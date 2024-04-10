@@ -1,0 +1,9 @@
+[submodule "rapidjson"]
+	path = rapidjson
+	url = https://github.com/Tencent/rapidjson.git
+[submodule "libzip"]
+	path = libzip
+	url = https://github.com/nih-at/libzip.git
+[submodule "lysys"]
+	path = lysys
+	url = https://github.com/evrhel/lysys.git
