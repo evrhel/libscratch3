@@ -12,17 +12,16 @@ class Visitor;
 // AST Node Types
 
 struct ASTNode;
-struct Unevaluated;
 
 struct SymbolName;
 
 // Expressions
 struct Expression;
 struct Consteval;
+struct Constexpr;
 struct ExpressionList;
 
 // Literals
-struct Constexpr;
 struct Number;
 struct PositiveNumber;
 struct PositiveInt;
@@ -32,7 +31,7 @@ struct Color;
 struct String;
 struct True;
 struct False;
-struct Null;
+struct None;
 
 // Motion Expressions
 struct XPos;
@@ -217,7 +216,7 @@ struct Program;
 // macros to reduce boilerplate code
 
 #define AST_ACCEPTOR inline virtual void Accept(Visitor *v) override { v->Visit(this); }
-#define AST_INPUT_SETTER(_Key, _Expr) inline virtual bool SetInput(const std::string &_Key, Expression *_Expr) override
+#define AST_INPUT_SETTER(_Key, _Val) inline virtual bool SetInput(const std::string &_Key, ASTNode *_Val) override
 #define AST_FIELD_SETTER(_Key, _Value, _Id) inline virtual bool SetField(const std::string & _Key , const std::string & _Value , const std::string & _Id ) override
 #define AST_TOSTRING() virtual std::string ToString() const override
 #define VISITOR_IMPL(_Deriver, _NodeT) void _Deriver :: Visit(_NodeT)
@@ -231,21 +230,24 @@ struct Program;
 	static constexpr AstType TYPE = AST( _Type ); \
 	inline _Type () { ASTNode::SetType(AST( _Type )); }
 
+#define EXPR_IMPL(_Type, _Parent, ...) \
+	static constexpr AstType TYPE = AST( _Type ); \
+	inline _Type () { ASTNode::SetType(AST( _Type )); syminfo = SymInfo( __VA_ARGS__); }
+
 //
 /////////////////////////////////////////////////////////////////////////////////
 
 enum AstType
 {
 	Ast_ASTNode,
-	Ast_Unevaluated,
 
 	Ast_SymbolName,
 
 	Ast_Expression,
 	Ast_Consteval,
+	Ast_Constexpr,
 	Ast_ExpressionList,
 
-	Ast_Constexpr,
 	Ast_Number,
 	Ast_PositiveNumber,
 	Ast_PositiveInt,
@@ -255,7 +257,7 @@ enum AstType
 	Ast_String,
 	Ast_True,
 	Ast_False,
-	Ast_Null,
+	Ast_None,
 
 	Ast_XPos,
 	Ast_YPos,
@@ -434,7 +436,7 @@ enum BlockType
 	BlockType_String = 10,
 	BlockType_Broadcast = 11,
 	BlockType_Variable = 12,
-	BlockType_List = 13
+	BlockType_List = 13,
 };
 
 enum RotationStyle
@@ -443,8 +445,13 @@ enum RotationStyle
 
 	RotationStyle_LeftRight,
 	RotationStyle_DontRotate,
-	RotationStyle_AllAround
+	RotationStyle_AllAround,
+
+	RotationStyle_Count
 };
+
+extern const char *const RotationStyleStrings[];
+RotationStyle RotationStyleFromString(const std::string &str);
 
 enum GraphicEffect
 {
@@ -456,43 +463,61 @@ enum GraphicEffect
 	GraphicEffect_Pixelate,
 	GraphicEffect_Mosaic,
 	GraphicEffect_Brightness,
-	GraphicEffect_Ghost
+	GraphicEffect_Ghost,
+
+	GraphicEffect_Count
 };
 
+extern const char *const GraphicEffectStrings[GraphicEffect_Count];
 GraphicEffect GraphicEffectFromString(const std::string &str);
-const char *GraphicEffectToString(GraphicEffect effect);
 
 enum LayerType
 {
 	LayerType_Unknown,
 
 	LayerType_Back,
-	LayerType_Front
+	LayerType_Front,
+
+	LayerType_Count
 };
+
+extern const char *const LayerTypeStrings[];
 
 enum LayerDir
 {
 	LayerDir_Unknown,
 
 	LayerDir_Back,
-	LayerDir_Front
+	LayerDir_Front,
+
+	LayerDir_Count
 };
+
+extern const char *const LayerDirStrings[];
 
 enum PropGetType
 {
-	PopGetType_Unknown,
+	PropGetType_Unknown,
 
 	PropGetType_Number,
-	PropGetType_Name
+	PropGetType_Name,
+
+	PropGetType_Count
 };
+
+extern const char *const PropGetTypeStrings[];
 
 enum SoundEffect
 {
 	SoundEffect_Unknown,
 
 	SoundEffect_Pitch,
-	SoundEffect_Pan
+	SoundEffect_Pan,
+
+	SoundEffect_Count
 };
+
+extern const char *const SoundEffectStrings[];
 
 enum Key
 {
@@ -541,16 +566,24 @@ enum Key
 	Key_6,
 	Key_7,
 	Key_8,
-	Key_9
+	Key_9,
+
+	Key_Any = -1
 };
+
+const char *GetKeyName(Key key);
 
 enum ListenValueType
 {
 	ListenValueType_Unknown,
 
 	ListenValueType_Loudness,
-	ListenValueType_Timer
+	ListenValueType_Timer,
+
+	ListenValueType_Count
 };
+
+extern const char *const ListenValueTypeStrings[];
 
 enum StopMode
 {
@@ -558,16 +591,24 @@ enum StopMode
 
 	StopMode_All,
 	StopMode_ThisScript,
-	StopMode_OtherScriptsInSprite
+	StopMode_OtherScriptsInSprite,
+
+	StopMode_Count
 };
+
+extern const char *const StopModeStrings[];
 
 enum DragMode
 {
 	DragMode_Unknown,
 
 	DragMode_Draggable,
-	DragMode_NotDraggable
+	DragMode_NotDraggable,
+
+	DragMode_Count
 };
+
+extern const char *const DragModeStrings[];
 
 enum PropertyTarget
 {
@@ -576,8 +617,12 @@ enum PropertyTarget
 	PropertyTarget_BackdropNumber,
 	PropertyTarget_BackdropName,
 	PropertyTarget_Volume,
-	PropertyTarget_Variable
+	PropertyTarget_Variable,
+
+	PropertyTarget_Count
 };
+
+extern const char *const PropertyTargetStrings[];
 
 enum DateFormat
 {
@@ -589,8 +634,12 @@ enum DateFormat
 	DateFormat_DayOfWeek,
 	DateFormat_Hour,
 	DateFormat_Minute,
-	DateFormat_Second
+	DateFormat_Second,
+
+	DateFormat_Count
 };
+
+extern const char *const DateFormatStrings[];
 
 enum MathFuncType
 {
@@ -609,8 +658,12 @@ enum MathFuncType
 	MathFuncType_Ln,
 	MathFuncType_Log,
 	MathFuncType_Exp,
-	MathFuncType_Exp10
+	MathFuncType_Exp10,
+
+	MathFuncType_Count
 };
+
+extern const char *const MathFuncStrings[];
 
 enum VideoState
 {
@@ -619,7 +672,11 @@ enum VideoState
 	VideoState_On,
 	VideoState_Off,
 	VideoState_OnFlipped,
+
+	VideoState_Count
 };
+
+extern const char *const VideoStateStrings[];
 
 enum MonitorMode
 {
@@ -628,8 +685,12 @@ enum MonitorMode
 	MonitorMode_Default,
 	MonitorMode_Large,
 	MonitorMode_Slider,
-	MonitorMode_List
+	MonitorMode_List,
+
+	MonitorMode_Count
 };
+
+extern const char *const MonitorModeStrings[];
 
 //
 /////////////////////////////////////////////////////////////////////////////////

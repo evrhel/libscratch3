@@ -31,6 +31,20 @@ struct MoveSteps : public Statement
 	AST_IMPL(MoveSteps, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "STEPS")
+		{
+			if (!e)
+			{
+				e = val->As<Expression>();
+				return !!e;
+			}
+		}
+
+		return false;
+	}
+
 	inline virtual ~MoveSteps()
 	{
 		delete e;
@@ -45,14 +59,14 @@ struct TurnDegrees : public Statement
 	AST_IMPL(TurnDegrees, Statement);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "DEGREES")
 		{
 			if (!e)
 			{
-				e = expr;
-				return true;
+				e = val->As<Expression>();
+				return !!e;
 			}
 		}
 
@@ -73,14 +87,14 @@ struct TurnNegDegrees : public Statement
 	AST_IMPL(TurnNegDegrees, Statement);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "DEGREES")
 		{
 			if (!e)
 			{
-				e = expr;
-				return true;
+				e = val->As<Expression>();
+				return !!e;
 			}
 		}
 
@@ -114,6 +128,29 @@ struct GotoXY : public Statement
 {
 	AST_IMPL(GotoXY, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "X")
+		{
+			if (!e1)
+			{
+				e1 = val->As<Expression>();
+				return !!e1;
+			}
+		}
+
+		if (key == "Y")
+		{
+			if (!e2)
+			{
+				e2 = val->As<Expression>();
+				return !!e2;
+			}
+		}
+
+		return false;
+	}
 
 	inline virtual ~GotoXY()
 	{
@@ -161,6 +198,20 @@ struct PointDir : public Statement
 	AST_IMPL(PointDir, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "DIRECTION")
+		{
+			if (!e)
+			{
+				e = val->As<Expression>();
+				return !!e;
+			}
+		}
+
+		return false;
+	}
+
 	inline virtual ~PointDir()
 	{
 		delete e;
@@ -174,6 +225,20 @@ struct PointTowards : public Statement
 {
 	AST_IMPL(PointTowards, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "TARGET")
+		{
+			if (!e)
+			{
+				e = val->As<Expression>();
+				return !!e;
+			}
+		}
+
+		return false;
+	}
 
 	inline virtual ~PointTowards()
 	{
@@ -203,14 +268,14 @@ struct SetX : public Statement
 	AST_IMPL(SetX, Statement);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "X")
 		{
 			if (!e)
 			{
-				e = expr;
-				return true;
+				e = val->As<Expression>();
+				return !!e;
 			}
 		}
 
@@ -230,6 +295,20 @@ struct ChangeY : public Statement
 {
 	AST_IMPL(ChangeY, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "DY")
+		{
+			if (!e)
+			{
+				e = val->As<Expression>();
+				return !!e;
+			}
+		}
+
+		return false;
+	}
 
 	inline virtual ~ChangeY()
 	{
@@ -266,6 +345,17 @@ struct SetRotationStyle : public Statement
 	AST_IMPL(SetRotationStyle, Statement);
 	AST_ACCEPTOR;
 
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "STYLE")
+		{
+			style = RotationStyleFromString(value);
+			return true;
+		}
+
+		return false;
+	}
+
 	RotationStyle style = RotationStyle_Unknown;
 };
 
@@ -275,14 +365,14 @@ struct SayForSecs : public Statement
 	AST_IMPL(SayForSecs, Statement);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "MESSAGE")
 		{
 			if (!e1)
 			{
-				e1 = expr;
-				return true;
+				e1 = val->As<Expression>();
+				return !!e1;
 			}
 		}
 
@@ -290,8 +380,8 @@ struct SayForSecs : public Statement
 		{
 			if (!e2)
 			{
-				e2 = expr;
-				return true;
+				e2 = val->As<Expression>();
+				return !!e2;
 			}
 		}
 
@@ -377,6 +467,19 @@ struct SwitchBackdrop : public Statement
 	AST_IMPL(SwitchBackdrop, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "BACKDROP")
+		{
+			if (e)
+				return false;
+			e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~SwitchBackdrop()
 	{
 		delete e;
@@ -455,12 +558,12 @@ struct SetGraphicEffect : public Statement
 	AST_IMPL(SetGraphicEffect, Statement);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "VALUE")
 		{
-			e = expr;
-			return true;
+			e = val->As<Expression>();
+			return !!e;
 		}
 
 		return false;
@@ -625,12 +728,25 @@ struct SetVolume : public Statement
 	AST_IMPL(SetVolume, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "VOLUME")
+		{
+			if (e)
+				return false;
+			e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~SetVolume()
 	{
 		delete e;
 	}
 
-	Expression *e;
+	Expression *e = nullptr;
 };
 
 // [when flag clicked]
@@ -730,14 +846,14 @@ struct WaitSecs : public Statement
 	AST_IMPL(WaitSecs, Statement);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "DURATION")
 		{
 			if (e)
 				return false;
-			e = expr;
-			return true;
+			e = val->As<Expression>();
+			return !!e;
 		}
 
 		return false;
@@ -793,6 +909,19 @@ struct If : public Statement
 	AST_IMPL(If, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "CONDITION")
+		{
+			if (e)
+				return false;
+			e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~If()
 	{
 		delete e;
@@ -812,6 +941,19 @@ struct IfElse : public Statement
 {
 	AST_IMPL(IfElse, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "CONDITION")
+		{
+			if (e)
+				return false;
+			e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~IfElse()
 	{
@@ -845,6 +987,19 @@ struct RepeatUntil : public Statement
 {
 	AST_IMPL(RepeatUntil, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "CONDITION")
+		{
+			if (e)
+				return false;
+			e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~RepeatUntil()
 	{
@@ -929,12 +1084,12 @@ struct SetVariable : public Statement
 	AST_IMPL(SetVariable, Statement);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "VALUE")
 		{
-			e = expr;
-			return true;
+			e = val->As<Expression>();
+			return !!e;
 		}
 
 		return false;

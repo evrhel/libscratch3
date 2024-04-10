@@ -6,7 +6,137 @@
 
 #include <rapidjson/document.h>
 
+static bool IsEventHandler(const std::string &opcode);
 static ASTNode *NodeFromOpcode(const std::string &opcode);
+
+static Constexpr *InterpretString(rapidjson::Value &v)
+{
+	std::string val = v.GetString();
+
+	// empty string is a None
+	if (val.empty())
+		return new None();
+
+	// attempt to parse as a positive integer
+	if (val.find_first_not_of("0123456789") == std::string::npos)
+	{
+		PositiveInt *pi = new PositiveInt();
+		pi->value = val;
+		return pi;
+	}
+
+	// attempt to parse as an integer
+	if (val[0] == '-' && val.find_first_not_of("0123456789", 1) == std::string::npos)
+	{
+		Int *i = new Int();
+		i->value = val;
+		return i;
+	}
+
+	// attempt to parse as a positive number
+	if (val.find_first_not_of("0123456789.") == std::string::npos)
+	{
+		PositiveNumber *pn = new PositiveNumber();
+		pn->value = val;
+		return pn;
+	}
+
+	// attempt to parse as a number
+	if (val[0] == '-' && val.find_first_not_of("0123456789.", 1) == std::string::npos)
+	{
+		Number *n = new Number();
+		n->value = val;
+		return n;
+	}
+
+	// attempt to parse a "true" or "false" boolean literal
+	if (val == "true")
+	{
+		True *t = new True();
+		t->value = val;
+		return t;
+	}
+
+	if (val == "false")
+	{
+		False *f = new False();
+		f->value = val;
+		return f;
+	}
+
+	// finally, it's just a string
+
+	String *s = new String();
+	s->value = v.GetString();
+	return s;
+}
+
+static Constexpr *ParseLiteral(rapidjson::Value &v)
+{
+	if (v.IsString())
+		return InterpretString(v);
+
+	if (v.IsInt())
+	{
+		int ival = v.GetInt();
+		if (ival >= 0)
+		{
+			PositiveInt *pi = new PositiveInt();
+			pi->value = std::to_string(ival);
+			return pi;
+		}
+		else
+		{
+			Int *i = new Int();
+			i->value = std::to_string(ival);
+			return i;
+		
+		}
+	}
+
+	if (v.IsDouble())
+	{
+		double dval = v.GetDouble();
+		if (dval >= 0)
+		{
+			PositiveNumber *pn = new PositiveNumber();
+			pn->value = std::to_string(dval);
+			return pn;
+		}
+		else
+		{
+			Number *n = new Number();
+			n->value = std::to_string(dval);
+			return n;
+		}
+	}
+
+	if (v.IsBool())
+	{
+		bool bval = v.GetBool();
+		if (bval)
+		{
+			True *t = new True();
+			t->value = "true";
+			return t;
+		}
+		else
+		{
+			False *f = new False();
+			f->value = "false";
+			return f;
+		}
+	}
+
+	if (v.IsNull())
+	{
+		None *n = new None();
+		n->value = "";
+		return n;
+	}
+
+	return nullptr;
+}
 
 class Parser
 {
@@ -24,6 +154,13 @@ public:
 			{
 				p->sprites = new SpriteDefList();
 				ParseTargets(targets, p);
+
+				if (p->sprites->sprites.size() == 0)
+				{
+					Warn("No targets found in project");
+					delete p->sprites;
+					p->sprites = nullptr;
+				}
 			}
 			else
 				Error("Expected array parsing targets");
@@ -83,8 +220,10 @@ private:
 		vsprintf_s(error, format, args);
 		va_end(args);
 
-		if (_log)
-			_log->push_back({ MessageType_Error, error });
+		printf("\033[31;1m[ERRO]\033[0m %s\n", error);
+
+		//if (_log)
+		//	_log->push_back({ MessageType_Error, error });
 		are_errors = true;
 	}
 
@@ -97,8 +236,25 @@ private:
 		vsprintf_s(error, format, args);
 		va_end(args);
 
-		if (_log)
-			_log->push_back({ MessageType_Warning, error });
+		printf("\033[33;1m[WARN]\033[0m %s\n", error);
+
+		//if (_log)
+		//	_log->push_back({ MessageType_Warning, error });
+	}
+
+	void Info(const char *format, ...)
+	{
+		char error[512];
+
+		va_list args;
+		va_start(args, format);
+		vsprintf_s(error, format, args);
+		va_end(args);
+
+		printf("\033[32m[INFO]\033[0m %s\n", error);
+
+		//if (_log)
+		//	_log->push_back({ MessageType_Info, error });
 	}
 	
 	void ParseTargets(rapidjson::Value &targets, Program *p)
@@ -141,6 +297,42 @@ private:
 
 		sd->name = target["name"].GetString();
 
+		if (target.HasMember("variables"))
+		{
+			rapidjson::Value &variables = target["variables"];
+			if (!variables.IsObject())
+			{
+				Error("Expected object parsing variables in target");
+				goto failure;
+			}
+
+			ParseVariables(variables, sd->variables);
+
+			if (sd->variables->variables.size() == 0)
+			{
+				delete sd->variables;
+				sd->variables = nullptr;
+			}
+		}
+
+		if (target.HasMember("lists"))
+		{
+			rapidjson::Value &lists = target["lists"];
+			if (!lists.IsObject())
+			{
+				Error("Expected object parsing lists in target");
+				goto failure;
+			}
+
+			ParseLists(lists, sd->lists);
+
+			if (sd->lists->lists.size() == 0)
+			{
+				delete sd->lists;
+				sd->lists = nullptr;
+			}
+		}
+
 		if (target.HasMember("blocks"))
 		{
 			rapidjson::Value &blocks = target["blocks"];
@@ -159,22 +351,48 @@ private:
 
 				if (!target.IsObject())
 				{
-					Error("Invalid target `%s`", id.c_str());
+					Error("Expected object parsing block `%s`", id.c_str());
 					continue;
 				}
 
 				if (!target.HasMember("topLevel"))
 				{
-					Error("Missing `topLevel` member in target `%s`", id.c_str());
+					Error("Missing `topLevel` member in block `%s`", id.c_str());
 					continue;
 				}
 
 				if (!target["topLevel"].GetBool())
 					continue; // ignore non-top-level targets
 
+				if (!target.HasMember("opcode"))
+				{
+					Error("Missing `opcode` member in block `%s`", id.c_str());
+					continue;
+				}
+
+				rapidjson::Value &opcode = target["opcode"];
+				if (!opcode.IsString())
+				{
+					Error("Expected string parsing opcode in block `%s`", id.c_str());
+					continue;
+				}
+
+				if (!IsEventHandler(opcode.GetString()))
+				{
+					Info("Discarding unreachable block `%s` (%s)", id.c_str(), opcode.GetString());
+					continue;
+				}
+
 				StatementList *sl = new StatementList();
 				ParseScript(blocks, id, sl);
-				sd->scripts->sll.push_back(sl);
+
+				if (sl->sl.size() > 0)
+					sd->scripts->sll.push_back(sl);
+				else
+				{
+					Warn("Empty script `%s`", id.c_str());
+					delete sl;
+				}
 			}
 		}
 		else
@@ -186,6 +404,103 @@ private:
 	failure:
 		delete sd;
 		return nullptr;
+	}
+
+	void ParseVariables(rapidjson::Value &variables, VariableDefList *vdl)
+	{
+		for (auto it = variables.MemberBegin(); it != variables.MemberEnd(); ++it)
+		{
+			std::string id = it->name.GetString();
+			rapidjson::Value &arr = it->value;
+			if (!arr.IsArray())
+			{
+				Error("Expected array parsing variable `%s`", id.c_str());
+				continue;
+			}
+
+			if (arr.Size() < 2)
+			{
+				Error("Expected at least 2 elements parsing variable `%s`", id.c_str());
+				continue;
+			}
+
+			rapidjson::Value &name = arr[0];
+			if (!name.IsString())
+			{
+				Error("Expected string parsing name in variable `%s`", id.c_str());
+				continue;
+			}
+
+			Constexpr *ce = ParseLiteral(arr[1]);
+			if (!ce)
+			{
+				Error("Failed to parse value in variable `%s` (%s)", id.c_str());
+				continue;
+			}
+
+			VariableDef *vd = new VariableDef();
+			vd->id = id;
+			vd->name = name.GetString();
+			vd->value = ce;
+
+			vdl->variables.push_back(vd);
+		}
+	}
+
+	void ParseLists(rapidjson::Value &lists, ListDefList *ldl)
+	{
+		for (auto it = lists.MemberBegin(); it != lists.MemberEnd(); ++it)
+		{
+			std::string id = it->name.GetString();
+			rapidjson::Value &arr = it->value;
+			if (!arr.IsArray())
+			{
+				Error("Expected array parsing list `%s`", id.c_str());
+				continue;
+			}
+
+			if (arr.Size() < 2)
+			{
+				Error("Expected at least 2 elements parsing list `%s`", id.c_str());
+				continue;
+			}
+
+			rapidjson::Value &name = arr[0];
+			if (!name.IsString())
+			{
+				Error("Expected string parsing name in list `%s`", id.c_str());
+				continue;
+			}
+
+			rapidjson::Value &value = arr[1];
+			if (!value.IsArray())
+			{
+				Error("Expected array parsing value in list `%s`", id.c_str());
+				continue;
+			}
+
+			ListDef *ld = new ListDef();
+
+			for (auto lit = value.Begin(); lit != value.End(); ++lit)
+			{
+				Constexpr *ce = ParseLiteral(*lit);
+				if (!ce)
+				{
+					delete ld;
+					Error("Failed to parse value in list `%s`", id.c_str());
+					goto next;
+				}
+
+				ld->value.push_back(ce);
+			}
+
+			ld->id = id;
+			ld->name = name.GetString();
+
+			ldl->lists.push_back(ld);
+		next:
+			(void)0; // dummy statement
+		}
 	}
 
 	void ParseScript(rapidjson::Value &blocks, const std::string &first, StatementList *sl)
@@ -251,6 +566,12 @@ private:
 			return nullptr;
 		}
 
+		if (!blocks.HasMember(id.c_str()))
+		{
+			Error("Missing block `%s`", id.c_str());
+			return nullptr;
+		}
+
 		rapidjson::Value &block = blocks[id.c_str()];
 		if (!block.IsObject())
 		{
@@ -283,7 +604,7 @@ private:
 			rapidjson::Value &inputs = block["inputs"];
 			if (!inputs.IsObject())
 			{
-				Error("Expected object parsing inputs in block `%s`", id.c_str());
+				Error("Expected object parsing inputs in block `%s` (%s)", id.c_str(), opcode.GetString());
 				delete n;
 				return nullptr;
 			}
@@ -291,26 +612,31 @@ private:
 			for (auto it = inputs.MemberBegin(); it != inputs.MemberEnd(); ++it)
 			{
 				std::string key = it->name.GetString();
-				Expression *val = ParseExpression(blocks, it->value);
+				ASTNode *val = ParseInput(blocks, it->value);
 				if (!val)
 				{
-					Error("Failed to parse input `%s` in block `%s`", key.c_str(), id.c_str());
+					Error("Failed to parse input `%s` in block `%s` (%s)",
+						key.c_str(), id.c_str(), opcode.GetString());
 					continue;
 				}
 
 				if (!n->SetInput(key, val))
-					Warn("Unknown input `%s` in block `%s`", key.c_str(), id.c_str());
+				{
+					Warn("Unknown input `%s` in block `%s` (%s)",
+						key.c_str(), id.c_str(), opcode.GetString());
+				}
 			}
 		}
 		else
-			Warn("Missing `inputs` member in block `%s`", id.c_str());
+			Warn("Missing `inputs` member in block `%s` (%s)", id.c_str(), opcode.GetString());
 
 		if (block.HasMember("fields"))
 		{
 			rapidjson::Value &fields = block["fields"];
 			if (!fields.IsObject())
 			{
-				Error("Expected object parsing fields in block `%s`", id.c_str());
+				Error("Expected object parsing fields in block `%s` (%s)",
+					id.c_str(), opcode.GetString());
 				delete n;
 				return nullptr;
 			}
@@ -320,7 +646,8 @@ private:
 				std::string key = it->name.GetString();
 				if (!it->value.IsArray())
 				{
-					Warn("Expected array parsing field `%s` in block `%s`", key.c_str(), id.c_str());
+					Warn("Expected array parsing field `%s` in block `%s` (%s)",
+						key.c_str(), id.c_str(), opcode.GetString());
 					continue;
 				}
 
@@ -330,14 +657,16 @@ private:
 
 				if (field.Size() < 1)
 				{
-					Warn("Expected at least 1 element parsing field `%s` in block `%s`", key.c_str(), id.c_str());
+					Warn("Expected at least 1 element parsing field `%s` in block `%s` (%s)",
+						key.c_str(), id.c_str(), opcode.GetString());
 					continue;
 				}
 
 				rapidjson::Value &valueval = field[0];
 				if (!valueval.IsString())
 				{
-					Warn("Expected string parsing value in field `%s` in block `%s`", key.c_str(), id.c_str());
+					Warn("Expected string parsing value in field `%s` in block `%s` (%s)",
+						key.c_str(), id.c_str(), opcode.GetString());
 					continue;
 				}
 				svalue = valueval.GetString();
@@ -349,7 +678,8 @@ private:
 					{
 						if (!idval.IsString())
 						{
-							Warn("Expected string parsing id in field `%s` in block `%s`", key.c_str(), id.c_str());
+							Warn("Expected string parsing id in field `%s` in block `%s` (%s)",
+								key.c_str(), id.c_str(), opcode.GetString());
 							continue;
 						}
 
@@ -358,11 +688,17 @@ private:
 				}
 
 				if (!n->SetField(key, svalue, sid))
-					Warn("Unknown field `%s` in block `%s`", key.c_str(), id.c_str());
+				{
+					Warn("Unknown field `%s` in block `%s` (%s)",
+						key.c_str(), id.c_str(), opcode.GetString());
+				}
 			}
 		}
 		else
-			Warn("Missing `fields` member in block `%s`", id.c_str());
+		{
+			Warn("Missing `fields` member in block `%s` (%s)",
+				id.c_str(), opcode.GetString());
+		}
 
 		assert(block.HasMember("topLevel")); // should have been checked in ParseTargets
 		
@@ -380,7 +716,7 @@ private:
 	}
 
 	// parse an expression
-	Expression *ParseExpression(rapidjson::Value &blocks, rapidjson::Value &v)
+	ASTNode *ParseInput(rapidjson::Value &blocks, rapidjson::Value &v)
 	{
 		if (!v.IsArray())
 		{
@@ -411,7 +747,7 @@ private:
 			}
 
 			if (v[1].IsArray())
-				return ParseExpression(blocks, v[1]);
+				return ParseInput(blocks, v[1]);
 			
 			if (!v[1].IsString())
 			{
@@ -419,15 +755,7 @@ private:
 				return nullptr;
 			}
 
-			ASTNode *node = ParseBlock(blocks, v[1].GetString());
-			Expression *e = node->As<Expression>();
-			if (!e)
-			{
-				Error("Expected expression, got %s", AstTypeString(node->GetType()));
-				return nullptr;
-			}
-
-			return e;
+			return ParseBlock(blocks, v[1].GetString());
 		}
 		case BlockType_NoShadow: {
 			if (v.Size() < 2)
@@ -437,7 +765,7 @@ private:
 			}
 
 			if (v[1].IsArray())
-				return ParseExpression(blocks, v[1]);
+				return ParseInput(blocks, v[1]);
 
 			if (!v[1].IsString())
 			{
@@ -445,15 +773,7 @@ private:
 				return nullptr;
 			}
 
-			ASTNode *node = ParseBlock(blocks, v[1].GetString());
-			Expression *e = node->As<Expression>();
-			if (!e)
-			{
-				Error("Expected expression, got %s", AstTypeString(node->GetType()));
-				return nullptr;
-			}
-
-			return e;
+			return ParseBlock(blocks, v[1].GetString());
 		}
 		case BlockType_ShadowObscured: {
 			if (v.Size() < 2)
@@ -463,7 +783,7 @@ private:
 			}
 
 			if (v[1].IsArray())
-				return ParseExpression(blocks, v[1]);
+				return ParseInput(blocks, v[1]);
 
 			if (!v[1].IsString())
 			{
@@ -471,107 +791,7 @@ private:
 				return nullptr;
 			}
 
-			ASTNode *node = ParseBlock(blocks, v[1].GetString());
-			if (!node)
-			{
-				Error("Failed to parse block `%s`", v[1].GetString());
-				return nullptr;
-			}
-
-			Expression *e = node->As<Expression>();
-			if (!e)
-			{
-				Error("Expected expression, got %s", AstTypeString(node->GetType()));
-				return nullptr;
-			}
-
-			return e;
-		}
-		case BlockType_Number: {
-			if (v.Size() < 2)
-			{
-				Error("Expected value parsing number block");
-				return nullptr;
-			}
-
-			if (!v[1].IsString())
-			{
-				Error("Expected string parsing number block");
-				return nullptr;
-			}
-
-			Number *n = new Number();
-			n->value = v[1].GetString();
-			return n;
-		}
-		case BlockType_PositiveNumber: {
-			if (v.Size() < 2)
-			{
-				Error("Expected value parsing positive number block");
-				return nullptr;
-			}
-
-			if (!v[1].IsString())
-			{
-				Error("Expected string parsing positive number block");
-				return nullptr;
-			}
-
-			PositiveNumber *pn = new PositiveNumber();
-			pn->value = v[1].GetString();
-
-			return pn;
-		}
-		case BlockType_PositiveInt: {
-			if (v.Size() < 2)
-			{
-				Error("Expected value parsing positive int block");
-				return nullptr;
-			}
-
-			if (!v[1].IsString())
-			{
-				Error("Expected string parsing positive int block");
-				return nullptr;
-			}
-
-			PositiveInt *pi = new PositiveInt();
-			pi->value = v[1].GetString();
-			return pi;
-		}
-		case BlockType_Int: {
-			if (v.Size() < 2)
-			{
-				Error("Expected value parsing int block");
-				return nullptr;
-			}
-
-			if (!v[1].IsString())
-			{
-				Error("Expected string parsing int block");
-				return nullptr;
-			}
-
-			Int *i = new Int();
-			i->value = v[1].GetString();
-			return i;
-		}
-		case BlockType_Angle: {
-			if (v.Size() < 2)
-			{
-				Error("Expected value parsing angle block");
-				return nullptr;
-			}
-
-			if (!v[1].IsString())
-			{
-				Error("Expected string parsing angle block");
-				return nullptr;
-			}
-
-			Angle *a = new Angle();
-			a->value = v[1].GetString();
-			return a;
+			return ParseBlock(blocks, v[1].GetString());
 		}
 		case BlockType_Color: {
 			if (v.Size() < 2)
@@ -590,22 +810,26 @@ private:
 			c->value = v[1].GetString();
 			return c;
 		}
+		case BlockType_Number:
+		case BlockType_PositiveNumber:
+		case BlockType_PositiveInt:
+		case BlockType_Int:
+		case BlockType_Angle:
 		case BlockType_String: {
 			if (v.Size() < 2)
 			{
-				Error("Expected value parsing string block");
+				Error("Expected value parsing literal");
 				return nullptr;
 			}
 
-			if (!v[1].IsString())
+			Constexpr *ce = ParseLiteral(v[1]);
+			if (!ce)
 			{
-				Error("Expected string parsing string block");
+				Error("Failed to parse literal");
 				return nullptr;
 			}
 
-			String *s = new String();
-			s->value = v[1].GetString();
-			return s;
+			return ce;
 		}
 		case BlockType_Broadcast: {
 			if (v.Size() < 2)
@@ -688,10 +912,26 @@ Program *ParseAST(const char *jsonString, size_t length, std::vector<Message> *l
 
 	doc.Parse(jsonString, length);
 	if (doc.HasParseError())
+	{
+		printf("\033[31;1m<FAILED>\033[0m\n");
 		return nullptr;
+	}
 
 	Parser parser(log);
 	return parser.Parse(doc);
+}
+
+// event handlers
+static bool IsEventHandler(const std::string &opcode)
+{
+	return opcode == "event_whenflagclicked" ||
+		opcode == "event_whenkeypressed" ||
+		opcode == "event_whenthisspriteclicked" ||
+		opcode == "event_whenstageclicked" ||
+		opcode == "event_whenbackdropswitchesto" ||
+		opcode == "event_whengreaterthan" ||
+		opcode == "event_whenbroadcastreceived" ||
+		opcode == "control_start_as_clone";
 }
 
 static ASTNode *NodeFromOpcode(const std::string &opcode)

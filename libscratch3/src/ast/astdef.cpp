@@ -1,31 +1,170 @@
 #include "astdef.hpp"
 
+const char *const RotationStyleStrings[RotationStyle_Count] = {
+	"unknown",
+	"left-right",
+	"don't rotate",
+	"all around"
+};
+
+RotationStyle RotationStyleFromString(const std::string &str)
+{
+	for (int i = 0; i < RotationStyle_Count; i++)
+		if (str == RotationStyleStrings[i])
+			return (RotationStyle)i;
+	return RotationStyle_Unknown;
+}
+
+const char *const GraphicEffectStrings[GraphicEffect_Count] = {
+	"unknown",
+	"COLOR",
+	"FISHEYE",
+	"WHIRL",
+	"PIXELATE",
+	"MOSAIC",
+	"BRIGHTNESS",
+	"GHOST"
+};
+
 GraphicEffect GraphicEffectFromString(const std::string &str)
 {
-	if (str == "COLOR") return GraphicEffect_Color;
-	if (str == "FISHEYE") return GraphicEffect_Fisheye;
-	if (str == "WHIRL") return GraphicEffect_Whirl;
-	if (str == "PIXELATE") return GraphicEffect_Pixelate;
-	if (str == "MOSAIC") return GraphicEffect_Mosaic;
-	if (str == "BRIGHTNESS") return GraphicEffect_Brightness;
-	if (str == "GHOST") return GraphicEffect_Ghost;
+	for (int i = 0; i < GraphicEffect_Count; i++)
+		if (str == GraphicEffectStrings[i])
+			return (GraphicEffect)i;
 	return GraphicEffect_Unknown;
 }
 
-const char *GraphicEffectToString(GraphicEffect effect)
+const char *const LayerTypeStrings[LayerType_Count] = {
+	"unknown",
+	"backward",
+	"front"
+};
+
+const char *const LayerDirStrings[LayerDir_Count] = {
+	"unknown",
+	"back",
+	"forward"
+};
+
+const char *const PropGetTypeStrings[PropGetType_Count] = {
+	"unknown",
+	"number",
+	"name"
+};
+
+const char *const SoundEffectStrings[] = {
+	"unknown",
+	"pitch",
+	"pan"
+};
+
+const char *GetKeyName(Key key)
 {
-	switch (effect)
-	{
-	default: return "<unknown>";
-	case GraphicEffect_Color: return "COLOR";
-	case GraphicEffect_Fisheye: return "FISHEYE";
-	case GraphicEffect_Whirl: return "WHIRL";
-	case GraphicEffect_Pixelate: return "PIXELATE";
-	case GraphicEffect_Mosaic: return "MOSAIC";
-	case GraphicEffect_Brightness: return "BRIGHTNESS";
-	case GraphicEffect_Ghost: return "GHOST";
-	}
+	static const char *Numbers[] = {
+		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
+	};
+
+	static const char *Letters[] = {
+		"A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+		"K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+		"U", "V", "W", "X", "Y", "Z"
+	};
+
+	if (key >= Key_0 && key <= Key_9)
+		return Numbers[key - Key_0];
+
+	if (key >= Key_A && key <= Key_Z)
+		return Letters[key - Key_A];
+
+	if (key == Key_Up)
+		return "Up";
+	if (key == Key_Down)
+		return "Down";
+	if (key == Key_Left)
+		return "Left";
+	if (key == Key_Right)
+		return "Right";
+
+	if (key == Key_Space)
+		return "Space";
+
+	if (key == Key_Any)
+		return "Any";
+
+	return "unknown";
 }
+
+const char *const ListenValueTypeStrings[ListenValueType_Count] = {
+	"unknown",
+	"LOUDNESS",
+	"TIMER"
+};
+
+const char *const StopModeStrings[StopMode_Count] = {
+	"unknown",
+	"ALL",
+	"THIS",
+	"OTHERS"
+};
+
+const char *const DragModeStrings[DragMode_Count] = {
+	"unknown",
+	"DRAGGABLE",
+	"NOTDRAGGABLE"
+};
+
+const char *const PropertyTargetStrings[PropertyTarget_Count] = {
+	"unknown",
+	"BACKDROPNUMBER",
+	"BACKDROPNAME",
+	"SPRITENUMBER",
+	"SPRITENAME"
+	"VARIABLE"
+};
+
+const char *const DateFormatStrings[DateFormat_Count] = {
+	"unknown",
+	"YEAR",
+	"MONTH",
+	"DATE",
+	"DAYOFWEEK",
+	"HOUR",
+	"MINUTE",
+	"SECOND"
+};
+
+const char *const MathFuncStrings[MathFuncType_Count] = {
+	"unknown",
+	"ABS",
+	"FLOOR",
+	"CEIL",
+	"SQRT",
+	"SIN",
+	"COS",
+	"TAN",
+	"ASIN",
+	"ACOS",
+	"ATAN",
+	"LN",
+	"LOG",
+	"EXP",
+	"EXP10"
+};
+
+const char *const VideoStateStrings[VideoState_Count] = {
+	"unknown",
+	"ON",
+	"OFF",
+	"ON_FLIPPED"
+};
+
+const char *const MonitorModeStrings[MonitorMode_Count] = {
+	"unknown",
+	"DEFAULT",
+	"LARGE",
+	"SLIDER",
+	"LIST"
+};
 
 const char *AstTypeString(AstType type)
 {
@@ -33,12 +172,11 @@ const char *AstTypeString(AstType type)
 	{
 	default: return "<unknown>";
 	case Ast_ASTNode: return "ASTNode";
-	case Ast_Unevaluated: return "Unevaluated";
 	case Ast_SymbolName: return "SymbolName";
 	case Ast_Expression: return "Expression";
 	case Ast_Consteval: return "Consteval";
-	case Ast_ExpressionList: return "ExpressionList";
 	case Ast_Constexpr: return "Constexpr";
+	case Ast_ExpressionList: return "ExpressionList";
 	case Ast_Number: return "Number";
 	case Ast_PositiveNumber: return "PositiveNumber";
 	case Ast_PositiveInt: return "PositiveInt";
@@ -48,7 +186,7 @@ const char *AstTypeString(AstType type)
 	case Ast_String: return "String";
 	case Ast_True: return "True";
 	case Ast_False: return "False";
-	case Ast_Null: return "Null";
+	case Ast_None: return "None";
 	case Ast_XPos: return "XPos";
 	case Ast_YPos: return "YPos";
 	case Ast_Direction: return "Direction";

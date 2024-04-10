@@ -18,7 +18,7 @@ public:
 	inline virtual void Visit(String *node) {}
 	inline virtual void Visit(True *node) {}
 	inline virtual void Visit(False *node) {}
-	inline virtual void Visit(Null *node) {}
+	inline virtual void Visit(None *node) {}
 	inline virtual void Visit(XPos *node) {}
 	inline virtual void Visit(YPos *node) {}
 	inline virtual void Visit(Direction *node) {}

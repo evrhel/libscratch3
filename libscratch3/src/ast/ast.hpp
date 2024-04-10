@@ -5,11 +5,14 @@
 #include "expression.hpp"
 #include "program.hpp"
 #include "statement.hpp"
+#include "syminfo.hpp"
+#include "visitor.hpp"
 
 enum MessageType
 {
 	MessageType_Error,
-	MessageType_Warning
+	MessageType_Warning,
+	MessageType_Info
 };
 
 struct Message

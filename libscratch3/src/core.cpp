@@ -22,6 +22,7 @@ int Scratch3::LoadProject(const char *filename)
 	if (!_loader)
 		return -1;
 
+	printf("\033[1mLoading archive \033[33;1m`%s`\033[0m\n", filename);
 	return Load();
 }
 
@@ -39,6 +40,7 @@ int Scratch3::LoadProjectFromDir(const char *dirname)
 	if (!_loader)
 		return -1;
 
+	printf("\033[1mLoading directory \033[33;1m`%s`\033[0m\n", dirname);
 	return Load();
 }
 
@@ -75,9 +77,14 @@ int Scratch3::Load()
 	if (_program)
 		return -1;
 
+	double start = ls_time64();
+
 	Resource *res = _loader->Find("project.json");
 	if (!res)
+	{
+		printf("\033[31;1mCould not find project.json\033[0m\n");
 		return -1;
+	}
 
 	const char *str = reinterpret_cast<const char *>(res->Data());
 	size_t size = res->Size();
@@ -85,25 +92,25 @@ int Scratch3::Load()
 
 	_program = ParseAST(str, size, &log);
 
-	if (log.size() > 0)
+	/*if (log.size() > 0)
 	{
-		printf("Errors:\n");
 		for (auto &msg : log)
 		{
 			if (msg.type == MessageType_Error)
-				printf("Error: %s\n", msg.message.c_str());
+				printf("\033[31;1mERRO:\033[0m %s\n", msg.message.c_str());
 			else if (msg.type == MessageType_Warning)
-				printf("Warning: %s\n", msg.message.c_str());
+				printf("\033[33;1mWARN:\033[0m %s\n", msg.message.c_str());
+			else if (msg.type == MessageType_Info)
+				printf("\033[32;1mINFO:\033[0m %s\n", msg.message.c_str());
 		}
-	}
+	}*/
+
+	double elapsed = ls_time64() - start;
+	if (elapsed < 1.0)
+		printf("Finished in %g sec\n", round(elapsed * 1000.0) / 1000.0);
 
 	if (!_program)
-	{
-		printf("Failed to parse\n");
 		return -1;
-	}
-
-	printf("Parsed without errors\n");
 
 	Visitor *dump = CreateDumpVisitor();
 	_program->Accept(dump);

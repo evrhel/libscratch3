@@ -22,24 +22,19 @@ struct VariableDefList : public ASTNode
 
 	inline VariableDef *Find(const std::string &id) const
 	{
-		auto it = variables.find(id);
-		if (it != variables.end())
-			return it->second;
+		for (auto v : variables)
+			if (v->id == id)
+				return v;
 		return 0;
-	}
-
-	inline void Add(const std::string &id, VariableDef *def)
-	{
-		variables[id] = def;
 	}
 
 	inline virtual ~VariableDefList()
 	{
-		for (auto &p : variables)
-			delete p.second;
+		for (auto v : variables)
+			delete v;
 	}
 
-	std::unordered_map<std::string, VariableDef *> variables;
+	std::vector<VariableDef *> variables;
 };
 
 // list definition in a sprite/stage
@@ -66,24 +61,19 @@ struct ListDefList : public ASTNode
 
 	inline ListDef *Find(const std::string &id) const
 	{
-		auto it = lists.find(id);
-		if (it != lists.end())
-			return it->second;
-		return 0;
-	}
-
-	inline void Add(const std::string &id, ListDef *def)
-	{
-		lists[id] = def;
+		for (auto l : lists)
+			if (l->id == id)
+				return l;
+		return nullptr;
 	}
 
 	inline virtual ~ListDefList()
 	{
-		for (auto &p : lists)
-			delete p.second;
+		for (auto l : lists)
+			delete l;
 	}
 
-	std::unordered_map<std::string, ListDef *> lists;
+	std::vector<ListDef *> lists;
 };
 
 struct StatementListList : public ASTNode

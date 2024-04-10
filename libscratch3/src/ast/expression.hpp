@@ -1,25 +1,30 @@
 #pragma once
 
 #include "astnode.hpp"
+#include "syminfo.hpp"
 
 // expression
 struct Expression : public ASTNode
 {
 	AST_IMPL(Expression, ASTNode);
+
+	SymInfo syminfo = SymbolType_Any;
 };
 
-// expression evaluatable at compile time, given
-// its arguments are constant expressions
+// expression evaluatable to a constant expression
+// at compile time, given its arguments are constant
+// expressions
 struct Consteval : public Expression
 {
 	AST_IMPL(Consteval, Expression);
 };
 
-// unevaluated expression, used in some expressions that require
-// an expression that does not yet exist on the stack.
-struct Unevaluated : public Expression
+// constant expression
+struct Constexpr : public Consteval
 {
-	AST_IMPL(Unevaluated, Expression);
+	AST_IMPL(Constexpr, Consteval);
+
+	std::string value; // empty string
 };
 
 // list of expressions
@@ -36,142 +41,173 @@ struct ExpressionList : public ASTNode
 
 	std::vector<Expression *> expressions;
 };
-
-// constant expression
-struct Constexpr : public Consteval
-{
-	AST_IMPL(Constexpr, Consteval);
-
-	std::string value; // empty string
-};
-
 // number
 struct Number : public Constexpr
 {
-	AST_IMPL(Number, Constexpr);
+	EXPR_IMPL(Number, Constexpr, SymbolType_Number);
 	AST_ACCEPTOR;
 };
 
 // positive number
 struct PositiveNumber : public Constexpr
 {
-	AST_IMPL(PositiveNumber, Constexpr);
+	EXPR_IMPL(PositiveNumber, Constexpr, SymbolType_PositiveNumber);
 	AST_ACCEPTOR;
 };
 
 // positive int
 struct PositiveInt : public Constexpr
 {
-	AST_IMPL(PositiveInt, Constexpr);
+	EXPR_IMPL(PositiveInt, Constexpr, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 };
 
 // int
 struct Int : public Constexpr
 {
-	AST_IMPL(Int, Constexpr);
+	EXPR_IMPL(Int, Constexpr, SymbolType_Int);
 	AST_ACCEPTOR;
 };
 
 // angle
 struct Angle : public Constexpr
 {
-	AST_IMPL(Angle, Constexpr);
+	EXPR_IMPL(Angle, Constexpr, SymbolType_Number);
 	AST_ACCEPTOR;
 };
 
 // color
 struct Color : public Constexpr
 {
-	AST_IMPL(Color, Constexpr);
+	EXPR_IMPL(Color, Constexpr, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 };
 
 // string
 struct String : public Constexpr
 {
-	AST_IMPL(String, Constexpr);
+	EXPR_IMPL(String, Constexpr, SymbolType_String);
 	AST_ACCEPTOR;
 };
 
 // true
 struct True : public Constexpr
 {
-	AST_IMPL(True, Constexpr);
+	EXPR_IMPL(True, Constexpr, SymbolType_Bool, "true");
 	AST_ACCEPTOR;
 };
 
 // false
 struct False : public Constexpr
 {
-	AST_IMPL(False, Constexpr);
+	EXPR_IMPL(False, Constexpr, SymbolType_Bool, "false");
 	AST_ACCEPTOR;
 };
 
 // emtpy
-struct Null : public Constexpr
+struct None : public Constexpr
 {
-	AST_IMPL(Null, Constexpr);
+	EXPR_IMPL(None, Constexpr, SymbolType_PositiveInt, "");
 	AST_ACCEPTOR;
 };
 
 // (x position)
 struct XPos : public Expression
 {
-	AST_IMPL(XPos, Expression);
+	EXPR_IMPL(XPos, Expression, SymbolType_Number);
 	AST_ACCEPTOR;
 };
 
 // (y position)
 struct YPos : public Expression
 {
-	AST_IMPL(YPos, Expression);
+	EXPR_IMPL(YPos, Expression, SymbolType_Number);
 	AST_ACCEPTOR;
 };
 
 // (direction)
 struct Direction : public Expression
 {
-	AST_IMPL(Direction, Expression);
+	EXPR_IMPL(Direction, Expression, SymbolType_Number);
 	AST_ACCEPTOR;
 };
 
 // (costume ?type)
 struct CurrentCostume : public Expression
 {
-	AST_IMPL(CurrentCostume, Expression);
+	EXPR_IMPL(CurrentCostume, Expression, SymbolType_String | SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 
-	PropGetType type;
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "NUMBER_NAME")
+		{
+			if (type == PropGetType_Unknown)
+			{
+				if (value == "number")
+					type = PropGetType_Number, syminfo = SymbolType_PositiveInt;
+				else if (value == "name")
+					type = PropGetType_Name, syminfo = SymbolType_String;
+				else
+					return false;
+
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	PropGetType type = PropGetType_Unknown;
 };
 
 // (backdrop ?type)
 struct CurrentBackdrop : public Expression
 {
-	AST_IMPL(CurrentBackdrop, Expression);
+	EXPR_IMPL(CurrentBackdrop, Expression, SymbolType_String | SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 
-	PropGetType type;
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "NUMBER_NAME")
+		{
+			if (type == PropGetType_Unknown)
+			{
+				if (value == "number")
+					type = PropGetType_Number, syminfo = SymbolType_PositiveInt;
+				else if (value == "name")
+					type = PropGetType_Name, syminfo = SymbolType_String;
+				else
+					return false;
+
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	PropGetType type = PropGetType_Unknown;
 };
 
 // (size)
 struct Size : public Expression
 {
-	AST_IMPL(Size, Expression);
+	EXPR_IMPL(Size, Expression, SymbolType_Number);
 	AST_ACCEPTOR;
 };
 
 // (volume)
 struct Volume : public Expression
 {
-	AST_IMPL(Volume, Expression);
+	EXPR_IMPL(Volume, Expression, SymbolType_PositiveNumber);
 	AST_ACCEPTOR;
 };
 
 // <touching $e>
 struct Touching : public Expression
 {
-	AST_IMPL(Touching, Expression);
+	EXPR_IMPL(Touching, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~Touching()
@@ -179,27 +215,41 @@ struct Touching : public Expression
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // color
 };
 
 // <touching color $e ?>
 struct TouchingColor : public Expression
 {
-	AST_IMPL(TouchingColor, Expression);
+	EXPR_IMPL(TouchingColor, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "COLOR")
+		{
+			if (!e)
+			{
+				e = val->As<Expression>();
+				return !!e;
+			}
+		}
+
+		return false;
+	}
 
 	inline virtual ~TouchingColor()
 	{
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // color
 };
 
 // <color $e1 is touching $e2 ?>
 struct ColorTouching : public Expression
 {
-	AST_IMPL(ColorTouching, Expression);
+	EXPR_IMPL(ColorTouching, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~ColorTouching()
@@ -208,13 +258,14 @@ struct ColorTouching : public Expression
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // color
+	Expression *e2 = nullptr; // color
 };
 
 // (distance to $e)
 struct DistanceTo : public Expression
 {
-	AST_IMPL(DistanceTo, Expression);
+	EXPR_IMPL(DistanceTo, Expression, SymbolType_PositiveNumber);
 	AST_ACCEPTOR;
 
 	inline virtual ~DistanceTo()
@@ -222,20 +273,20 @@ struct DistanceTo : public Expression
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // string
 };
 
 // (answer)
 struct Answer : public Expression
 {
-	AST_IMPL(Answer, Expression);
+	EXPR_IMPL(Answer, Expression, SymbolType_String);
 	AST_ACCEPTOR;
 };
 
 // <key $e pressed>
 struct KeyPressed : public Expression
 {
-	AST_IMPL(KeyPressed, Expression);
+	EXPR_IMPL(KeyPressed, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~KeyPressed()
@@ -243,48 +294,48 @@ struct KeyPressed : public Expression
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // string
 };
 
 // <mouse down>
 struct MouseDown : public Expression
 {
-	AST_IMPL(MouseDown, Expression);
+	EXPR_IMPL(MouseDown, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
 };
 
 // (mouse x)
 struct MouseX : public Expression
 {
-	AST_IMPL(MouseX, Expression);
+	EXPR_IMPL(MouseX, Expression, SymbolType_Int);
 	AST_ACCEPTOR;
 };
 
 // (mouse y)
 struct MouseY : public Expression
 {
-	AST_IMPL(MouseY, Expression);
+	EXPR_IMPL(MouseY, Expression, SymbolType_Int);
 	AST_ACCEPTOR;
 };
 
 // (loudness)
 struct Loudness : public Expression
 {
-	AST_IMPL(Loudness, Expression);
+	EXPR_IMPL(Loudness, Expression, SymbolType_PositiveNumber);
 	AST_ACCEPTOR;
 };
 
 // (timer)
 struct TimerValue : public Expression
 {
-	AST_IMPL(TimerValue, Expression);
+	EXPR_IMPL(TimerValue, Expression, SymbolType_PositiveNumber);
 	AST_ACCEPTOR;
 };
 
 // (?target of $e)
 struct PropertyOf : public Expression
 {
-	AST_IMPL(PropertyOf, Expression);
+	EXPR_IMPL(PropertyOf, Expression, SymbolType_Any);
 	AST_ACCEPTOR;
 
 	inline virtual ~PropertyOf()
@@ -294,22 +345,38 @@ struct PropertyOf : public Expression
 
 	PropertyTarget target = PropertyTarget_Unknown;
 	std::string id, name; // id/name of variable if target is a variable
-	Expression *e = nullptr;
+	Expression *e = nullptr; // string
 };
 
 // (current $format)
 struct CurrentDate : public Expression
 {
-	AST_IMPL(CurrentDate, Expression);
+	EXPR_IMPL(CurrentDate, Expression, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 
 	AST_FIELD_SETTER(key, value, id)
 	{
 		if (key == "CURRENTMENU")
 		{
-			if (format.empty())
+			if (format == DateFormat_Unknown)
 			{
-				format = value;
+				if (value == "YEAR")
+					format = DateFormat_Year;
+				else if (value == "MONTH")
+					format = DateFormat_Month;
+				else if (value == "DATE")
+					format = DateFormat_Date;
+				else if (value == "DAYOFWEEK")
+					format = DateFormat_DayOfWeek;
+				else if (value == "HOUR")
+					format = DateFormat_Hour;
+				else if (value == "MINUTE")
+					format = DateFormat_Minute;
+				else if (value == "SECOND")
+					format = DateFormat_Second;
+				else
+					return false;
+
 				return true;
 			}
 		}
@@ -317,45 +384,45 @@ struct CurrentDate : public Expression
 		return false;
 	}
 
-	std::string format;
+	DateFormat format = DateFormat_Unknown;
 };
 
 // (days since 2000)
 struct DaysSince2000 : public Expression
 {
-	AST_IMPL(DaysSince2000, Expression);
+	EXPR_IMPL(DaysSince2000, Expression, SymbolType_PositiveNumber);
 	AST_ACCEPTOR;
 };
 
 // (username)
 struct Username : public Expression
 {
-	AST_IMPL(Username, Expression);
+	EXPR_IMPL(Username, Expression, SymbolType_String);
 	AST_ACCEPTOR;
 };
 
 // ($e1 + $e2)
 struct Add : public Consteval
 {
-	AST_IMPL(Add, Consteval);
+	EXPR_IMPL(Add, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "NUM1")
 		{
 			if (!e1)
 			{
-				e1 = expr;
-				return true;
+				e1 = val->As<Expression>();
+				return !!e1;
 			}
 		}
 		else if (key == "NUM2")
 		{
 			if (!e2)
 			{
-				e2 = expr;
-				return true;
+				e2 = val->As<Expression>();
+				return !!e2;
 			}
 		}
 
@@ -368,13 +435,14 @@ struct Add : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // number
 };
 
 // ($e1 - $e2)
 struct Sub : public Consteval
 {
-	AST_IMPL(Sub, Consteval);
+	EXPR_IMPL(Sub, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
 	inline virtual ~Sub()
@@ -383,24 +451,25 @@ struct Sub : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // number
 };
 
 // ($e1 * $e2)
 struct Mul : public Consteval
 {
-	AST_IMPL(Mul, Consteval);
+	EXPR_IMPL(Mul, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "NUM1")
 		{
 			if (e1)
 				return false;
 
-			e1 = expr;
-			return true;
+			e1 = val->As<Expression>();
+			return !!e1;
 		}
 
 		if (key == "NUM2")
@@ -408,8 +477,8 @@ struct Mul : public Consteval
 			if (e2)
 				return false;
 
-			e2 = expr;
-			return true;
+			e2 = val->As<Expression>();
+			return !!e2;
 		}
 
 		return false;
@@ -421,13 +490,14 @@ struct Mul : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // number
 };
 
 // ($e1 / $e2)
 struct Div : public Consteval
 {
-	AST_IMPL(Div, Consteval);
+	EXPR_IMPL(Div, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
 	inline virtual ~Div()
@@ -436,31 +506,32 @@ struct Div : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // number
 };
 
 // (pick random $e1 to $e2)
 struct Random : public Expression
 {
-	AST_IMPL(Random, Expression);
+	EXPR_IMPL(Random, Expression, SymbolType_Number);
 	AST_ACCEPTOR;
 
-	AST_INPUT_SETTER(key, expr)
+	AST_INPUT_SETTER(key, val)
 	{
 		if (key == "FROM")
 		{
 			if (!e1)
 			{
-				e1 = expr;
-				return true;
+				e1 = val->As<Expression>();
+				return !!e1;
 			}
 		}
 		else if (key == "TO")
 		{
 			if (!e2)
 			{
-				e2 = expr;
-				return true;
+				e2 = val->As<Expression>();
+				return !!e2;
 			}
 		}
 
@@ -473,13 +544,14 @@ struct Random : public Expression
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // number
 };
 
 // ($e1 > $e2)
 struct Greater : public Consteval
 {
-	AST_IMPL(Greater, Consteval);
+	EXPR_IMPL(Greater, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~Greater()
@@ -488,13 +560,14 @@ struct Greater : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // number
 };
 
 // ($e1 < $e2)
 struct Less : public Consteval
 {
-	AST_IMPL(Less, Consteval);
+	EXPR_IMPL(Less, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~Less()
@@ -503,14 +576,37 @@ struct Less : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // number
 };
 
 // ($e1 = $e2)
 struct Equal : public Consteval
 {
-	AST_IMPL(Equal, Consteval);
+	EXPR_IMPL(Equal, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "OPERAND1")
+		{
+			if (!e1)
+			{
+				e1 = val->As<Expression>();
+				return !!e1;
+			}
+		}
+		else if (key == "OPERAND2")
+		{
+			if (!e2)
+			{
+				e2 = val->As<Expression>();
+				return !!e2;
+			}
+		}
+
+		return false;
+	}
 
 	inline virtual ~Equal()
 	{
@@ -518,13 +614,14 @@ struct Equal : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // any
+	Expression *e2 = nullptr; // any
 };
 
 // ($e1 and $e2)
 struct LogicalAnd : public Consteval
 {
-	AST_IMPL(LogicalAnd, Consteval);
+	EXPR_IMPL(LogicalAnd, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~LogicalAnd()
@@ -533,13 +630,14 @@ struct LogicalAnd : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // bool
+	Expression *e2 = nullptr; // bool
 };
 
 // ($e1 or $e2)
 struct LogicalOr : public Consteval
 {
-	AST_IMPL(LogicalOr, Consteval);
+	EXPR_IMPL(LogicalOr, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~LogicalOr()
@@ -548,13 +646,14 @@ struct LogicalOr : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // bool
+	Expression *e2 = nullptr; // bool
 };
 
 // (not $e)
 struct LogicalNot : public Consteval
 {
-	AST_IMPL(LogicalNot, Consteval);
+	EXPR_IMPL(LogicalNot, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~LogicalNot()
@@ -562,13 +661,13 @@ struct LogicalNot : public Consteval
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // bool
 };
 
 // (join $e1 $e2)
 struct Concat : public Consteval
 {
-	AST_IMPL(Concat, Consteval);
+	EXPR_IMPL(Concat, Consteval, SymbolType_String);
 	AST_ACCEPTOR;
 
 	inline virtual ~Concat()
@@ -577,13 +676,14 @@ struct Concat : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // string
+	Expression *e2 = nullptr; // string
 };
 
 // (letter $e1 of $e2)
 struct CharAt : public Consteval
 {
-	AST_IMPL(CharAt, Consteval);
+	EXPR_IMPL(CharAt, Consteval, SymbolType_String);
 	AST_ACCEPTOR;
 
 	inline virtual ~CharAt()
@@ -592,13 +692,14 @@ struct CharAt : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // string
 };
 
 // (length of $e)
 struct StringLength : public Consteval
 {
-	AST_IMPL(StringLength, Consteval);
+	EXPR_IMPL(StringLength, Consteval, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 
 	inline virtual ~StringLength()
@@ -606,13 +707,13 @@ struct StringLength : public Consteval
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // string
 };
 
 // <$e1 contains $e2 ?>
 struct StringContains : public Consteval
 {
-	AST_IMPL(StringContains, Consteval);
+	EXPR_IMPL(StringContains, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~StringContains()
@@ -621,13 +722,14 @@ struct StringContains : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // string
+	Expression *e2 = nullptr; // string
 };
 
 // ($e1 mod $e2)
 struct Mod : public Consteval
 {
-	AST_IMPL(Mod, Consteval);
+	EXPR_IMPL(Mod, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
 	inline virtual ~Mod()
@@ -636,13 +738,14 @@ struct Mod : public Consteval
 		delete e2;
 	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	Expression *e1 = nullptr; // number
+	Expression *e2 = nullptr; // number
 };
 
 // (round $e)
 struct Round : public Consteval
 {
-	AST_IMPL(Round, Consteval);
+	EXPR_IMPL(Round, Consteval, SymbolType_Int);
 	AST_ACCEPTOR;
 
 	inline virtual ~Round()
@@ -650,13 +753,13 @@ struct Round : public Consteval
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // number
 };
 
 // (?func of $e)
 struct MathFunc : public Consteval
 {
-	AST_IMPL(MathFunc, Consteval);
+	EXPR_IMPL(MathFunc, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
 	inline virtual ~MathFunc()
@@ -665,13 +768,13 @@ struct MathFunc : public Consteval
 	}
 
 	std::string func;
-	Expression *e = nullptr;
+	Expression *e = nullptr; // number
 };
 
 // (?id)
 struct VariableExpr : public Expression
 {
-	AST_IMPL(VariableExpr, Expression);
+	EXPR_IMPL(VariableExpr, Expression, SymbolType_Any);
 	AST_ACCEPTOR;
 
 	std::string id, name;
@@ -680,7 +783,7 @@ struct VariableExpr : public Expression
 // (?id)
 struct ListExpr : public Expression
 {
-	AST_IMPL(ListExpr, Expression);
+	EXPR_IMPL(ListExpr, Expression, SymbolType_String);
 	AST_ACCEPTOR;
 
 	std::string id, name;
@@ -689,7 +792,7 @@ struct ListExpr : public Expression
 // (item $e of ?id)
 struct ListAccess : public Expression
 {
-	AST_IMPL(ListAccess, Expression);
+	EXPR_IMPL(ListAccess, Expression, SymbolType_Any);
 	AST_ACCEPTOR;
 
 	inline virtual ~ListAccess()
@@ -697,14 +800,14 @@ struct ListAccess : public Expression
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // positive int
 	std::string id, name;
 };
 
 // (item # of $e in ?id)
 struct IndexOf : public Expression
 {
-	AST_IMPL(IndexOf, Expression);
+	EXPR_IMPL(IndexOf, Expression, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 
 	inline virtual ~IndexOf()
@@ -712,14 +815,14 @@ struct IndexOf : public Expression
 		delete e;
 	}
 
-	Expression *e = nullptr;
+	Expression *e = nullptr; // any
 	std::string id, name;
 };
 
 // (length of ?id)
 struct ListLength : public Expression
 {
-	AST_IMPL(ListLength, Expression);
+	EXPR_IMPL(ListLength, Expression, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 
 	std::string id, name;
@@ -728,7 +831,7 @@ struct ListLength : public Expression
 // <?id contains $e>
 struct ListContains : public Expression
 {
-	AST_IMPL(ListContains, Expression);
+	EXPR_IMPL(ListContains, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
 
 	inline virtual ~ListContains()
@@ -737,5 +840,5 @@ struct ListContains : public Expression
 	}
 
 	std::string id, name;
-	Expression *e = nullptr;
+	Expression *e = nullptr; // any
 };

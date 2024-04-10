@@ -19,7 +19,7 @@ struct ASTNode
 	inline virtual void Accept(Visitor *visitor) { }
 
 	// Set an input value
-	inline virtual bool SetInput(const std::string &key, Expression *value) { return false; }
+	inline virtual bool SetInput(const std::string &key, ASTNode *value) { return false; }
 
 	inline virtual bool SetField(const std::string &key,
 		const std::string &value, const std::string &id) { return false; }

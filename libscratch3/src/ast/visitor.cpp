@@ -18,59 +18,74 @@ public:
 
 	virtual void Visit(Number *node)
 	{
-		Printf("\033[1mNumber\033[0m \033[32m%s\033[0m\n", node->value.c_str());
+		Printf("\033[32m%s\033[0m -> %s\n",
+			node->value.c_str(),
+			node->syminfo.ToString().c_str());
 	}
 
 	virtual void Visit(PositiveNumber *node)
 	{
-		Printf("PositiveNumber \033[32m%s\033[0m\n", node->value.c_str());
+		Printf("\033[32m%s\033[0m\n", node->value.c_str());
 	}
 
 	virtual void Visit(PositiveInt *node)
 	{
-		Printf("PositiveInt \033[32m%s\033[0m\n", node->value.c_str());
+		Printf("\033[32m%s\033[0m\n", node->value.c_str());
 	}
 
 	virtual void Visit(Int *node)
 	{
-		Printf("Int \033[32m%s\033[0m\n", node->value.c_str());
+		Printf("\033[32m%s\033[0m\n", node->value.c_str());
 	}
 
 	virtual void Visit(Angle *node)
 	{
-		Printf("Angle \033[32m%s\033[0m deg\n", node->value.c_str());
+		Printf("\033[32m%s\033[0m deg\n", node->value.c_str());
 	}
 
 	virtual void Visit(Color *node)
 	{
-		Printf("Color %s\n", node->value.c_str());
+		Printf("%s\n", node->value.c_str());
 	}
 
 	virtual void Visit(String *node)
 	{
-		Printf("\033[1mString\033[0m \033[33;1m\"%s\"\033[0m\n", node->value.c_str());
+		Printf("\033[33;1m\"%s\"\033[0m\n", node->value.c_str());
 	}
 
 	virtual void Visit(True *node)
 	{
-		Printf("\033[1mTrue\033[0m\n");
+		Printf("\033[35;1mtrue\033[0m\n");
 	}
 
 	virtual void Visit(False *node)
 	{
-		Printf("\033[1mFalse\033[0m\n");
+		Printf("\033[35;1mfalse\033[0m\n");
 	}
 
-	virtual void Visit(Null *node)
+	virtual void Visit(None *node)
 	{
-		Printf("\033[1mNull\033[0m\n");
+		Printf("\033[1mNone\033[0m\n");
 	}
 
 	virtual void Visit(XPos *node) {}
 	virtual void Visit(YPos *node) {}
 	virtual void Visit(Direction *node) {}
-	virtual void Visit(CurrentCostume *node) {}
-	virtual void Visit(CurrentBackdrop *node) {}
+
+	virtual void Visit(CurrentCostume *node)
+	{
+		Printf("\033[35mCurrentCostume\033[0m %s -> \033[1m%s\033[0m\n",
+			PropGetTypeStrings[node->type],
+			node->syminfo.ToString().c_str());
+	}
+
+	virtual void Visit(CurrentBackdrop *node)
+	{
+		Printf("\033[35mCurrentBackdrop\033[0m %s -> \033[1m%s\033[0m\n",
+			PropGetTypeStrings[node->type],
+			node->syminfo.ToString().c_str());
+	}
+
 	virtual void Visit(Size *node) {}
 	virtual void Visit(Volume *node) {}
 	virtual void Visit(Touching *node) {}
@@ -88,7 +103,9 @@ public:
 
 	virtual void Visit(CurrentDate *node)
 	{
-		Printf("\033[36;1mCurrentDate\033[0m %s\n", node->format.c_str());
+		Printf("\033[36;1mCurrentDate\033[0m %s -> \033[1m%s\033[0m\n",
+			DateFormatStrings[node->format],
+			node->syminfo.ToString().c_str());
 	}
 
 	virtual void Visit(DaysSince2000 *node) {}
@@ -96,7 +113,9 @@ public:
 
 	virtual void Visit(Add *node)
 	{
-		Printf("\033[32;1mAdd\033[0m\n");
+		Printf("\033[32;1mAdd\033[0m -> \033[1m%s\033[0m\n",
+			node->syminfo.ToString().c_str());
+
 		_indent++;
 		node->e1->Accept(this);
 		node->e2->Accept(this);
@@ -107,7 +126,9 @@ public:
 
 	virtual void Visit(Mul *node)
 	{
-		Printf("\033[32;1mMul\033[0m\n");
+		Printf("\033[32;1mMul\033[0m -> \033[1m%s\033[0m\n",
+			node->syminfo.ToString().c_str());
+
 		_indent++;
 		node->e1->Accept(this);
 		node->e2->Accept(this);
@@ -118,7 +139,9 @@ public:
 
 	virtual void Visit(Random *node)
 	{
-		Printf("\033[32;1mRandom\033[0m\n");
+		Printf("\033[32;1mRandom\033[0m -> \033[1m%s\033[0m\n",
+			node->syminfo.ToString().c_str());
+
 		_indent++;
 		node->e1->Accept(this);
 		node->e2->Accept(this);
@@ -141,7 +164,8 @@ public:
 
 	virtual void Visit(VariableExpr *node)
 	{
-		Printf("\033[31;1mVariableExpr\033[0m %s\n", node->name.c_str());
+		Printf("\033[31;1m%s\033[0m\n",
+			node->name.c_str(), node->syminfo.ToString().c_str());
 	}
 
 	virtual void Visit(ListExpr *node) {}
@@ -214,7 +238,7 @@ public:
 
 	virtual void Visit(SetGraphicEffect *node)
 	{
-		Printf("\033[35mSetGraphicEffect\033[0m %s\n", GraphicEffectToString(node->effect));
+		Printf("\033[35mSetGraphicEffect\033[0m %s\n", GraphicEffectStrings[node->effect]);
 		_indent++;
 		node->e->Accept(this);
 		_indent--;
@@ -293,10 +317,12 @@ public:
 
 	virtual void Visit(VariableDef *node)
 	{
-		Printf("\033[31;1mVariableDef\033[0m %s\n", node->name.c_str());
-		_indent++;
+		Printf("\033[31;1m%s\033[0m = ", node->name.c_str());
+
+		int indent = _indent;
+		_indent = 0;
 		node->value->Accept(this);
-		_indent--;
+		_indent = indent;
 	}
 
 	virtual void Visit(VariableDefList *node)
@@ -304,17 +330,18 @@ public:
 		Printf("\033[1mVariableDefList\033[0m\n");
 		_indent++;
 		for (auto v : node->variables)
-			v.second->Accept(this);
+			v->Accept(this);
 		_indent--;
 	}
 
 	virtual void Visit(ListDef *node)
 	{
-		Printf("\033[1mListDef\033[0m %s\n", node->name.c_str());
+		Printf("\033[31;1m%s\033[0m = {\n", node->name.c_str());
 		_indent++;
 		for (auto v : node->value)
 			v->Accept(this);
 		_indent--;
+		Printf("}\n");
 	}
 
 	virtual void Visit(ListDefList *node)
@@ -322,7 +349,7 @@ public:
 		Printf("\033[1mListDefList\033[0m\n");
 		_indent++;
 		for (auto v : node->lists)
-			v.second->Accept(this);
+			v->Accept(this);
 		_indent--;
 	}
 
@@ -337,11 +364,11 @@ public:
 
 	virtual void Visit(SpriteDef *node)
 	{
-		Printf("\033[1mSpriteDef\033[0m %s\n", node->name.c_str());
+		Printf("\033[1mSpriteDef\033[0m \033[33;1m%s\033[0m\n", node->name.c_str());
 		_indent++;
-		node->variables->Accept(this);
-		node->lists->Accept(this);
-		node->scripts->Accept(this);
+		if (node->variables) node->variables->Accept(this);
+		if (node->lists) node->lists->Accept(this);
+		if (node->scripts) node->scripts->Accept(this);
 		_indent--;
 	}
 
@@ -358,9 +385,9 @@ public:
 	{
 		Printf("\033[1mStageDef\033[0m\n");
 		_indent++;
-		node->variables->Accept(this);
-		node->lists->Accept(this);
-		node->scripts->Accept(this);
+		if (node->variables) node->variables->Accept(this);
+		if (node->lists) node->lists->Accept(this);
+		if (node->scripts) node->scripts->Accept(this);
 		_indent--;
 	}
 
@@ -379,15 +406,9 @@ public:
 	{
 		Printf("\033[1mProgram\033[0m\n");
 		_indent++;
-		if (node->stage)
-			node->stage->Accept(this);
-
-		if (node->sprites)
-			node->sprites->Accept(this);
-
-		if (node->monitors)
-			node->monitors->Accept(this);
-
+		if (node->stage) node->stage->Accept(this);
+		if (node->sprites) node->sprites->Accept(this);
+		if (node->monitors) node->monitors->Accept(this);
 		_indent--;
 	}
 private:
