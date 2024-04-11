@@ -229,10 +229,8 @@ struct TouchingColor : public Expression
 		if (key == "COLOR")
 		{
 			if (!e)
-			{
 				e = val->As<Expression>();
-				return !!e;
-			}
+			return !!e;
 		}
 
 		return false;
@@ -338,6 +336,56 @@ struct PropertyOf : public Expression
 	EXPR_IMPL(PropertyOf, Expression, SymbolType_Any);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, value)
+	{
+		if (key == "OBJECT")
+		{
+			if (!e)
+				e = value->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "PROPERTY")
+		{
+			if (target == PropertyTarget_Unknown)
+			{
+				if (value == "backdrop #")
+					target = PropertyTarget_BackdropNumber;
+				else if (value == "backdrop name")
+					target = PropertyTarget_BackdropName;
+				else if (value == "x position")
+					target = PropertyTarget_XPosition;
+				else if (value == "y position")
+					target = PropertyTarget_YPosition;
+				else if (value == "direction")
+					target = PropertyTarget_Direction;
+				else if (value == "costume #")
+					target = PropertyTarget_CostumeNumber;
+				else if (value == "costume name")
+					target = PropertyTarget_CostumeName;
+				else if (value == "size")
+					target = PropertyTarget_Size;
+				else if (value == "volume")
+					target = PropertyTarget_Volume;
+				else
+				{
+					target = PropertyTarget_Variable;
+					name = value;
+					this->id = id;
+				}
+
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	inline virtual ~PropertyOf()
 	{
 		delete e;
@@ -412,18 +460,14 @@ struct Add : public Consteval
 		if (key == "NUM1")
 		{
 			if (!e1)
-			{
 				e1 = val->As<Expression>();
-				return !!e1;
-			}
+			return !!e1;
 		}
 		else if (key == "NUM2")
 		{
 			if (!e2)
-			{
 				e2 = val->As<Expression>();
-				return !!e2;
-			}
+			return !!e2;
 		}
 
 		return false;
@@ -465,19 +509,15 @@ struct Mul : public Consteval
 	{
 		if (key == "NUM1")
 		{
-			if (e1)
-				return false;
-
-			e1 = val->As<Expression>();
+			if (!e1)
+				e1 = val->As<Expression>();
 			return !!e1;
 		}
 
 		if (key == "NUM2")
 		{
-			if (e2)
-				return false;
-
-			e2 = val->As<Expression>();
+			if (!e2)
+				e2 = val->As<Expression>();
 			return !!e2;
 		}
 
@@ -521,18 +561,14 @@ struct Random : public Expression
 		if (key == "FROM")
 		{
 			if (!e1)
-			{
 				e1 = val->As<Expression>();
-				return !!e1;
-			}
+			return !!e1;
 		}
 		else if (key == "TO")
 		{
 			if (!e2)
-			{
 				e2 = val->As<Expression>();
-				return !!e2;
-			}
+			return !!e2;
 		}
 
 		return false;
@@ -554,6 +590,24 @@ struct Greater : public Consteval
 	EXPR_IMPL(Greater, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "OPERAND1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+		else if (key == "OPERAND2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
 	inline virtual ~Greater()
 	{
 		delete e1;
@@ -569,6 +623,24 @@ struct Less : public Consteval
 {
 	EXPR_IMPL(Less, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "OPERAND1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+		else if (key == "OPERAND2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
 
 	inline virtual ~Less()
 	{
@@ -591,18 +663,14 @@ struct Equal : public Consteval
 		if (key == "OPERAND1")
 		{
 			if (!e1)
-			{
 				e1 = val->As<Expression>();
-				return !!e1;
-			}
+			return !!e1;
 		}
 		else if (key == "OPERAND2")
 		{
 			if (!e2)
-			{
 				e2 = val->As<Expression>();
-				return !!e2;
-			}
+			return !!e2;
 		}
 
 		return false;
@@ -624,6 +692,24 @@ struct LogicalAnd : public Consteval
 	EXPR_IMPL(LogicalAnd, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "OPERAND1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+		else if (key == "OPERAND2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
 	inline virtual ~LogicalAnd()
 	{
 		delete e1;
@@ -639,6 +725,24 @@ struct LogicalOr : public Consteval
 {
 	EXPR_IMPL(LogicalOr, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "OPERAND1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+		else if (key == "OPERAND2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
 
 	inline virtual ~LogicalOr()
 	{

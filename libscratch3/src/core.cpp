@@ -8,7 +8,7 @@
 static void StdoutLogCallback(void *up, Scratch3_Severity severity, const char *message)
 {
 	if (severity == Scratch3_Error)
-		printf("\\033[31;1m[ERRO]\033[0m %s\n", message);
+		printf("\033[31;1m[ERRO]\033[0m %s\n", message);
 	else if (severity == Scratch3_Warning)
 		printf("\033[33;1m[WARN]\033[0m %s\n", message);
 	else if (severity == Scratch3_Info)

@@ -616,7 +616,15 @@ enum PropertyTarget
 
 	PropertyTarget_BackdropNumber,
 	PropertyTarget_BackdropName,
+
+	PropertyTarget_XPosition,
+	PropertyTarget_YPosition,
+	PropertyTarget_Direction,
+	PropertyTarget_CostumeNumber,
+	PropertyTarget_CostumeName,
+	PropertyTarget_Size,
 	PropertyTarget_Volume,
+
 	PropertyTarget_Variable,
 
 	PropertyTarget_Count

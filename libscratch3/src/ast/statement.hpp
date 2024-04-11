@@ -36,10 +36,8 @@ struct MoveSteps : public Statement
 		if (key == "STEPS")
 		{
 			if (!e)
-			{
 				e = val->As<Expression>();
-				return !!e;
-			}
+			return !!e;
 		}
 
 		return false;
@@ -64,10 +62,8 @@ struct TurnDegrees : public Statement
 		if (key == "DEGREES")
 		{
 			if (!e)
-			{
 				e = val->As<Expression>();
-				return !!e;
-			}
+			return !!e;
 		}
 
 		return false;
@@ -92,10 +88,8 @@ struct TurnNegDegrees : public Statement
 		if (key == "DEGREES")
 		{
 			if (!e)
-			{
 				e = val->As<Expression>();
-				return !!e;
-			}
+			return !!e;
 		}
 
 		return false;
@@ -134,19 +128,15 @@ struct GotoXY : public Statement
 		if (key == "X")
 		{
 			if (!e1)
-			{
 				e1 = val->As<Expression>();
-				return !!e1;
-			}
+			return !!e1;
 		}
 
 		if (key == "Y")
 		{
 			if (!e2)
-			{
 				e2 = val->As<Expression>();
-				return !!e2;
-			}
+			return !!e2;
 		}
 
 		return false;
@@ -182,6 +172,32 @@ struct GlideXY : public Statement
 	AST_IMPL(GlideXY, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "SECS")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "X")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		if (key == "Y")
+		{
+			if (!e3)
+				e3 = val->As<Expression>();
+			return !!e3;
+		}
+
+		return false;
+	}
+
 	inline virtual ~GlideXY()
 	{
 		delete e1;
@@ -203,10 +219,8 @@ struct PointDir : public Statement
 		if (key == "DIRECTION")
 		{
 			if (!e)
-			{
 				e = val->As<Expression>();
-				return !!e;
-			}
+			return !!e;
 		}
 
 		return false;
@@ -231,10 +245,8 @@ struct PointTowards : public Statement
 		if (key == "TARGET")
 		{
 			if (!e)
-			{
 				e = val->As<Expression>();
-				return !!e;
-			}
+			return !!e;
 		}
 
 		return false;
@@ -253,6 +265,18 @@ struct ChangeX : public Statement
 {
 	AST_IMPL(ChangeX, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "DX")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~ChangeX()
 	{
@@ -273,10 +297,8 @@ struct SetX : public Statement
 		if (key == "X")
 		{
 			if (!e)
-			{
 				e = val->As<Expression>();
-				return !!e;
-			}
+			return !!e;
 		}
 
 		return false;
@@ -301,10 +323,8 @@ struct ChangeY : public Statement
 		if (key == "DY")
 		{
 			if (!e)
-			{
 				e = val->As<Expression>();
-				return !!e;
-			}
+			return !!e;
 		}
 
 		return false;
@@ -370,19 +390,15 @@ struct SayForSecs : public Statement
 		if (key == "MESSAGE")
 		{
 			if (!e1)
-			{
 				e1 = val->As<Expression>();
-				return !!e1;
-			}
+			return !!e1;
 		}
 
 		if (key == "SECS")
 		{
 			if (!e2)
-			{
 				e2 = val->As<Expression>();
-				return !!e2;
-			}
+			return !!e2;
 		}
 
 		return false;
@@ -471,9 +487,8 @@ struct SwitchBackdrop : public Statement
 	{
 		if (key == "BACKDROP")
 		{
-			if (e)
-				return false;
-			e = val->As<Expression>();
+			if (!e)
+				e = val->As<Expression>();
 			return !!e;
 		}
 
@@ -529,6 +544,18 @@ struct SetSize : public Statement
 	AST_IMPL(SetSize, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "SIZE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~SetSize()
 	{
 		delete e;
@@ -562,7 +589,8 @@ struct SetGraphicEffect : public Statement
 	{
 		if (key == "VALUE")
 		{
-			e = val->As<Expression>();
+			if (!e)
+				e = val->As<Expression>();
 			return !!e;
 		}
 
@@ -732,9 +760,8 @@ struct SetVolume : public Statement
 	{
 		if (key == "VOLUME")
 		{
-			if (e)
-				return false;
-			e = val->As<Expression>();
+			if (!e)
+				e = val->As<Expression>();
 			return !!e;
 		}
 
@@ -850,9 +877,8 @@ struct WaitSecs : public Statement
 	{
 		if (key == "DURATION")
 		{
-			if (e)
-				return false;
-			e = val->As<Expression>();
+			if (!e)
+				e = val->As<Expression>();
 			return !!e;
 		}
 
@@ -893,6 +919,18 @@ struct Forever : public Statement
 	AST_IMPL(Forever, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "SUBSTACK")
+		{
+			if (!sl)
+				sl = val->As<StatementList>();
+			return !!sl;
+		}
+
+		return false;
+	}
+
 	inline virtual ~Forever()
 	{
 		delete sl;
@@ -913,10 +951,16 @@ struct If : public Statement
 	{
 		if (key == "CONDITION")
 		{
-			if (e)
-				return false;
-			e = val->As<Expression>();
+			if (!e)
+				e = val->As<Expression>();
 			return !!e;
+		}
+
+		if (key == "SUBSTACK")
+		{
+			if (!sl)
+				sl = val->As<StatementList>();
+			return !!sl;
 		}
 
 		return false;
@@ -946,10 +990,23 @@ struct IfElse : public Statement
 	{
 		if (key == "CONDITION")
 		{
-			if (e)
-				return false;
-			e = val->As<Expression>();
+			if (!e)
+				e = val->As<Expression>();
 			return !!e;
+		}
+
+		if (key == "SUBSTACK")
+		{
+			if (!sl1)
+				sl1 = val->As<StatementList>();
+			return !!sl1;
+		}
+
+		if (key == "SUBSTACK2")
+		{
+			if (!sl2)
+				sl2 = val->As<StatementList>();
+			return !!sl2;
 		}
 
 		return false;
@@ -992,10 +1049,16 @@ struct RepeatUntil : public Statement
 	{
 		if (key == "CONDITION")
 		{
-			if (e)
-				return false;
-			e = val->As<Expression>();
+			if (!e)
+				e = val->As<Expression>();
 			return !!e;
+		}
+
+		if (key == "SUBSTACK")
+		{
+			if (!sl)
+				sl = val->As<StatementList>();
+			return !!sl;
 		}
 
 		return false;
@@ -1088,7 +1151,8 @@ struct SetVariable : public Statement
 	{
 		if (key == "VALUE")
 		{
-			e = val->As<Expression>();
+			if (!e)
+				e = val->As<Expression>();
 			return !!e;
 		}
 
@@ -1125,6 +1189,32 @@ struct ChangeVariable : public Statement
 {
 	AST_IMPL(ChangeVariable, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "VALUE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "VARIABLE")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
 
 	inline virtual ~ChangeVariable()
 	{

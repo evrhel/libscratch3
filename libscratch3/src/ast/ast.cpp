@@ -629,8 +629,7 @@ private:
 	//! target.
 	//! 
 	//! \param blocks The "blocks" member of the target. Must be an object.
-	//! \param first The ID of the first block in the script. This should have
-	//! the "topLevel" member set to true, but this is not checked.
+	//! \param first The ID of the first block in the script.
 	//! \param sl The StatementList object to populate.
 	void ParseScript(rapidjson::Value &blocks, const std::string &first, StatementList *sl)
 	{
@@ -656,7 +655,7 @@ private:
 			}
 
 			// parse the block
-			ASTNode *node = ParseBlock(blocks, id);
+			ASTNode *node = ParseBlock(blocks, id, false);
 			if (!node)
 				break;
 
@@ -697,10 +696,14 @@ private:
 	//! 
 	//! \param blocks The "blocks" member. Must be an object.
 	//! \param id The ID of the block to parse.
+	//! \param createList Whether to create a list of statements from the block.
+	//! If true, the resulting ASTNode object will be a StatementList, only if
+	//! the parsed block is a Statement. Use this for parsing branches, such as
+	//! "if" blocks.
 	//! 
 	//! \return An ASTNode object representing the block, or nullptr if parsing
 	//! failed.
-	ASTNode *ParseBlock(rapidjson::Value &blocks, const std::string &id)
+	ASTNode *ParseBlock(rapidjson::Value &blocks, const std::string &id, bool createList)
 	{
 		// Blocks are in the format (only relevant members are shown):
 		// "id": {
@@ -758,6 +761,20 @@ private:
 			return nullptr;
 		}
 
+		// Create a StatementList object if requested
+		if (createList)
+		{
+			if (n->Is(Statement::TYPE))
+			{
+				delete n; // This is inefficient, we are parsing the block twice!
+				n = new StatementList();
+				ParseScript(blocks, id, n->As<StatementList>());
+				return n;
+			}
+
+			// block is an expression, don't create a list
+		}
+
 		// Parse the inputs member (expressions)
 		if (block.HasMember("inputs"))
 		{
@@ -788,7 +805,7 @@ private:
 				// set the input in the node
 				if (!n->SetInput(key, val))
 				{
-					Warn("Unknown input `%s` in block `%s` (%s)",
+					Warn("Unknown or invalid input `%s` in block `%s` (%s)",
 						key.c_str(), id.c_str(), opcode.GetString());
 				}
 			}
@@ -862,7 +879,7 @@ private:
 				// set the field in the node
 				if (!n->SetField(key, svalue, sid))
 				{
-					Warn("Unknown field `%s` in block `%s` (%s)",
+					Warn("Unknown or invalid field `%s` in block `%s` (%s)",
 						key.c_str(), id.c_str(), opcode.GetString());
 				}
 			}
@@ -939,7 +956,7 @@ private:
 				return nullptr;
 			}
 
-			return ParseBlock(blocks, v[1].GetString());
+			return ParseBlock(blocks, v[1].GetString(), true);
 		}
 		case BlockType_NoShadow: {
 			if (v.Size() < 2)
@@ -957,7 +974,7 @@ private:
 				return nullptr;
 			}
 
-			return ParseBlock(blocks, v[1].GetString());
+			return ParseBlock(blocks, v[1].GetString(), true);
 		}
 		case BlockType_ShadowObscured: {
 			if (v.Size() < 2)
@@ -975,7 +992,7 @@ private:
 				return nullptr;
 			}
 
-			return ParseBlock(blocks, v[1].GetString());
+			return ParseBlock(blocks, v[1].GetString(), true);
 		}
 		case BlockType_Color: {
 			if (v.Size() < 2)
@@ -1149,8 +1166,8 @@ static ASTNode *NodeFromOpcode(const std::string &opcode)
 	if (opcode == "motion_turnleft") return new TurnNegDegrees();
 	if (opcode == "motion_goto") return new Goto();
 	if (opcode == "motion_gotoxy") return new GotoXY();
-	if (opcode == "motion_glide") return new Glide();
-	if (opcode == "motion_glidexy") return new GlideXY();
+	if (opcode == "motion_glideto") return new Glide();
+	if (opcode == "motion_glidesecstoxy") return new GlideXY();
 	if (opcode == "motion_pointindirection") return new PointDir();
 	if (opcode == "motion_pointtowards") return new PointTowards();
 	if (opcode == "motion_changexby") return new ChangeX();

@@ -115,11 +115,16 @@ const char *const DragModeStrings[DragMode_Count] = {
 
 const char *const PropertyTargetStrings[PropertyTarget_Count] = {
 	"unknown",
-	"BACKDROPNUMBER",
-	"BACKDROPNAME",
-	"SPRITENUMBER",
-	"SPRITENAME"
-	"VARIABLE"
+	"backdrop #",
+	"backdrop name",
+	"x position",
+	"y position",
+	"direction",
+	"costume #",
+	"costume name",
+	"size",
+	"volume",
+	"variable" // actual value is stored in a PropertyOf node
 };
 
 const char *const DateFormatStrings[DateFormat_Count] = {
