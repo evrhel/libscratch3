@@ -16,13 +16,7 @@ struct StatementList : public ASTNode
 	AST_IMPL(StatementList, ASTNode);
 	AST_ACCEPTOR;
 
-	inline virtual ~StatementList()
-	{
-		for (auto s : sl)
-			delete s;
-	}
-
-	std::vector<Statement *> sl;
+	std::vector<AutoRelease<Statement>> sl;
 };
 
 // [move $e steps]
@@ -43,12 +37,7 @@ struct MoveSteps : public Statement
 		return false;
 	}
 
-	inline virtual ~MoveSteps()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [turn cw $e degrees]
@@ -69,12 +58,7 @@ struct TurnDegrees : public Statement
 		return false;
 	}
 
-	inline virtual ~TurnDegrees()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [turn ccw $e degrees]
@@ -95,12 +79,7 @@ struct TurnNegDegrees : public Statement
 		return false;
 	}
 
-	inline virtual ~TurnNegDegrees()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [go to $e]
@@ -121,12 +100,7 @@ struct Goto : public Statement
 		return false;
 	}
 
-	inline virtual ~Goto()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [go to x: $e1 y: $e2]
@@ -154,13 +128,9 @@ struct GotoXY : public Statement
 		return false;
 	}
 
-	inline virtual ~GotoXY()
-	{
-		delete e1;
-		delete e2;
-	}
 
-	Expression *e1 = nullptr, *e2 = nullptr;
+	AutoRelease<Expression> e1;
+	AutoRelease<Expression> e2;
 };
 
 // [glide $e1 secs to $e2]
@@ -188,13 +158,8 @@ struct Glide : public Statement
 		return false;
 	}
 
-	inline virtual ~Glide()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr, *e2 = nullptr;
+	AutoRelease<Expression> e1;
+	AutoRelease<Expression> e2;
 };
 
 // [glide $e1 secs to x: $e2 y: $e3]
@@ -229,14 +194,10 @@ struct GlideXY : public Statement
 		return false;
 	}
 
-	inline virtual ~GlideXY()
-	{
-		delete e1;
-		delete e2;
-		delete e3;
-	}
 
-	Expression *e1 = nullptr, *e2 = nullptr, *e3 = nullptr;
+	AutoRelease<Expression> e1;
+	AutoRelease<Expression> e2;
+	AutoRelease<Expression> e3;
 };
 
 // [point in direction $e]
@@ -257,12 +218,7 @@ struct PointDir : public Statement
 		return false;
 	}
 
-	inline virtual ~PointDir()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [point towards $e]
@@ -283,12 +239,7 @@ struct PointTowards : public Statement
 		return false;
 	}
 
-	inline virtual ~PointTowards()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [change x by $e]
@@ -309,12 +260,7 @@ struct ChangeX : public Statement
 		return false;
 	}
 
-	inline virtual ~ChangeX()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [set x to $e]
@@ -335,12 +281,7 @@ struct SetX : public Statement
 		return false;
 	}
 
-	inline virtual ~SetX()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [change y by $e]
@@ -361,12 +302,7 @@ struct ChangeY : public Statement
 		return false;
 	}
 
-	inline virtual ~ChangeY()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [set y to $e]
@@ -387,12 +323,7 @@ struct SetY : public Statement
 		return false;
 	}
 
-	inline virtual ~SetY()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [if on edge, bounce]
@@ -447,13 +378,8 @@ struct SayForSecs : public Statement
 		return false;
 	}
 
-	inline virtual ~SayForSecs()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr, *e2 = nullptr;
+	AutoRelease<Expression> e1;
+	AutoRelease<Expression> e2;
 };
 
 // [say $e]
@@ -474,12 +400,7 @@ struct Say : public Statement
 		return false;
 	}
 
-	inline virtual ~Say()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [think $e1 for $e2 secs]
@@ -507,13 +428,8 @@ struct ThinkForSecs : public Statement
 		return false;
 	}
 
-	inline virtual ~ThinkForSecs()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr, *e2 = nullptr;
+	AutoRelease<Expression> e1;
+	AutoRelease<Expression> e2;
 };
 
 // [think $e]
@@ -534,12 +450,7 @@ struct Think : public Statement
 		return false;
 	}
 
-	inline virtual ~Think()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [switch costume to $e]
@@ -560,12 +471,7 @@ struct SwitchCostume : public Statement
 		return false;
 	}
 
-	inline virtual ~SwitchCostume()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [next costume]
@@ -593,12 +499,7 @@ struct SwitchBackdrop : public Statement
 		return false;
 	}
 
-	inline virtual ~SwitchBackdrop()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [switch backdrop to $e and wait]
@@ -619,12 +520,7 @@ struct SwitchBackdropAndWait : public Statement
 		return false;
 	}
 
-	inline virtual ~SwitchBackdropAndWait()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [next backdrop]
@@ -652,12 +548,7 @@ struct ChangeSize : public Statement
 		return false;
 	}
 
-	inline virtual ~ChangeSize()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [set size to $e]
@@ -678,12 +569,7 @@ struct SetSize : public Statement
 		return false;
 	}
 
-	inline virtual ~SetSize()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [change ?effect effect by $e]
@@ -715,13 +601,8 @@ struct ChangeGraphicEffect : public Statement
 		return false;
 	}
 
-	inline virtual ~ChangeGraphicEffect()
-	{
-		delete e;
-	}
-
 	GraphicEffect effect = GraphicEffect_Unknown;
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [set ?effect effect to $e]
@@ -753,13 +634,8 @@ struct SetGraphicEffect : public Statement
 		return false;
 	}
 
-	inline virtual ~SetGraphicEffect()
-	{
-		delete e;
-	}
-
 	GraphicEffect effect = GraphicEffect_Unknown;
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [clear graphic effects]
@@ -848,14 +724,9 @@ struct MoveLayer : public Statement
 
 		return false;
 	}
-
-	inline virtual ~MoveLayer()
-	{
-		delete e;
-	}
-
+	
 	LayerDir direction = LayerDir_Unknown;
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [play sound $e until done]
@@ -876,12 +747,7 @@ struct PlaySoundUntilDone : public Statement
 		return false;
 	}
 
-	inline virtual ~PlaySoundUntilDone()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [start sound $e]
@@ -902,12 +768,7 @@ struct StartSound : public Statement
 		return false;
 	}
 
-	inline virtual ~StartSound()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [stop all sounds]
@@ -948,13 +809,8 @@ struct ChangeSoundEffect : public Statement
 		return false;
 	}
 
-	inline virtual ~ChangeSoundEffect()
-	{
-		delete e;
-	}
-
 	SoundEffect effect = SoundEffect_Unknown;
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [set ?effect effect to $e]
@@ -988,13 +844,8 @@ struct SetSoundEffect : public Statement
 		return false;
 	}
 
-	inline virtual ~SetSoundEffect()
-	{
-		delete e;
-	}
-
 	SoundEffect effect = SoundEffect_Unknown;
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [clear sound effects]
@@ -1022,12 +873,7 @@ struct ChangeVolume : public Statement
 		return false;
 	}
 
-	inline virtual ~ChangeVolume()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [set volume to $e %]
@@ -1048,12 +894,7 @@ struct SetVolume : public Statement
 		return false;
 	}
 
-	inline virtual ~SetVolume()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [when flag clicked]
@@ -1150,13 +991,8 @@ struct OnGreaterThan : public Statement
 		return false;
 	}
 
-	inline virtual ~OnGreaterThan()
-	{
-		delete e;
-	}
-
 	ListenValueType value = ListenValueType_Unknown;
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [when I receive ?message]
@@ -1197,12 +1033,7 @@ struct Broadcast : public Statement
 		return false;
 	}
 
-	inline virtual ~Broadcast()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [broadcast $e and wait]
@@ -1223,12 +1054,7 @@ struct BroadcastAndWait : public Statement
 		return false;
 	}
 
-	inline virtual ~BroadcastAndWait()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [wait $e secs]
@@ -1249,12 +1075,7 @@ struct WaitSecs : public Statement
 		return false;
 	}
 
-	inline virtual ~WaitSecs()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [repeat $e]
@@ -1284,14 +1105,8 @@ struct Repeat : public Statement
 		return false;
 	}
 
-	inline virtual ~Repeat()
-	{
-		delete e;
-		delete sl;
-	}
-
-	Expression *e = nullptr;
-	StatementList *sl = nullptr;
+	AutoRelease<Expression> e;
+	AutoRelease<StatementList> sl;
 };
 
 // [forever]
@@ -1319,12 +1134,7 @@ struct Forever : public Statement
 		return false;
 	}
 
-	inline virtual ~Forever()
-	{
-		delete sl;
-	}
-
-	StatementList *sl = nullptr;
+	AutoRelease<StatementList> sl;
 };
 
 // [if $e]
@@ -1354,14 +1164,8 @@ struct If : public Statement
 		return false;
 	}
 
-	inline virtual ~If()
-	{
-		delete e;
-		delete sl;
-	}
-
-	Expression *e = nullptr;
-	StatementList *sl = nullptr;
+	AutoRelease<Expression> e;
+	AutoRelease<StatementList> sl;
 };
 
 // [if $e]
@@ -1400,15 +1204,9 @@ struct IfElse : public Statement
 		return false;
 	}
 
-	inline virtual ~IfElse()
-	{
-		delete e;
-		delete sl1;
-		delete sl2;
-	}
-
-	Expression *e = nullptr;
-	StatementList *sl1 = nullptr, *sl2 = nullptr;
+	AutoRelease<Expression> e;
+	AutoRelease<StatementList> sl1;
+	AutoRelease<StatementList> sl2;
 };
 
 // [wait until $e]
@@ -1428,13 +1226,8 @@ struct WaitUntil : public Statement
 
 		return false;
 	}
-
-	inline virtual ~WaitUntil()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	
+	AutoRelease<Expression> e;
 };
 
 // [repeat until $e]
@@ -1464,14 +1257,8 @@ struct RepeatUntil : public Statement
 		return false;
 	}
 
-	inline virtual ~RepeatUntil()
-	{
-		delete e;
-		delete sl;
-	}
-
-	Expression *e = nullptr;
-	StatementList *sl = nullptr;
+	AutoRelease<Expression> e;
+	AutoRelease<StatementList> sl;
 };
 
 // [stop ?mode]
@@ -1521,12 +1308,7 @@ struct CreateClone : public Statement
 		return false;
 	}
 
-	inline virtual ~CreateClone()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [delete this clone]
@@ -1554,12 +1336,7 @@ struct AskAndWait : public Statement
 		return false;
 	}
 
-	inline virtual ~AskAndWait()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [set drag mode ?mode]
@@ -1625,13 +1402,8 @@ struct SetVariable : public Statement
 		return false;
 	}
 
-	inline virtual ~SetVariable()
-	{
-		delete e;
-	}
-
 	std::string id, name;
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [change ?id by $e]
@@ -1666,13 +1438,8 @@ struct ChangeVariable : public Statement
 		return false;
 	}
 
-	inline virtual ~ChangeVariable()
-	{
-		delete e;
-	}
-
 	std::string id, name;
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 };
 
 // [show variable ?id]
@@ -1753,12 +1520,7 @@ struct AppendToList : public Statement
 		return false;
 	}
 
-	inline virtual ~AppendToList()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 	std::string id, name;
 };
 
@@ -1794,12 +1556,7 @@ struct DeleteFromList : public Statement
 		return false;
 	}
 
-	inline virtual ~DeleteFromList()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr;
+	AutoRelease<Expression> e;
 	std::string id, name;
 };
 
@@ -1865,13 +1622,8 @@ struct InsertInList : public Statement
 		return false;
 	}
 
-	inline virtual ~InsertInList()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr, *e2 = nullptr;
+	AutoRelease<Expression> e1;
+	AutoRelease<Expression> e2;
 	std::string id, name;
 };
 
@@ -1914,15 +1666,9 @@ struct ReplaceInList : public Statement
 		return false;
 	}
 
-	inline virtual ~ReplaceInList()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr;
+	AutoRelease<Expression> e1;
 	std::string name, id;
-	Expression *e2 = nullptr;
+	AutoRelease<Expression> e2;
 };
 
 // [show list ?id]
@@ -2033,13 +1779,7 @@ struct DefineProc : public Statement
 		return false;
 	}
 
-	inline virtual ~DefineProc()
-	{
-		delete proto;
-		// delete sl;
-	}
-
-	ProcProto *proto = nullptr;
+	AutoRelease<ProcProto> proto;
 
 	// StatementList *sl = nullptr;
 };
@@ -2066,12 +1806,6 @@ struct Call : public Statement
 
 	// TODO: accept mutation
 
-	inline virtual ~Call()
-	{
-		for (auto &p : args)
-			delete p.second;
-	}
-
 	std::string proccode; // proccode
-	std::unordered_map<std::string, Expression *> args;
+	std::unordered_map<std::string, AutoRelease<Expression>> args;
 };

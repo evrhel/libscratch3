@@ -33,13 +33,7 @@ struct ExpressionList : public ASTNode
 	AST_IMPL(ExpressionList, ASTNode);
 	AST_ACCEPTOR;
 
-	inline virtual ~ExpressionList()
-	{
-		for (auto e : expressions)
-			delete e;
-	}
-
-	std::vector<Expression *> expressions;
+	std::vector<AutoRelease<Expression>> expressions;
 };
 // number
 struct Number : public Constexpr
@@ -222,12 +216,7 @@ struct Touching : public Expression
 		return false;
 	}
 
-	inline virtual ~Touching()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // object
+	AutoRelease<Expression> e; // object
 };
 
 // <touching color $e ?>
@@ -248,12 +237,7 @@ struct TouchingColor : public Expression
 		return false;
 	}
 
-	inline virtual ~TouchingColor()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // color
+	AutoRelease<Expression> e; // color
 };
 
 // <color $e1 is touching $e2 ?>
@@ -309,12 +293,7 @@ struct DistanceTo : public Expression
 		return false;
 	}
 
-	inline virtual ~DistanceTo()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // string
+	AutoRelease<Expression> e; // string
 };
 
 // (answer)
@@ -342,12 +321,7 @@ struct KeyPressed : public Expression
 		return false;
 	}
 
-	inline virtual ~KeyPressed()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // string
+	AutoRelease<Expression> e; // string
 };
 
 // <mouse down>
@@ -469,14 +443,9 @@ struct PropertyOf : public Expression
 		return false;
 	}
 
-	inline virtual ~PropertyOf()
-	{
-		delete e;
-	}
-
 	PropertyTarget target = PropertyTarget_Unknown;
 	std::string id, name; // id/name of variable if target is a variable
-	Expression *e = nullptr; // string
+	AutoRelease<Expression> e; // string
 };
 
 // (current $format)
@@ -557,14 +526,8 @@ struct Add : public Consteval
 		return false;
 	}
 
-	inline virtual ~Add()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // number
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // number
 };
 
 // ($e1 - $e2)
@@ -592,14 +555,8 @@ struct Sub : public Consteval
 		return false;
 	}
 
-	inline virtual ~Sub()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // number
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // number
 };
 
 // ($e1 * $e2)
@@ -627,14 +584,8 @@ struct Mul : public Consteval
 		return false;
 	}
 
-	inline virtual ~Mul()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // number
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // number
 };
 
 // ($e1 / $e2)
@@ -662,14 +613,8 @@ struct Div : public Consteval
 		return false;
 	}
 
-	inline virtual ~Div()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // number
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // number
 };
 
 // (pick random $e1 to $e2)
@@ -697,14 +642,8 @@ struct Random : public Expression
 		return false;
 	}
 
-	inline virtual ~Random()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // number
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // number
 };
 
 // ($e1 > $e2)
@@ -732,14 +671,8 @@ struct Greater : public Consteval
 		return false;
 	}
 
-	inline virtual ~Greater()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // number
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // number
 };
 
 // ($e1 < $e2)
@@ -767,14 +700,8 @@ struct Less : public Consteval
 		return false;
 	}
 
-	inline virtual ~Less()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // number
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // number
 };
 
 // ($e1 = $e2)
@@ -802,14 +729,8 @@ struct Equal : public Consteval
 		return false;
 	}
 
-	inline virtual ~Equal()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // any
-	Expression *e2 = nullptr; // any
+	AutoRelease<Expression> e1; // any
+	AutoRelease<Expression> e2; // any
 };
 
 // ($e1 and $e2)
@@ -837,14 +758,8 @@ struct LogicalAnd : public Consteval
 		return false;
 	}
 
-	inline virtual ~LogicalAnd()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // bool
-	Expression *e2 = nullptr; // bool
+	AutoRelease<Expression> e1; // bool
+	AutoRelease<Expression> e2; // bool
 };
 
 // ($e1 or $e2)
@@ -872,14 +787,8 @@ struct LogicalOr : public Consteval
 		return false;
 	}
 
-	inline virtual ~LogicalOr()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // bool
-	Expression *e2 = nullptr; // bool
+	AutoRelease<Expression> e1; // bool
+	AutoRelease<Expression> e2; // bool
 };
 
 // (not $e)
@@ -900,12 +809,7 @@ struct LogicalNot : public Consteval
 		return false;
 	}
 
-	inline virtual ~LogicalNot()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // bool
+	AutoRelease<Expression> e; // bool
 };
 
 // (join $e1 $e2)
@@ -933,14 +837,8 @@ struct Concat : public Consteval
 		return false;
 	}
 
-	inline virtual ~Concat()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // string
-	Expression *e2 = nullptr; // string
+	AutoRelease<Expression> e1; // string
+	AutoRelease<Expression> e2; // string
 };
 
 // (letter $e1 of $e2)
@@ -968,14 +866,8 @@ struct CharAt : public Consteval
 		return false;
 	}
 
-	inline virtual ~CharAt()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // string
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // string
 };
 
 // (length of $e)
@@ -996,12 +888,7 @@ struct StringLength : public Consteval
 		return false;
 	}
 
-	inline virtual ~StringLength()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // string
+	AutoRelease<Expression> e; // string
 };
 
 // <$e1 contains $e2 ?>
@@ -1029,14 +916,8 @@ struct StringContains : public Consteval
 		return false;
 	}
 
-	inline virtual ~StringContains()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // string
-	Expression *e2 = nullptr; // string
+	AutoRelease<Expression> e1; // string
+	AutoRelease<Expression> e2; // string
 };
 
 // ($e1 mod $e2)
@@ -1064,14 +945,8 @@ struct Mod : public Consteval
 		return false;
 	}
 
-	inline virtual ~Mod()
-	{
-		delete e1;
-		delete e2;
-	}
-
-	Expression *e1 = nullptr; // number
-	Expression *e2 = nullptr; // number
+	AutoRelease<Expression> e1; // number
+	AutoRelease<Expression> e2; // number
 };
 
 // (round $e)
@@ -1092,12 +967,7 @@ struct Round : public Consteval
 		return false;
 	}
 
-	inline virtual ~Round()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // number
+	AutoRelease<Expression> e; // number
 };
 
 // (?func of $e)
@@ -1129,13 +999,8 @@ struct MathFunc : public Consteval
 		return false;
 	}
 
-	inline virtual ~MathFunc()
-	{
-		delete e;
-	}
-
 	std::string func;
-	Expression *e = nullptr; // number
+	AutoRelease<Expression> e; // number
 };
 
 // (?id)
@@ -1197,12 +1062,7 @@ struct ListAccess : public Expression
 		return false;
 	}
 
-	inline virtual ~ListAccess()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // positive int
+	AutoRelease<Expression> e; // positive int
 	std::string id, name;
 };
 
@@ -1238,12 +1098,7 @@ struct IndexOf : public Expression
 		return false;
 	}
 
-	inline virtual ~IndexOf()
-	{
-		delete e;
-	}
-
-	Expression *e = nullptr; // any
+	AutoRelease<Expression> e; // any
 	std::string id, name;
 };
 
@@ -1301,12 +1156,7 @@ struct ListContains : public Expression
 
 		return false;
 	}
-
-	inline virtual ~ListContains()
-	{
-		delete e;
-	}
-
+	
 	std::string id, name;
-	Expression *e = nullptr; // any
+	AutoRelease<Expression> e; // any
 };

@@ -219,7 +219,6 @@ public:
 				if (p->sprites->sprites.size() == 0)
 				{
 					Warn("No targets found in project");
-					delete p->sprites;
 					p->sprites = nullptr;
 				}
 			}
@@ -393,13 +392,10 @@ private:
 				goto failure;
 			}
 
-			ParseVariables(variables, sd->variables);
+			ParseVariables(variables, *sd->variables);
 
 			if (sd->variables->variables.size() == 0)
-			{
-				delete sd->variables;
 				sd->variables = nullptr;
-			}
 		}
 
 		// Lists that this target defines
@@ -414,13 +410,10 @@ private:
 				goto failure;
 			}
 
-			ParseLists(lists, sd->lists);
+			ParseLists(lists, *sd->lists);
 
 			if (sd->lists->lists.size() == 0)
-			{
-				delete sd->lists;
 				sd->lists = nullptr;
-			}
 		}
 
 		// Blocks in the target
@@ -615,8 +608,8 @@ private:
 				Constexpr *ce = ParseLiteral(*lit);
 				if (!ce)
 				{
-					delete ld;
 					Error("Failed to parse value in list `%s`", id.c_str());
+					delete ld;
 					goto next;
 				}
 
@@ -678,12 +671,14 @@ private:
 			if (!s)
 			{
 				Error("Expected statement, got %s", AstTypeString(node->GetType()));
-				_defs.erase(id), delete node;
+				_defs.erase(id);
+				node->Release();
 				break;
 			}
 
 			// add the statement to the list
 			sl->sl.push_back(s);
+			s = Release(s);
 
 			// go to the next block
 
@@ -782,9 +777,10 @@ private:
 			if (n->Is(Statement::TYPE))
 			{
 				delete n; // This is inefficient, we are parsing the block twice!
-				n = new StatementList();
-				ParseScript(blocks, id, n->As<StatementList>());
-				return n;
+
+				StatementList *sl = new StatementList();
+				ParseScript(blocks, id, sl);
+				return sl;
 			}
 
 			// block is an expression, don't create a list
@@ -916,7 +912,7 @@ private:
 
 		// we discard top-level targets that are not statements
 
-		_defs[id] = n;
+		_defs[id] = Retain(n);
 		return n;
 	}
 

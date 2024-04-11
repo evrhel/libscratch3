@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	//Scratch3_DumpAST(S);
+	Scratch3_DumpAST(S);
 
 	rc = Scratch3_Run(S);
 	if (rc == -1)

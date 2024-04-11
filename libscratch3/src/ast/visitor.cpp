@@ -80,7 +80,11 @@ public:
 									node->syminfo.ToString().c_str());
 	}
 
-	virtual void Visit(Direction *node) {}
+	virtual void Visit(Direction *node)
+	{
+		Printf("\033[34;1mDirection\033[0m -> \033[1m%s\033[0m\n",
+			node->syminfo.ToString().c_str());
+	}
 
 	virtual void Visit(CurrentCostume *node)
 	{
@@ -96,9 +100,26 @@ public:
 			node->syminfo.ToString().c_str());
 	}
 
-	virtual void Visit(Size *node) {}
-	virtual void Visit(Volume *node) {}
-	virtual void Visit(Touching *node) {}
+	virtual void Visit(Size *node)
+	{
+		Printf("\033[35Size\033[0m -> \033[1m%s\033[0m\n",
+			node->syminfo.ToString().c_str());
+	}
+
+	virtual void Visit(Volume *node)
+	{
+		Printf("\033[35;1mVolume\033[0m -> \033[1m%s\033[0m\n",
+			node->syminfo.ToString().c_str());
+	}
+
+	virtual void Visit(Touching *node)
+	{
+		Printf("\033[36;1mTouching\033[0m -> \033[1m%s\033[0m\n",
+			node->syminfo.ToString().c_str());
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
 
 	virtual void Visit(TouchingColor *node)
 	{
@@ -477,8 +498,8 @@ public:
 		Printf("\033[33mIfElse\033[0m\n");
 		_indent++;
 		node->e->Accept(this);
-		node->sl1->Accept(this);
-		node->sl2->Accept(this);
+		if (node->sl1) node->sl1->Accept(this);
+		if (node->sl2) node->sl2->Accept(this);
 		_indent--;
 	}
 
@@ -489,7 +510,7 @@ public:
 		Printf("\033[33mRepeatUntil\033[0m\n");
 		_indent++;
 		node->e->Accept(this);
-		node->sl->Accept(this);
+		if (node->sl) node->sl->Accept(this);
 		_indent--;
 	}
 

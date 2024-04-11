@@ -133,7 +133,7 @@ int Scratch3::Compile()
 	const char *str = reinterpret_cast<const char *>(res->Data());
 	size_t size = res->Size();
 
-	_program = ParseAST(str, size, _log, _up);
+	_program = Retain(ParseAST(str, size, _log, _up));
 
 	return _program ? 0 : -1;
 }
@@ -184,4 +184,8 @@ Scratch3::Scratch3(Loader *loader, Scratch3_LogCallback log, void *up) :
 	_loader(loader),
 	_program(nullptr) {}
 
-Scratch3::~Scratch3() { delete _loader; }
+Scratch3::~Scratch3()
+{
+	delete _loader;
+	Release(_program);
+}
