@@ -210,12 +210,24 @@ struct Touching : public Expression
 	EXPR_IMPL(Touching, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, value)
+	{
+		if (key == "TOUCHINGOBJECTMENU")
+		{
+			if (!e)
+				e = value->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~Touching()
 	{
 		delete e;
 	}
 
-	Expression *e = nullptr; // color
+	Expression *e = nullptr; // object
 };
 
 // <touching color $e ?>
@@ -286,6 +298,18 @@ struct KeyPressed : public Expression
 {
 	EXPR_IMPL(KeyPressed, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, value)
+	{
+		if (key == "KEY_OPTION")
+		{
+			if (!e)
+				e = value->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~KeyPressed()
 	{

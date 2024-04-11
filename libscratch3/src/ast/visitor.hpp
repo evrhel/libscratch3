@@ -7,6 +7,7 @@ class Visitor
 public:
 	/////////////////////////////////////////////////////////////////
 	// Expressions
+	//
 
 	inline virtual void Visit(ExpressionList *node) {}
 	inline virtual void Visit(Number *node) {}
@@ -66,8 +67,10 @@ public:
 	inline virtual void Visit(ListLength *node) {}
 	inline virtual void Visit(ListContains *node) {}
 
+	//
 	/////////////////////////////////////////////////////////////////
 	// Statements
+	//
 
 	inline virtual void Visit(StatementList *node) {}
 	inline virtual void Visit(MoveSteps *node) {}
@@ -148,8 +151,28 @@ public:
 	inline virtual void Visit(DefineProc *node) {}
 	inline virtual void Visit(Call *node) {}
 
+	//
+	/////////////////////////////////////////////////////////////////
+	// Reporters
+	//
+
+	inline virtual void Visit(GotoReporter *node) {}
+	inline virtual void Visit(GlideReporter *node) {}
+	inline virtual void Visit(PointTowardsReporter *node) {}
+	inline virtual void Visit(CostumeReporter *node) {}
+	inline virtual void Visit(BackdropReporter *node) {}
+	inline virtual void Visit(SoundReporter *node) {}
+	inline virtual void Visit(BroadcastReporter *node) {}
+	inline virtual void Visit(CloneReporter *node) {}
+	inline virtual void Visit(TouchingReporter *node) {}
+	inline virtual void Visit(DistanceReporter *node) {}
+	inline virtual void Visit(KeyReporter *node) {}
+	inline virtual void Visit(PropertyOfReporter *node) {}
+
+	//
 	/////////////////////////////////////////////////////////////////
 	// Program Components
+	//
 
 	inline virtual void Visit(VariableDef *node) {}
 	inline virtual void Visit(VariableDefList *node) {}

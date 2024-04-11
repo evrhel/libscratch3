@@ -797,9 +797,12 @@ private:
 				ASTNode *val = ParseInput(blocks, it->value);
 				if (!val)
 				{
-					Error("Failed to parse input `%s` in block `%s` (%s)",
+					//Error("Failed to parse input `%s` in block `%s` (%s)",
+					//	key.c_str(), id.c_str(), opcode.GetString());
+					//continue;
+					
+					Warn("Null input `%s` in block `%s` (%s)",
 						key.c_str(), id.c_str(), opcode.GetString());
-					continue;
 				}
 
 				// set the input in the node
@@ -949,6 +952,9 @@ private:
 
 			if (v[1].IsArray())
 				return ParseInput(blocks, v[1]);
+
+			if (v[1].IsNull())
+				return nullptr;
 			
 			if (!v[1].IsString())
 			{
@@ -968,6 +974,9 @@ private:
 			if (v[1].IsArray())
 				return ParseInput(blocks, v[1]);
 
+			if (v[1].IsNull())
+				return nullptr;
+
 			if (!v[1].IsString())
 			{
 				Error("Expected string parsing no shadow block");
@@ -985,6 +994,9 @@ private:
 
 			if (v[1].IsArray())
 				return ParseInput(blocks, v[1]);
+
+			if (v[1].IsNull())
+				return nullptr;
 
 			if (!v[1].IsString())
 			{
@@ -1196,6 +1208,8 @@ static ASTNode *NodeFromOpcode(const std::string &opcode)
 	if (opcode == "looks_cleargraphiceffects") return new ClearGraphicEffects();
 	if (opcode == "looks_show") return new ShowSprite();
 	if (opcode == "looks_hide") return new HideSprite();
+	if (opcode == "looks_gotofrontback") return new GotoLayer();
+	if (opcode == "looks_goforwardbackwardlayers") return new MoveLayer();
 	if (opcode == "looks_costumenumbername") return new CurrentCostume();
 	if (opcode == "looks_backdropnumbername") return new CurrentBackdrop();
 	if (opcode == "looks_size") return new Size();
@@ -1291,8 +1305,21 @@ static ASTNode *NodeFromOpcode(const std::string &opcode)
 
 	if (opcode == "procedures_definition") return new DefineProc();
 	if (opcode == "procedures_call") return new Call();
-	// argument_reporter_string_number
-	// argument_reporter_boolean
+
+	// Reporters
+
+	if (opcode == "motion_goto_menu") return new GotoReporter();
+	if (opcode == "motion_glideto_menu") return new GlideReporter();
+	if (opcode == "motion_pointtowards_menu") return new PointTowardsReporter();
+	if (opcode == "looks_costume") return new CostumeReporter();
+	if (opcode == "looks_backdrops") return new BackdropReporter();
+	if (opcode == "sound_sounds_menu") return new SoundReporter();
+	if (opcode == "event_broadcast_menu") return new BroadcastReporter();
+	if (opcode == "control_create_clone_of_menu") return new CloneReporter();
+	if (opcode == "sensing_touchingobjectmenu") return new TouchingReporter();
+	if (opcode == "sensing_distancetomenu") return new DistanceReporter();
+	if (opcode == "sensing_keyoptions") return new KeyReporter();
+	if (opcode == "sensing_of_object_menu") return new PropertyOfReporter();
 
 	// No extension blocks are supported
 

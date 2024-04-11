@@ -10,12 +10,16 @@ class Visitor;
 
 /////////////////////////////////////////////////////////////////////////////////
 // AST Node Types
+//
 
 struct ASTNode;
 
 struct SymbolName;
 
+/////////////////////////////////////////////////////////////////////////////////
 // Expressions
+//
+
 struct Expression;
 struct Consteval;
 struct Constexpr;
@@ -94,7 +98,34 @@ struct IndexOf;
 struct ListLength;
 struct ListContains;
 
+//
+/////////////////////////////////////////////////////////////////////////////////
+// Internal Reporters
+// 
+// Reporters are internal expressions used in Scratch in the form of dropdown
+// menus that contain a list of options.
+//
+
+struct Reporter;
+
+struct GotoReporter;
+struct GlideReporter;
+struct PointTowardsReporter;
+struct CostumeReporter;
+struct BackdropReporter;
+struct SoundReporter;
+struct BroadcastReporter;
+struct CloneReporter;
+struct TouchingReporter;
+struct DistanceReporter;
+struct KeyReporter;
+struct PropertyOfReporter;
+
+//
+/////////////////////////////////////////////////////////////////////////////////
 // Statements
+//
+
 struct Statement;
 struct StatementList;
 
@@ -212,8 +243,10 @@ struct ValMonitorList;
 
 struct Program;
 
+//
 /////////////////////////////////////////////////////////////////////////////////
 // macros to reduce boilerplate code
+//
 
 #define AST_ACCEPTOR inline virtual void Accept(Visitor *v) override { v->Visit(this); }
 #define AST_INPUT_SETTER(_Key, _Val) inline virtual bool SetInput(const std::string &_Key, ASTNode *_Val) override
@@ -234,8 +267,28 @@ struct Program;
 	static constexpr AstType TYPE = AST( _Type ); \
 	inline _Type () { ASTNode::SetType(AST( _Type )); syminfo = SymInfo( __VA_ARGS__); }
 
+#define REPORTER_IMPL(_Type, _Parent, _Key) \
+	static constexpr AstType TYPE = AST( _Type ); \
+	inline _Type () { ASTNode::SetType(AST( _Type )); } \
+	AST_FIELD_SETTER(key, value, id) \
+	{ \
+		if ( #_Key == key ) \
+		{ \
+			if (!value.empty()) \
+			{ \
+				this->value = value; \
+				return true; \
+			} \
+			return false; \
+		} \
+		return false; \
+	} \
+	std::string value;
+
 //
 /////////////////////////////////////////////////////////////////////////////////
+// AST Node Types
+//
 
 enum AstType
 {
@@ -310,6 +363,21 @@ enum AstType
 	Ast_IndexOf,
 	Ast_ListLength,
 	Ast_ListContains,
+
+	Ast_Reporter,
+	
+	Ast_GotoReporter,
+	Ast_GlideReporter,
+	Ast_PointTowardsReporter,
+	Ast_CostumeReporter,
+	Ast_BackdropReporter,
+	Ast_SoundReporter,
+	Ast_BroadcastReporter,
+	Ast_CloneReporter,
+	Ast_TouchingReporter,
+	Ast_DistanceReporter,
+	Ast_KeyReporter,
+	Ast_PropertyOfReporter,
 
 	Ast_Statement,
 	Ast_StatementList,
@@ -417,8 +485,10 @@ enum AstType
 	Ast_Program
 };
 
+//
 /////////////////////////////////////////////////////////////////////////////////
 // Constants
+//
 
 enum BlockType
 {
@@ -436,7 +506,7 @@ enum BlockType
 	BlockType_String = 10,
 	BlockType_Broadcast = 11,
 	BlockType_Variable = 12,
-	BlockType_List = 13,
+	BlockType_List = 13
 };
 
 enum RotationStyle
@@ -475,8 +545,8 @@ enum LayerType
 {
 	LayerType_Unknown,
 
-	LayerType_Back,
 	LayerType_Front,
+	LayerType_Back,
 
 	LayerType_Count
 };
@@ -487,8 +557,8 @@ enum LayerDir
 {
 	LayerDir_Unknown,
 
-	LayerDir_Back,
-	LayerDir_Front,
+	LayerDir_Forward,
+	LayerDir_Backward,
 
 	LayerDir_Count
 };
@@ -530,7 +600,7 @@ enum Key
 	Key_Right,
 	Key_Left,
 
-	Key_A = 'A',
+	Key_A = 'a',
 	Key_B,
 	Key_C,
 	Key_D,
@@ -702,5 +772,15 @@ extern const char *const MonitorModeStrings[];
 
 //
 /////////////////////////////////////////////////////////////////////////////////
+// Utility Functions
+//
 
+//! \brief Get the string representation of an AST type.
+//! 
+//! \param type The AST type.
+//! 
+//! \return The string representation.
 const char *AstTypeString(AstType type);
+
+//
+/////////////////////////////////////////////////////////////////////////////////

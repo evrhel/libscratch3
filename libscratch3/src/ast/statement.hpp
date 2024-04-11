@@ -1,6 +1,6 @@
 #pragma once
 
-#include "expression.hpp"
+#include "reporter.hpp"
 
 // executable statement
 struct Statement : public ASTNode
@@ -462,6 +462,18 @@ struct SwitchCostume : public Statement
 	AST_IMPL(SwitchCostume, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "COSTUME")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~SwitchCostume()
 	{
 		delete e;
@@ -654,6 +666,37 @@ struct MoveLayer : public Statement
 {
 	AST_IMPL(MoveLayer, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "NUM")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "FORWARD_BACKWARD")
+		{
+			if (direction == LayerDir_Unknown)
+			{
+				if (value == "forward")
+					direction = LayerDir_Forward;
+				else if (value == "backward")
+					direction = LayerDir_Backward;
+				else
+					return false;
+			}
+			return true;
+		}
+
+		return false;
+	}
 
 	inline virtual ~MoveLayer()
 	{
@@ -924,7 +967,12 @@ struct Forever : public Statement
 		if (key == "SUBSTACK")
 		{
 			if (!sl)
-				sl = val->As<StatementList>();
+			{
+				if (val == nullptr)
+					sl = new StatementList();
+				else
+					sl = val->As<StatementList>();
+			}
 			return !!sl;
 		}
 

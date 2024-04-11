@@ -36,14 +36,14 @@ GraphicEffect GraphicEffectFromString(const std::string &str)
 
 const char *const LayerTypeStrings[LayerType_Count] = {
 	"unknown",
-	"backward",
-	"front"
+	"front",
+	"back"
 };
 
 const char *const LayerDirStrings[LayerDir_Count] = {
 	"unknown",
-	"back",
-	"forward"
+	"forward",
+	"backward"
 };
 
 const char *const PropGetTypeStrings[PropGetType_Count] = {
