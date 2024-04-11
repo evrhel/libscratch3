@@ -992,14 +992,16 @@ struct MathFunc : public Consteval
 	{
 		if (key == "OPERATOR")
 		{
-			func = value;
-			return true;
+			if (func != MathFuncType_Unknown)
+				return false;
+			func = MathFuncFromString(value);
+			return func != MathFuncType_Unknown;
 		}
 
 		return false;
 	}
 
-	std::string func;
+	MathFuncType func = MathFuncType_Unknown;
 	AutoRelease<Expression> e; // number
 };
 

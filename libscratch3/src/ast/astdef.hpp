@@ -755,6 +755,7 @@ enum MathFuncType
 };
 
 extern const char *const MathFuncStrings[];
+MathFuncType MathFuncFromString(const std::string &str);
 
 enum VideoState
 {

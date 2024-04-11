@@ -133,8 +133,8 @@ const char *GetKeyName(Key key)
 
 const char *const ListenValueTypeStrings[ListenValueType_Count] = {
 	"unknown",
-	"LOUDNESS",
-	"TIMER"
+	"loudness",
+	"timer"
 };
 
 ListenValueType ListenValueTypeFromString(const std::string &str)
@@ -201,21 +201,29 @@ const char *const DateFormatStrings[DateFormat_Count] = {
 
 const char *const MathFuncStrings[MathFuncType_Count] = {
 	"unknown",
-	"ABS",
-	"FLOOR",
-	"CEIL",
-	"SQRT",
-	"SIN",
-	"COS",
-	"TAN",
-	"ASIN",
-	"ACOS",
-	"ATAN",
-	"LN",
-	"LOG",
-	"EXP",
-	"EXP10"
+	"abs",
+	"floor",
+	"ceiling",
+	"sqrt",
+	"sin",
+	"cos",
+	"tan",
+	"asin",
+	"acos",
+	"atan",
+	"ln",
+	"log",
+	"e ^",
+	"10 ^"
 };
+
+MathFuncType MathFuncFromString(const std::string &str)
+{
+	for (int i = 0; i < MathFuncType_Count; i++)
+		if (str == MathFuncStrings[i])
+			return (MathFuncType)i;
+	return MathFuncType_Unknown;
+}
 
 const char *const VideoStateStrings[VideoState_Count] = {
 	"unknown",

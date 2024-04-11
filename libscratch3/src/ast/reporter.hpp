@@ -55,7 +55,7 @@ struct SoundReporter : public Reporter
 // Reporter for (broadcast ()) or (broadcast () and wait)
 struct BroadcastReporter : public Reporter
 {
-	AST_IMPL(BroadcastReporter, Reporter);
+	REPORTER_IMPL(BroadcastReporter, Reporter, BROADCAST_OPTION);
 	AST_ACCEPTOR;
 };
 
