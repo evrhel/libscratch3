@@ -1,14 +1,44 @@
 #include "ast.hpp"
 
+#include <lysys/lysys.hpp>
+
 #include <cstdarg>
 #include <cstdio>
 #include <cassert>
+#include <cmath>
 
 #include <rapidjson/document.h>
+#include <rapidjson/error/en.h>
 
+//! \brief Check whether an opcode is an event handler.
+//! 
+//! \param opcode The opcode to check. This is the value of the "opcode"
+//! member in a block object, not the internal opcode values this library
+//! uses.
+//! 
+//! \return True if the opcode is an event handler, false otherwise.
 static bool IsEventHandler(const std::string &opcode);
+
+//! \brief Create an AST node from an opcode.
+//! 
+//! \param opcode The opcode to create a node from. Has same restrictions
+//! as IsEventHandler().
+//! 
+//! \return An ASTNode object representing the opcode, or nullptr if the
+//! opcode is unknown or unsupported.
 static ASTNode *NodeFromOpcode(const std::string &opcode);
 
+//! \brief Interpret a string as a literal value.
+//! 
+//! Tries to interpret a JSON string as a literal value. The function
+//! will attempt to parse the string as an integer, double, boolean,
+//! or null. If the string is not a literal value, it will be interpreted
+//! as a string.
+//! 
+//! \param v The JSON value to interpret. Must be a string.
+//! 
+//! \return A Constexpr node representing the literal value. Never returns
+//! nullptr.
 static Constexpr *InterpretString(rapidjson::Value &v)
 {
 	std::string val = v.GetString();
@@ -71,6 +101,17 @@ static Constexpr *InterpretString(rapidjson::Value &v)
 	return s;
 }
 
+//! \brief Parse a literal value from a JSON value.
+//! 
+//! Tries to parse a literal value from a JSON value. The value can be
+//! a string, integer, double, boolean, or null. If the value is a string,
+//! the function will attempt to interpret it as a more specific type
+//! (e.g. integer, double, boolean, etc.).
+//! 
+//! \param v The JSON value to parse.
+//! 
+//! \return A Constexpr object representing the literal value, or nullptr
+//! if parsing failed.
 static Constexpr *ParseLiteral(rapidjson::Value &v)
 {
 	if (v.IsString())
@@ -135,18 +176,29 @@ static Constexpr *ParseLiteral(rapidjson::Value &v)
 		return n;
 	}
 
+	// Unsupported literal type
 	return nullptr;
 }
 
 class Parser
 {
 public:
-	Program *Parse(rapidjson::Value &doc)
+	// Parse JSON string into AST
+	Program *Parse(const char *json, size_t length)
 	{
 		_defs.clear();
 
+		rapidjson::Document doc;
+		doc.Parse(json, length);
+		if (doc.HasParseError())
+		{
+			Error("Malformed JSON: %s", rapidjson::GetParseError_En(doc.GetParseError()));
+			return nullptr;
+		}
+
 		Program *p = new Program();
 
+		// "targets" member
 		if (doc.HasMember("targets"))
 		{
 			rapidjson::Value &targets = doc["targets"];
@@ -168,6 +220,7 @@ public:
 		else
 			Warn("Missing `targets` member");
 
+		// "monitors" member
 		if (doc.HasMember("monitors"))
 		{
 			rapidjson::Value &monitors = doc["monitors"];
@@ -181,6 +234,7 @@ public:
 		else
 			Warn("Missing `monitors` member");
 
+		// "extensions" member
 		if (doc.HasMember("extensions"))
 		{
 			rapidjson::Value &extensions = doc["extensions"];
@@ -203,60 +257,72 @@ public:
 		return nullptr;
 	}
 
-	Parser(std::vector<Message> *log) :
-		_log(log) {}
+	Parser(Scratch3_LogCallback log, void *up) :
+		_log(log), _up(up) {}
 private:
 	std::unordered_map<std::string, ASTNode *> _defs;
 
-	std::vector<Message> *_log;
+	Scratch3_LogCallback _log;
+	void *_up;
 	bool are_errors = false;
 
+	// Write an error message
 	void Error(const char *format, ...)
 	{
 		char error[512];
 
-		va_list args;
-		va_start(args, format);
-		vsprintf_s(error, format, args);
-		va_end(args);
-
-		printf("\033[31;1m[ERRO]\033[0m %s\n", error);
-
-		//if (_log)
-		//	_log->push_back({ MessageType_Error, error });
 		are_errors = true;
+
+		if (_log)
+		{
+			va_list args;
+			va_start(args, format);
+			vsprintf_s(error, format, args);
+			va_end(args);
+
+			_log(_up, Scratch3_Error, error);
+		}
 	}
 
+	// Write a warning message
 	void Warn(const char *format, ...)
 	{
 		char error[512];
 
-		va_list args;
-		va_start(args, format);
-		vsprintf_s(error, format, args);
-		va_end(args);
+		if (_log)
+		{
+			va_list args;
+			va_start(args, format);
+			vsprintf_s(error, format, args);
+			va_end(args);
 
-		printf("\033[33;1m[WARN]\033[0m %s\n", error);
-
-		//if (_log)
-		//	_log->push_back({ MessageType_Warning, error });
+			_log(_up, Scratch3_Warning, error);
+		}
 	}
 
+	// Write an informational message
 	void Info(const char *format, ...)
 	{
 		char error[512];
 
-		va_list args;
-		va_start(args, format);
-		vsprintf_s(error, format, args);
-		va_end(args);
+		if (_log)
+		{
+			va_list args;
+			va_start(args, format);
+			vsprintf_s(error, format, args);
+			va_end(args);
 
-		printf("\033[32m[INFO]\033[0m %s\n", error);
-
-		//if (_log)
-		//	_log->push_back({ MessageType_Info, error });
+			_log(_up, Scratch3_Info, error);
+		}
 	}
 	
+	//! \brief Parse the "targets" member
+	//! 
+	//! The "targets" member is an array of objects, each representing
+	//! a sprite or stage.
+	//! 
+	//! \param targets The "targets" member. Must be an array.
+	//! \param p The program object to populate.
 	void ParseTargets(rapidjson::Value &targets, Program *p)
 	{
 		assert(targets.IsArray());
@@ -276,8 +342,16 @@ private:
 		}
 	}
 
+	//! \brief Parse a sprite or stage object.
+	//! 
+	//! \param target The object representing the sprite or stage.
+	//! Must be an object.
+	//! 
+	//! \return A SpriteDef object, or nullptr if parsing failed.
 	SpriteDef *ParseSprite(rapidjson::Value &target)
 	{
+		assert(target.IsObject());
+
 		SpriteDef *sd = new SpriteDef();
 		sd->variables = new VariableDefList();
 		sd->lists = new ListDefList();
@@ -297,6 +371,10 @@ private:
 
 		sd->name = target["name"].GetString();
 
+		// Variables that this target defines
+		// If the target is a sprite, these are variables local
+		// to the sprite. If the target is the stage, these are
+		// global variables.
 		if (target.HasMember("variables"))
 		{
 			rapidjson::Value &variables = target["variables"];
@@ -315,6 +393,9 @@ private:
 			}
 		}
 
+		// Lists that this target defines
+		// Like variables, these are local to the sprite or global
+		// to the stage.
 		if (target.HasMember("lists"))
 		{
 			rapidjson::Value &lists = target["lists"];
@@ -333,6 +414,7 @@ private:
 			}
 		}
 
+		// Blocks in the target
 		if (target.HasMember("blocks"))
 		{
 			rapidjson::Value &blocks = target["blocks"];
@@ -344,6 +426,11 @@ private:
 
 			_defs.clear();
 
+			// Iterate over all blocks in the target, we only care about
+			// top-level blocks that are event handlers. Non-event handlers
+			// are unreachable and are discarded. If a block is not a
+			// top-level block, we skip it, it will be parsed when we reach
+			// it when traversing the script via the `next` member.
 			for (auto it = blocks.MemberBegin(); it != blocks.MemberEnd(); ++it)
 			{
 				rapidjson::Value &target = it->value;
@@ -364,6 +451,8 @@ private:
 				if (!target["topLevel"].GetBool())
 					continue; // ignore non-top-level targets
 
+				// retrieve the opcode
+
 				if (!target.HasMember("opcode"))
 				{
 					Error("Missing `opcode` member in block `%s`", id.c_str());
@@ -377,15 +466,18 @@ private:
 					continue;
 				}
 
+				// check if the opcode is an event handler
 				if (!IsEventHandler(opcode.GetString()))
 				{
 					Info("Discarding unreachable block `%s` (%s)", id.c_str(), opcode.GetString());
 					continue;
 				}
 
+				// traverse the script starting from this block
 				StatementList *sl = new StatementList();
 				ParseScript(blocks, id, sl);
 
+				// add the script to the list of scripts
 				if (sl->sl.size() > 0)
 					sd->scripts->sll.push_back(sl);
 				else
@@ -406,8 +498,16 @@ private:
 		return nullptr;
 	}
 
+	//! \brief Parse the "variables" member of a target
+	//!
+	//! \param variables The "variables" member. Must be an object.
+	//! \param vdl The VariableDefList object to populate.
 	void ParseVariables(rapidjson::Value &variables, VariableDefList *vdl)
 	{
+		// Iterate over all variables in the target
+		//
+		// Variables are defined in the format:
+		// "id": ["name", value]
 		for (auto it = variables.MemberBegin(); it != variables.MemberEnd(); ++it)
 		{
 			std::string id = it->name.GetString();
@@ -431,12 +531,15 @@ private:
 				continue;
 			}
 
+			// Parse the value of the variable
 			Constexpr *ce = ParseLiteral(arr[1]);
 			if (!ce)
 			{
 				Error("Failed to parse value in variable `%s` (%s)", id.c_str());
 				continue;
 			}
+
+			// Create a VariableDef node and add it to the list
 
 			VariableDef *vd = new VariableDef();
 			vd->id = id;
@@ -447,8 +550,18 @@ private:
 		}
 	}
 
+	//! \brief Parse a list definition from the "lists" member of a target.
+	//! 
+	//! \param lists The "lists" member. Must be an object.
+	//! \param ldl The ListDefList object to populate.
 	void ParseLists(rapidjson::Value &lists, ListDefList *ldl)
 	{
+		assert(lists.IsObject());
+
+		// Iterate over all lists in the target
+		//
+		// Lists are defined in the format:
+		// "id": ["name", [value1, value2, ...]]
 		for (auto it = lists.MemberBegin(); it != lists.MemberEnd(); ++it)
 		{
 			std::string id = it->name.GetString();
@@ -481,6 +594,7 @@ private:
 
 			ListDef *ld = new ListDef();
 
+			// Parse the values in the list
 			for (auto lit = value.Begin(); lit != value.End(); ++lit)
 			{
 				Constexpr *ce = ParseLiteral(*lit);
@@ -494,6 +608,8 @@ private:
 				ld->value.push_back(ce);
 			}
 
+			// Add the list to the list of lists
+
 			ld->id = id;
 			ld->name = name.GetString();
 
@@ -503,13 +619,29 @@ private:
 		}
 	}
 
+	//! \brief Parse a script starting from a block ID.
+	//! 
+	//! Parses a script starting from a block ID. The script is a sequence
+	//! of blocks that are connected via the "next" member. The script is
+	//! stored in a StatementList object. Note that the blocks object is
+	//! specific to the target, meaning that in a malicious project, the
+	//! blocks object can contain arbitrary blocks that are not part of the
+	//! target.
+	//! 
+	//! \param blocks The "blocks" member of the target. Must be an object.
+	//! \param first The ID of the first block in the script. This should have
+	//! the "topLevel" member set to true, but this is not checked.
+	//! \param sl The StatementList object to populate.
 	void ParseScript(rapidjson::Value &blocks, const std::string &first, StatementList *sl)
 	{
 		Statement *s;
 		
+		// Traverse the script starting from the first block
+		// See ParseBlock for the format of blocks
 		std::string id = first;
 		for (;;)
 		{
+			// Check if the block exists
 			if (!blocks.HasMember(id.c_str()))
 			{
 				Error("Missing block `%s`", first.c_str());
@@ -523,6 +655,7 @@ private:
 				return;
 			}
 
+			// parse the block
 			ASTNode *node = ParseBlock(blocks, id);
 			if (!node)
 				break;
@@ -535,7 +668,10 @@ private:
 				break;
 			}
 
+			// add the statement to the list
 			sl->sl.push_back(s);
+
+			// go to the next block
 
 			if (!block.HasMember("next"))
 			{
@@ -557,8 +693,30 @@ private:
 		}
 	}
 
+	//! \brief Parse a block from the "blocks" member of a target.
+	//! 
+	//! \param blocks The "blocks" member. Must be an object.
+	//! \param id The ID of the block to parse.
+	//! 
+	//! \return An ASTNode object representing the block, or nullptr if parsing
+	//! failed.
 	ASTNode *ParseBlock(rapidjson::Value &blocks, const std::string &id)
 	{
+		// Blocks are in the format (only relevant members are shown):
+		// "id": {
+		//    "opcode": "opcode",
+		//    "next": "next block id" | null,
+		//    "inputs": {
+		//       "input1": ...,
+		//       ...
+		//    },
+		//    "fields": {
+		//       "field1": ...,
+		//       ...
+		//    },
+		//    "topLevel": true | false
+		// }
+
 		auto it = _defs.find(id);
 		if (it != _defs.end())
 		{
@@ -592,6 +750,7 @@ private:
 			return nullptr;
 		}
 
+		// Create an AST node from the opcode
 		ASTNode *n = NodeFromOpcode(opcode.GetString());
 		if (!n)
 		{
@@ -599,8 +758,13 @@ private:
 			return nullptr;
 		}
 
+		// Parse the inputs member (expressions)
 		if (block.HasMember("inputs"))
 		{
+			// inputs are in the format:
+			// "input": [type, value]
+			// See BlockType for the types of inputs
+
 			rapidjson::Value &inputs = block["inputs"];
 			if (!inputs.IsObject())
 			{
@@ -609,6 +773,7 @@ private:
 				return nullptr;
 			}
 
+			// iterate over all inputs in the block
 			for (auto it = inputs.MemberBegin(); it != inputs.MemberEnd(); ++it)
 			{
 				std::string key = it->name.GetString();
@@ -620,6 +785,7 @@ private:
 					continue;
 				}
 
+				// set the input in the node
 				if (!n->SetInput(key, val))
 				{
 					Warn("Unknown input `%s` in block `%s` (%s)",
@@ -630,6 +796,7 @@ private:
 		else
 			Warn("Missing `inputs` member in block `%s` (%s)", id.c_str(), opcode.GetString());
 
+		// Parse the fields member (dropdowns, text fields, etc.)
 		if (block.HasMember("fields"))
 		{
 			rapidjson::Value &fields = block["fields"];
@@ -641,8 +808,13 @@ private:
 				return nullptr;
 			}
 
+			// iterate over all fields in the block
 			for (auto it = fields.MemberBegin(); it != fields.MemberEnd(); ++it)
 			{
+				// fields are in the format:
+				// "field": ["value", "id"]
+				// the "id" member is optional
+
 				std::string key = it->name.GetString();
 				if (!it->value.IsArray())
 				{
@@ -687,6 +859,7 @@ private:
 					}
 				}
 
+				// set the field in the node
 				if (!n->SetField(key, svalue, sid))
 				{
 					Warn("Unknown field `%s` in block `%s` (%s)",
@@ -715,7 +888,17 @@ private:
 		return n;
 	}
 
-	// parse an expression
+	//! \brief Parse an input from a block.
+	//! 
+	//! These are generally expressions, but may be statements in
+	//! the case of branches, such as "if" blocks where its inputs
+	//! are statement lists.
+	//! 
+	//! \param blocks The "blocks" member of the target.
+	//! \param v The JSON value to parse.
+	//! 
+	//! \return An ASTNode object representing the input, or nullptr if
+	//! parsing failed.
 	ASTNode *ParseInput(rapidjson::Value &blocks, rapidjson::Value &v)
 	{
 		if (!v.IsArray())
@@ -736,6 +919,7 @@ private:
 			return nullptr;
 		}
 
+		// block types are defined in the BlockType enum
 		BlockType type = (BlockType)v[0].GetInt();
 		switch (type)
 		{
@@ -816,6 +1000,10 @@ private:
 		case BlockType_Int:
 		case BlockType_Angle:
 		case BlockType_String: {
+			// Parse the literal value
+			// We ignore the block type and just parse the value
+			// as a literal ourselves and to avoid malicious projects
+
 			if (v.Size() < 2)
 			{
 				Error("Expected value parsing literal");
@@ -844,6 +1032,9 @@ private:
 			return nullptr;
 		}
 		case BlockType_Variable: {
+			// Variables are in the format:
+			// [12, "name", "id"]
+
 			if (v.Size() < 3)
 			{
 				Error("Expected id parsing variable block");
@@ -864,12 +1055,16 @@ private:
 				return nullptr;
 			}
 
+			// Create a VariableExpr node
 			VariableExpr *var = new VariableExpr();
 			var->id = id.GetString();
 			var->name = name.GetString();
 			return var;
 		}
 		case BlockType_List: {
+			// Lists are in the format:
+			// [13, "name", "id"]
+
 			if (v.Size() < 3)
 			{
 				Error("Expected id parsing list block");
@@ -890,6 +1085,7 @@ private:
 				return nullptr;
 			}
 
+			// Create a ListExpr node
 			ListExpr *list = new ListExpr();
 			list->id = id.GetString();
 			list->name = name.GetString();
@@ -904,24 +1100,30 @@ private:
 	}
 };
 
-#include <stdio.h>
-
-Program *ParseAST(const char *jsonString, size_t length, std::vector<Message> *log)
+Program *ParseAST(const char *jsonString, size_t length, Scratch3_LogCallback log, void *up)
 {
-	rapidjson::Document doc;
+	Program *p;
+	
+	double start = ls_time64();
 
-	doc.Parse(jsonString, length);
-	if (doc.HasParseError())
+	// parse the AST
+	Parser parser(log, up);
+	p = parser.Parse(jsonString, length);
+
+	// log the time taken to parse
+	if (log)
 	{
-		printf("\033[31;1m<FAILED>\033[0m\n");
-		return nullptr;
+		double elapsed = ls_time64() - start;
+
+		char message[64];
+		sprintf_s(message, "Finished in %g sec", round(elapsed * 1000.0) / 1000.0);
+
+		log(up, Scratch3_Info, message);
 	}
 
-	Parser parser(log);
-	return parser.Parse(doc);
+	return p;
 }
 
-// event handlers
 static bool IsEventHandler(const std::string &opcode)
 {
 	return opcode == "event_whenflagclicked" ||
@@ -936,6 +1138,12 @@ static bool IsEventHandler(const std::string &opcode)
 
 static ASTNode *NodeFromOpcode(const std::string &opcode)
 {
+	// https://en.scratch-wiki.info/wiki/List_of_Block_Opcodes
+	// 
+	// There are some issues on the wiki as of April 2024:
+	// -  The "repeat" block is listed as having opcode "motion_turnright"
+	//    but it's actually "control_repeat"
+
 	if (opcode == "motion_movesteps") return new MoveSteps();
 	if (opcode == "motion_turnright") return new TurnDegrees();
 	if (opcode == "motion_turnleft") return new TurnNegDegrees();
@@ -996,7 +1204,7 @@ static ASTNode *NodeFromOpcode(const std::string &opcode)
 	if (opcode == "event_broadcastandwait") return new BroadcastAndWait();
 
 	if (opcode == "control_wait") return new WaitSecs();
-	if (opcode == "control_repeat") return new Repeat(); // NOTE: the Scratch Wiki has the this as "motion_turnright" but it's actually "control_repeat"
+	if (opcode == "control_repeat") return new Repeat();
 	if (opcode == "control_forever") return new Forever();
 	if (opcode == "control_if") return new If();
 	if (opcode == "control_if_else") return new IfElse();

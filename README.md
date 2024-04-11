@@ -52,13 +52,14 @@ int main(int argc, char *argv[])
     Scratch3 *S;
     int rc;
 
-    // Create a new Scratch 3 instance
-    S = Scratch3_Create(NULL);
+    // Create a new Scratch 3 instance referencing the
+    // given project file
+    S = Scratch3_Create("path/to/project.sb3", NULL, NULL)
     if (S == NULL)
         return 1;
 
-    // Load a project
-    rc = Scratch3_LoadProject(S, "path/to/project.sb3");
+    // Compile the project
+    rc = Scratch3_Compile(S);
     if (rc == -1)
     {
         Scratch3_Destroy(S);

@@ -16,42 +16,23 @@ int main(int argc, char *argv[])
 
 	const char *file = argv[1];
 
-	ls_init(NULL);
-
-	struct ls_stat st;
-	if (ls_stat(file, &st) != 0)
-	{
-		fprintf(stderr, "Could not find project file\n");
-		ls_shutdown();
-		return 1;
-	}
-
-	bool isDir = st.type == LS_FT_DIR;
-
-	Scratch3Info info{};
-
-	S = Scratch3_Create(&info);
+	S = Scratch3_Create(file, NULL, NULL);
 	if (!S)
 	{
-		fprintf(stderr, "Failed to create Scratch3 instance\n");
+		fprintf(stderr, "Failed to create instance\n");
 		ls_shutdown();
 		return 1;
 	}
 
-	if (isDir)
-		rc = Scratch3_LoadProjectFromDir(S, file);
-	else
-		rc = Scratch3_LoadProject(S, file);
-
+	rc = Scratch3_Compile(S);
 	if (rc == -1)
 	{
-		fprintf(stderr, "Failed to load project\n");
+		fprintf(stderr, "Failed to compile project\n");
+
 		Scratch3_Destroy(S);
 		ls_shutdown();
 		return 1;
 	}
-
-	double start = ls_time64();
 
 	rc = Scratch3_Run(S);
 	if (rc == -1)
@@ -71,10 +52,6 @@ int main(int argc, char *argv[])
 		ls_shutdown();
 		return 1;
 	}
-
-	double end = ls_time64();
-
-	printf("Project finished in %.2f seconds\n", end - start);
 
 	Scratch3_Destroy(S);
 	ls_shutdown();

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <scratch3/scratch3.h>
+
 #include "astdef.hpp"
 #include "astnode.hpp"
 #include "expression.hpp"
@@ -8,18 +10,13 @@
 #include "syminfo.hpp"
 #include "visitor.hpp"
 
-enum MessageType
-{
-	MessageType_Error,
-	MessageType_Warning,
-	MessageType_Info
-};
-
-struct Message
-{
-	MessageType type = MessageType_Error;
-	std::string message;
-};
-
-// Parse AST from project.json
-Program *ParseAST(const char *jsonString, size_t length, std::vector<Message> *log = nullptr);
+//! Parse JSON string into AST.
+//! 
+//! \param jsonString The JSON string to parse.
+//! \param length The length of the JSON string.
+//! \param log The log callback.
+//! \param up The user pointer.
+//! 
+//! \return The AST.
+Program *ParseAST(const char *jsonString, size_t length,
+	Scratch3_LogCallback log, void *up);
