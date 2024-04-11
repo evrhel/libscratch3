@@ -379,26 +379,54 @@ struct PropertyOf : public Expression
 			if (target == PropertyTarget_Unknown)
 			{
 				if (value == "backdrop #")
+				{
 					target = PropertyTarget_BackdropNumber;
+					syminfo = SymbolType_PositiveInt;
+				}
 				else if (value == "backdrop name")
+				{
 					target = PropertyTarget_BackdropName;
+					syminfo = SymbolType_String;
+				}
 				else if (value == "x position")
+				{
 					target = PropertyTarget_XPosition;
+					syminfo = SymbolType_Number;
+				}
 				else if (value == "y position")
+				{
 					target = PropertyTarget_YPosition;
+					syminfo = SymbolType_Number;
+				}
 				else if (value == "direction")
+				{
 					target = PropertyTarget_Direction;
+					syminfo = SymbolType_Number;
+				}
 				else if (value == "costume #")
+				{
 					target = PropertyTarget_CostumeNumber;
+					syminfo = SymbolType_PositiveInt;
+				}
 				else if (value == "costume name")
+				{
 					target = PropertyTarget_CostumeName;
+					syminfo = SymbolType_String;
+				}
 				else if (value == "size")
+				{
 					target = PropertyTarget_Size;
+					syminfo = SymbolType_PositiveNumber;
+				}
 				else if (value == "volume")
+				{
 					target = PropertyTarget_Volume;
+					syminfo = SymbolType_PositiveNumber;
+				}
 				else
 				{
 					target = PropertyTarget_Variable;
+					syminfo = SymbolType_Any;
 					name = value;
 					this->id = id;
 				}

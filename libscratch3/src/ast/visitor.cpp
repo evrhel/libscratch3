@@ -68,8 +68,18 @@ public:
 		Printf("\033[1mNone\033[0m\n");
 	}
 
-	virtual void Visit(XPos *node) {}
-	virtual void Visit(YPos *node) {}
+	virtual void Visit(XPos *node)
+	{
+		Printf("\033[34;1mXPos\033[0m -> \033[1m%s\033[0m\n",
+						node->syminfo.ToString().c_str());
+	}
+
+	virtual void Visit(YPos *node)
+	{
+		Printf("\033[34;1mYPos\033[0m -> \033[1m%s\033[0m\n",
+									node->syminfo.ToString().c_str());
+	}
+
 	virtual void Visit(Direction *node) {}
 
 	virtual void Visit(CurrentCostume *node)
@@ -89,17 +99,53 @@ public:
 	virtual void Visit(Size *node) {}
 	virtual void Visit(Volume *node) {}
 	virtual void Visit(Touching *node) {}
-	virtual void Visit(TouchingColor *node) {}
+
+	virtual void Visit(TouchingColor *node)
+	{
+		Printf("\033[36;1mTouchingColor\033[0m -> \033[1m%s\033[0m\n",
+						node->syminfo.ToString().c_str());
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(ColorTouching *node) {}
 	virtual void Visit(DistanceTo *node) {}
 	virtual void Visit(Answer *node) {}
-	virtual void Visit(KeyPressed *node) {}
+
+	virtual void Visit(KeyPressed *node)
+	{
+		Printf("\033[36;1mKeyPressed\033[0m -> \033[1m%s\033[0m\n",
+			node->syminfo.ToString().c_str());
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(MouseDown *node) {}
 	virtual void Visit(MouseX *node) {}
 	virtual void Visit(MouseY *node) {}
 	virtual void Visit(Loudness *node) {}
 	virtual void Visit(TimerValue *node) {}
-	virtual void Visit(PropertyOf *node) {}
+
+	virtual void Visit(PropertyOf *node)
+	{
+		if (node->target == PropertyTarget_Variable)
+		{
+			Printf("\033[36;1mPropertyOf\033[0m \033[31m%s\033[0m -> \033[1m%s\033[0m\n",
+				PropertyTargetStrings[node->target],
+				node->syminfo.ToString().c_str());
+		}
+		else
+		{
+			Printf("\033[36;1mPropertyOf\033[0m %s -> \033[1m%s\033[0m\n",
+				PropertyTargetStrings[node->target],
+				node->syminfo.ToString().c_str());
+		}
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
 
 	virtual void Visit(CurrentDate *node)
 	{
@@ -148,11 +194,61 @@ public:
 		_indent--;
 	}
 
-	virtual void Visit(Greater *node) {}
-	virtual void Visit(Less *node) {}
-	virtual void Visit(Equal *node) {}
-	virtual void Visit(LogicalAnd *node) {}
-	virtual void Visit(LogicalOr *node) {}
+	virtual void Visit(Greater *node)
+	{
+		Printf("\033[32;1mGreater\033[0m -> \033[1m%s\033[0m\n",
+						node->syminfo.ToString().c_str());
+
+		_indent++;
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		_indent--;
+	}
+
+	virtual void Visit(Less *node)
+	{
+		Printf("\033[32;1mLess\033[0m -> \033[1m%s\033[0m\n",
+									node->syminfo.ToString().c_str());
+
+		_indent++;
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		_indent--;
+	}
+
+	virtual void Visit(Equal *node)
+	{
+		Printf("\033[32;1mEqual\033[0m -> \033[1m%s\033[0m\n",
+						node->syminfo.ToString().c_str());
+
+		_indent++;
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		_indent--;
+	}
+
+	virtual void Visit(LogicalAnd *node)
+	{
+		Printf("\033[32;1mLogicalAnd\033[0m -> \033[1m%s\033[0m\n",
+						node->syminfo.ToString().c_str());
+
+		_indent++;
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		_indent--;
+	}
+
+	virtual void Visit(LogicalOr *node)
+	{
+		Printf("\033[32;1mLogicalOr\033[0m -> \033[1m%s\033[0m\n",
+									node->syminfo.ToString().c_str());
+
+		_indent++;
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(LogicalNot *node) {}
 	virtual void Visit(Concat *node) {}
 	virtual void Visit(CharAt *node) {}
@@ -196,11 +292,36 @@ public:
 	virtual void Visit(TurnNegDegrees *node) {}
 	virtual void Visit(Goto *node) {}
 	virtual void Visit(GotoXY *node) {}
-	virtual void Visit(Glide *node) {}
-	virtual void Visit(GlideXY *node) {}
+
+	virtual void Visit(Glide *node)
+	{
+		Printf("\033[34;1mGlide\033[0m\n");
+		_indent++;
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		_indent--;
+	}
+
+	virtual void Visit(GlideXY *node)
+	{
+		Printf("\033[34;1mGlideXY\033[0m\n");
+		_indent++;
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		node->e2->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(PointDir *node) {}
 	virtual void Visit(PointTowards *node) {}
-	virtual void Visit(ChangeX *node) {}
+
+	virtual void Visit(ChangeX *node)
+	{
+		Printf("\033[34;1mChangeX\033[0m\n");
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
 
 	virtual void Visit(SetX *node)
 	{
@@ -210,7 +331,14 @@ public:
 		_indent--;
 	}
 
-	virtual void Visit(ChangeY *node) {}
+	virtual void Visit(ChangeY *node)
+	{
+		Printf("\033[34;1mChangeY\033[0m\n");
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(SetY *node) {}
 	virtual void Visit(BounceIfOnEdge *node) {}
 	virtual void Visit(SetRotationStyle *node) {}
@@ -227,13 +355,37 @@ public:
 	virtual void Visit(Say *node) {}
 	virtual void Visit(ThinkForSecs *node) {}
 	virtual void Visit(Think *node) {}
-	virtual void Visit(SwitchCostume *node) {}
+
+	virtual void Visit(SwitchCostume *node)
+	{
+		Printf("\033[35mSwitchCostume\033[0m\n");
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(NextCostume *node) {}
-	virtual void Visit(SwitchBackdrop *node) {}
+
+	virtual void Visit(SwitchBackdrop *node)
+	{
+		Printf("\033[35mSwitchBackdrop\033[0m\n");
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(SwitchBackdropAndWait *node) {}
 	virtual void Visit(NextBackdrop *node) {}
 	virtual void Visit(ChangeSize *node) {}
-	virtual void Visit(SetSize *node) {}
+
+	virtual void Visit(SetSize *node)
+	{
+		Printf("\033[35mSetSize\033[0m\n");
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(ChangeGraphicEffect *node) {}
 
 	virtual void Visit(SetGraphicEffect *node)
@@ -245,10 +397,30 @@ public:
 	}
 
 	virtual void Visit(ClearGraphicEffects *node) {}
-	virtual void Visit(ShowSprite *node) {}
-	virtual void Visit(HideSprite *node) {}
-	virtual void Visit(GotoLayer *node) {}
-	virtual void Visit(MoveLayer *node) {}
+
+	virtual void Visit(ShowSprite *node)
+	{
+		Printf("\033[35mShowSprite\033[0m\n");
+	}
+
+	virtual void Visit(HideSprite *node)
+	{
+		Printf("\033[35mHideSprite\033[0m\n");
+	}
+
+	virtual void Visit(GotoLayer *node)
+	{
+		Printf("\033[35mGotoLayer\033[0m %s\n", LayerTypeStrings[node->layer]);
+	}
+
+	virtual void Visit(MoveLayer *node)
+	{
+		Printf("\033[35mMoveLayer %s\033[0m\n", LayerDirStrings[node->direction]);
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(PlaySoundUntilDone *node) {}
 	virtual void Visit(StartSound *node) {}
 	virtual void Visit(StopAllSounds *node) {}
@@ -281,11 +453,46 @@ public:
 	}
 
 	virtual void Visit(Repeat *node) {}
-	virtual void Visit(Forever *node) {}
-	virtual void Visit(If *node) {}
-	virtual void Visit(IfElse *node) {}
+
+	virtual void Visit(Forever *node)
+	{
+		Printf("\033[33mForever\033[0m\n");
+		_indent++;
+		if (node->sl) node->sl->Accept(this);
+		else Printf("(empty)\n");
+		_indent--;
+	}
+
+	virtual void Visit(If *node)
+	{
+		Printf("\033[33mIf\033[0m\n");
+		_indent++;
+		node->e->Accept(this);
+		node->sl->Accept(this);
+		_indent--;
+	}
+
+	virtual void Visit(IfElse *node)
+	{
+		Printf("\033[33mIfElse\033[0m\n");
+		_indent++;
+		node->e->Accept(this);
+		node->sl1->Accept(this);
+		node->sl2->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(WaitUntil *node) {}
-	virtual void Visit(RepeatUntil *node) {}
+
+	virtual void Visit(RepeatUntil *node)
+	{
+		Printf("\033[33mRepeatUntil\033[0m\n");
+		_indent++;
+		node->e->Accept(this);
+		node->sl->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(Stop *node) {}
 	virtual void Visit(CloneStart *node) {}
 	virtual void Visit(CreateClone *node) {}
@@ -302,7 +509,14 @@ public:
 		_indent--;
 	}
 
-	virtual void Visit(ChangeVariable *node) {}
+	virtual void Visit(ChangeVariable *node)
+	{
+		Printf("\033[31;1mChangeVariable\033[0m %s\n", node->name.c_str());
+		_indent++;
+		node->e->Accept(this);
+		_indent--;
+	}
+
 	virtual void Visit(ShowVariable *node) {}
 	virtual void Visit(HideVariable *node) {}
 	virtual void Visit(AppendToList *node) {}
@@ -314,6 +528,43 @@ public:
 	virtual void Visit(HideList *node) {}
 	virtual void Visit(DefineProc *node) {}
 	virtual void Visit(Call *node) {}
+
+	virtual void Visit(GotoReporter *node) {}
+	virtual void Visit(GlideReporter *node) {}
+	virtual void Visit(PointTowardsReporter *node) {}
+
+	virtual void Visit(CostumeReporter *node)
+	{
+		Printf("\033[33;1m`%s`\033[0m\n", node->value.c_str());
+	}
+
+	virtual void Visit(BackdropReporter *node)
+	{
+		Printf("\033[33;1m`%s`\033[0m\n", node->value.c_str());
+	}
+
+	virtual void Visit(SoundReporter *node) {}
+
+	virtual void Visit(BroadcastReporter *node) {}
+
+	virtual void Visit(CloneReporter *node) {}
+
+	virtual void Visit(TouchingReporter *node)
+	{
+		Printf("\033[33;1m`%s`\033[0m\n", node->value.c_str());
+	}
+
+	virtual void Visit(DistanceReporter *node) {}
+
+	virtual void Visit(KeyReporter *node)
+	{
+		Printf("\033[33;1m`%s`\033[0m\n", node->value.c_str());
+	}
+
+	virtual void Visit(PropertyOfReporter *node)
+	{
+		Printf("\033[33;1m`%s`\033[0m\n", node->value.c_str());
+	}
 
 	virtual void Visit(VariableDef *node)
 	{

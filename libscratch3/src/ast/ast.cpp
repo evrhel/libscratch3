@@ -116,6 +116,15 @@ static Constexpr *ParseLiteral(rapidjson::Value &v)
 {
 	if (v.IsString())
 		return InterpretString(v);
+	
+	// std::to_string does not give a minimal representation
+	const auto to_string = [](double val)
+	{
+		size_t len = snprintf(NULL, 0, "%g", val);
+		std::string str(len, '\0');
+		sprintf_s(&str[0], len + 1, "%g", val);
+		return str;
+	};
 
 	if (v.IsInt())
 	{
@@ -141,13 +150,13 @@ static Constexpr *ParseLiteral(rapidjson::Value &v)
 		if (dval >= 0)
 		{
 			PositiveNumber *pn = new PositiveNumber();
-			pn->value = std::to_string(dval);
+			pn->value = to_string(dval);
 			return pn;
 		}
 		else
 		{
 			Number *n = new Number();
-			n->value = std::to_string(dval);
+			n->value = to_string(dval);
 			return n;
 		}
 	}
@@ -797,12 +806,9 @@ private:
 				ASTNode *val = ParseInput(blocks, it->value);
 				if (!val)
 				{
-					//Error("Failed to parse input `%s` in block `%s` (%s)",
-					//	key.c_str(), id.c_str(), opcode.GetString());
-					//continue;
-					
 					Warn("Null input `%s` in block `%s` (%s)",
 						key.c_str(), id.c_str(), opcode.GetString());
+					continue;
 				}
 
 				// set the input in the node
