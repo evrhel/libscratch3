@@ -262,6 +262,25 @@ struct ColorTouching : public Expression
 	EXPR_IMPL(ColorTouching, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "COLOR")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "COLOR2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
 	inline virtual ~ColorTouching()
 	{
 		delete e1;
@@ -277,6 +296,18 @@ struct DistanceTo : public Expression
 {
 	EXPR_IMPL(DistanceTo, Expression, SymbolType_PositiveNumber);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, value)
+	{
+		if (key == "DISTANCETOMENU")
+		{
+			if (!e)
+				e = value->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~DistanceTo()
 	{
@@ -515,7 +546,8 @@ struct Add : public Consteval
 				e1 = val->As<Expression>();
 			return !!e1;
 		}
-		else if (key == "NUM2")
+
+		if (key == "NUM2")
 		{
 			if (!e2)
 				e2 = val->As<Expression>();
@@ -540,6 +572,25 @@ struct Sub : public Consteval
 {
 	EXPR_IMPL(Sub, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "NUM1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "NUM2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
 
 	inline virtual ~Sub()
 	{
@@ -592,6 +643,25 @@ struct Div : public Consteval
 	EXPR_IMPL(Div, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "NUM1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "NUM2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
 	inline virtual ~Div()
 	{
 		delete e1;
@@ -616,7 +686,8 @@ struct Random : public Expression
 				e1 = val->As<Expression>();
 			return !!e1;
 		}
-		else if (key == "TO")
+
+		if (key == "TO")
 		{
 			if (!e2)
 				e2 = val->As<Expression>();
@@ -650,7 +721,8 @@ struct Greater : public Consteval
 				e1 = val->As<Expression>();
 			return !!e1;
 		}
-		else if (key == "OPERAND2")
+
+		if (key == "OPERAND2")
 		{
 			if (!e2)
 				e2 = val->As<Expression>();
@@ -684,7 +756,8 @@ struct Less : public Consteval
 				e1 = val->As<Expression>();
 			return !!e1;
 		}
-		else if (key == "OPERAND2")
+
+		if (key == "OPERAND2")
 		{
 			if (!e2)
 				e2 = val->As<Expression>();
@@ -718,7 +791,8 @@ struct Equal : public Consteval
 				e1 = val->As<Expression>();
 			return !!e1;
 		}
-		else if (key == "OPERAND2")
+
+		if (key == "OPERAND2")
 		{
 			if (!e2)
 				e2 = val->As<Expression>();
@@ -752,7 +826,8 @@ struct LogicalAnd : public Consteval
 				e1 = val->As<Expression>();
 			return !!e1;
 		}
-		else if (key == "OPERAND2")
+
+		if (key == "OPERAND2")
 		{
 			if (!e2)
 				e2 = val->As<Expression>();
@@ -786,7 +861,8 @@ struct LogicalOr : public Consteval
 				e1 = val->As<Expression>();
 			return !!e1;
 		}
-		else if (key == "OPERAND2")
+
+		if (key == "OPERAND2")
 		{
 			if (!e2)
 				e2 = val->As<Expression>();
@@ -812,6 +888,18 @@ struct LogicalNot : public Consteval
 	EXPR_IMPL(LogicalNot, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "OPERAND")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~LogicalNot()
 	{
 		delete e;
@@ -825,6 +913,25 @@ struct Concat : public Consteval
 {
 	EXPR_IMPL(Concat, Consteval, SymbolType_String);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "STRING1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "STRING2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
 
 	inline virtual ~Concat()
 	{
@@ -842,6 +949,25 @@ struct CharAt : public Consteval
 	EXPR_IMPL(CharAt, Consteval, SymbolType_String);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "LETTER")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "STRING")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
 	inline virtual ~CharAt()
 	{
 		delete e1;
@@ -858,6 +984,18 @@ struct StringLength : public Consteval
 	EXPR_IMPL(StringLength, Consteval, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "STRING")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~StringLength()
 	{
 		delete e;
@@ -871,6 +1009,25 @@ struct StringContains : public Consteval
 {
 	EXPR_IMPL(StringContains, Consteval, SymbolType_Bool);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "STRING1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "STRING2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
 
 	inline virtual ~StringContains()
 	{
@@ -888,6 +1045,25 @@ struct Mod : public Consteval
 	EXPR_IMPL(Mod, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "NUM1")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "NUM2")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
 	inline virtual ~Mod()
 	{
 		delete e1;
@@ -904,6 +1080,18 @@ struct Round : public Consteval
 	EXPR_IMPL(Round, Consteval, SymbolType_Int);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "NUM")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~Round()
 	{
 		delete e;
@@ -918,6 +1106,29 @@ struct MathFunc : public Consteval
 	EXPR_IMPL(MathFunc, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "NUM")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "OPERATOR")
+		{
+			func = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	inline virtual ~MathFunc()
 	{
 		delete e;
@@ -931,6 +1142,15 @@ struct MathFunc : public Consteval
 struct VariableExpr : public Expression
 {
 	EXPR_IMPL(VariableExpr, Expression, SymbolType_Any);
+	AST_ACCEPTOR;
+
+	std::string id, name;
+};
+
+// broadcast id
+struct BroadcastExpr : public Expression
+{
+	EXPR_IMPL(BroadcastExpr, Expression, SymbolType_Any);
 	AST_ACCEPTOR;
 
 	std::string id, name;
@@ -951,6 +1171,32 @@ struct ListAccess : public Expression
 	EXPR_IMPL(ListAccess, Expression, SymbolType_Any);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "INDEX")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	inline virtual ~ListAccess()
 	{
 		delete e;
@@ -965,6 +1211,32 @@ struct IndexOf : public Expression
 {
 	EXPR_IMPL(IndexOf, Expression, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "ITEM")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
 
 	inline virtual ~IndexOf()
 	{
@@ -981,6 +1253,20 @@ struct ListLength : public Expression
 	EXPR_IMPL(ListLength, Expression, SymbolType_PositiveInt);
 	AST_ACCEPTOR;
 
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	std::string id, name;
 };
 
@@ -989,6 +1275,32 @@ struct ListContains : public Expression
 {
 	EXPR_IMPL(ListContains, Expression, SymbolType_Bool);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "ITEM")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
 
 	inline virtual ~ListContains()
 	{

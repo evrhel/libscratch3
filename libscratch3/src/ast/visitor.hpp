@@ -61,6 +61,7 @@ public:
 	inline virtual void Visit(Round *node) {}
 	inline virtual void Visit(MathFunc *node) {}
 	inline virtual void Visit(VariableExpr *node) {}
+	inline virtual void Visit(BroadcastExpr *node) {}
 	inline virtual void Visit(ListExpr *node) {}
 	inline virtual void Visit(ListAccess *node) {}
 	inline virtual void Visit(IndexOf *node) {}
@@ -148,6 +149,7 @@ public:
 	inline virtual void Visit(ReplaceInList *node) {}
 	inline virtual void Visit(ShowList *node) {}
 	inline virtual void Visit(HideList *node) {}
+	inline virtual void Visit(ProcProto *node) {}
 	inline virtual void Visit(DefineProc *node) {}
 	inline virtual void Visit(Call *node) {}
 
@@ -168,6 +170,8 @@ public:
 	inline virtual void Visit(DistanceReporter *node) {}
 	inline virtual void Visit(KeyReporter *node) {}
 	inline virtual void Visit(PropertyOfReporter *node) {}
+	inline virtual void Visit(ArgReporterStringNumber *node) {}
+	inline virtual void Visit(ArgReporterBoolean *node) {}
 
 	//
 	/////////////////////////////////////////////////////////////////

@@ -15,12 +15,16 @@ int main(int argc, char *argv[])
 
 	const char *file = argv[1];
 
+	printf("Loading project `%s`\n", file);
+
 	S = Scratch3_Create(file, Scratch3_GetStdoutLogCallback(), NULL);
 	if (!S)
 	{
 		fprintf(stderr, "Failed to create instance\n");
 		return 1;
 	}
+
+	printf("Compiling project\n");
 
 	rc = Scratch3_Compile(S);
 	if (rc == -1)
@@ -31,7 +35,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	Scratch3_DumpAST(S);
+	//Scratch3_DumpAST(S);
 
 	rc = Scratch3_Run(S);
 	if (rc == -1)

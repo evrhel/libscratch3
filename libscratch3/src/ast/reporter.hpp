@@ -11,21 +11,21 @@ struct Reporter : public Expression
 // Reporter for (goto)
 struct GotoReporter : public Reporter
 {
-	AST_IMPL(GotoReporter, Reporter);
+	REPORTER_IMPL(GotoReporter, Reporter, TO);
 	AST_ACCEPTOR;
 };
 
 // Reporter for (glide () secs to ())
 struct GlideReporter : public Reporter
 {
-	AST_IMPL(GlideReporter, Reporter);
+	REPORTER_IMPL(GlideReporter, Reporter, TO);
 	AST_ACCEPTOR;
 };
 
 // Reporter for (point towards ())
 struct PointTowardsReporter : public Reporter
 {
-	AST_IMPL(PointTowardsReporter, Reporter);
+	REPORTER_IMPL(PointTowardsReporter, Reporter, TOWARDS);
 	AST_ACCEPTOR;
 };
 
@@ -48,7 +48,7 @@ struct BackdropReporter : public Reporter
 // (play sound ())
 struct SoundReporter : public Reporter
 {
-	AST_IMPL(SoundReporter, Reporter);
+	REPORTER_IMPL(SoundReporter, Reporter, SOUND_MENU);
 	AST_ACCEPTOR;
 };
 
@@ -62,7 +62,7 @@ struct BroadcastReporter : public Reporter
 // Reporter for (create clone of ())
 struct CloneReporter : public Reporter
 {
-	AST_IMPL(CloneReporter, Reporter);
+	REPORTER_IMPL(CloneReporter, Reporter, CLONE_OPTION);
 	AST_ACCEPTOR;
 };
 
@@ -76,7 +76,8 @@ struct TouchingReporter : public Reporter
 // Reporter for (distance to ())
 struct DistanceReporter : public Reporter
 {
-	AST_IMPL(DistanceReporter, Reporter);
+	REPORTER_IMPL(DistanceReporter, Reporter, DISTANCETOMENU);
+	AST_ACCEPTOR;
 };
 
 // Reporter for <key () pressed?>
@@ -90,5 +91,19 @@ struct KeyReporter : public Reporter
 struct PropertyOfReporter : public Reporter
 {
 	REPORTER_IMPL(PropertyOfReporter, Reporter, OBJECT);
+	AST_ACCEPTOR;
+};
+
+// Reporter for string/number argument in a custom block
+struct ArgReporterStringNumber : public Reporter
+{
+	REPORTER_IMPL(ArgReporterStringNumber, Reporter, VALUE);
+	AST_ACCEPTOR;
+};
+
+// Reporter for boolean argument in a custom block
+struct ArgReporterBoolean : public Reporter
+{
+	REPORTER_IMPL(ArgReporterBoolean, Reporter, VALUE);
 	AST_ACCEPTOR;
 };

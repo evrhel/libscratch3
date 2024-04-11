@@ -445,6 +445,12 @@ private:
 				rapidjson::Value &target = it->value;
 				std::string id = it->name.GetString();
 
+				if (target.IsArray())
+				{
+					Info("Discarding dangling block `%s`", id.c_str());
+					continue;
+				}
+
 				if (!target.IsObject())
 				{
 					Error("Expected object parsing block `%s`", id.c_str());
@@ -478,7 +484,7 @@ private:
 				// check if the opcode is an event handler
 				if (!IsEventHandler(opcode.GetString()))
 				{
-					Info("Discarding unreachable block `%s` (%s)", id.c_str(), opcode.GetString());
+					Info("Discarding dangling block `%s` (%s)", id.c_str(), opcode.GetString());
 					continue;
 				}
 
@@ -1055,16 +1061,34 @@ private:
 			return ce;
 		}
 		case BlockType_Broadcast: {
-			if (v.Size() < 2)
+			// Broadcasts are in the format:
+			// [11, "name", "id"]
+
+			if (v.Size() < 3)
 			{
-				Error("Expected value parsing broadcast block");
+				Error("Expected id parsing broadcast");
 				return nullptr;
 			}
 
-			// TODO: implement broadcast block
+			rapidjson::Value &id = v[2];
+			if (!id.IsString())
+			{
+				Error("Expected string parsing id in broadcast");
+				return nullptr;
+			}
 
-			Error("Broadcast block not implemented");
-			return nullptr;
+			rapidjson::Value &name = v[1];
+			if (!name.IsString())
+			{
+				Error("Expected string parsing name in broadcast");
+				return nullptr;
+			}
+
+			// Create a BroadcastExpr node
+			BroadcastExpr *broad = new BroadcastExpr();
+			broad->id = id.GetString();
+			broad->name = name.GetString();
+			return broad;
 		}
 		case BlockType_Variable: {
 			// Variables are in the format:
@@ -1168,7 +1192,8 @@ static bool IsEventHandler(const std::string &opcode)
 		opcode == "event_whenbackdropswitchesto" ||
 		opcode == "event_whengreaterthan" ||
 		opcode == "event_whenbroadcastreceived" ||
-		opcode == "control_start_as_clone";
+		opcode == "control_start_as_clone" ||
+		opcode == "procedures_definition";
 }
 
 static ASTNode *NodeFromOpcode(const std::string &opcode)
@@ -1309,6 +1334,7 @@ static ASTNode *NodeFromOpcode(const std::string &opcode)
 	if (opcode == "data_showlist") return new ShowList();
 	if (opcode == "data_hidelist") return new HideList();
 
+	if (opcode == "procedures_prototype") return new ProcProto();
 	if (opcode == "procedures_definition") return new DefineProc();
 	if (opcode == "procedures_call") return new Call();
 
@@ -1326,6 +1352,8 @@ static ASTNode *NodeFromOpcode(const std::string &opcode)
 	if (opcode == "sensing_distancetomenu") return new DistanceReporter();
 	if (opcode == "sensing_keyoptions") return new KeyReporter();
 	if (opcode == "sensing_of_object_menu") return new PropertyOfReporter();
+	if (opcode == "argument_reporter_string_number") return new ArgReporterStringNumber();
+	if (opcode == "argument_reporter_boolean") return new ArgReporterBoolean();
 
 	// No extension blocks are supported
 

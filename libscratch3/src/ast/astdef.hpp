@@ -92,6 +92,7 @@ struct MathFunc;
 
 // Variables Expressions
 struct VariableExpr;
+struct BroadcastExpr;
 struct ListExpr;
 struct ListAccess;
 struct IndexOf;
@@ -120,6 +121,8 @@ struct TouchingReporter;
 struct DistanceReporter;
 struct KeyReporter;
 struct PropertyOfReporter;
+struct ArgReporterStringNumber;
+struct ArgReporterBoolean;
 
 //
 /////////////////////////////////////////////////////////////////////////////////
@@ -222,6 +225,7 @@ struct ShowList;
 struct HideList;
 
 // Custom Blocks
+struct ProcProto;
 struct DefineProc;
 struct Call;
 
@@ -358,6 +362,7 @@ enum AstType
 	Ast_MathFunc,
 
 	Ast_VariableExpr,
+	Ast_BroadcastExpr,
 	Ast_ListExpr,
 	Ast_ListAccess,
 	Ast_IndexOf,
@@ -378,6 +383,8 @@ enum AstType
 	Ast_DistanceReporter,
 	Ast_KeyReporter,
 	Ast_PropertyOfReporter,
+	Ast_ArgReporterStringNumber,
+	Ast_ArgReporterBoolean,
 
 	Ast_Statement,
 	Ast_StatementList,
@@ -464,6 +471,7 @@ enum AstType
 	Ast_ShowList,
 	Ast_HideList,
 
+	Ast_ProcProto,
 	Ast_DefineProc,
 	Ast_Call,
 
@@ -588,6 +596,7 @@ enum SoundEffect
 };
 
 extern const char *const SoundEffectStrings[];
+SoundEffect SoundEffectFromString(const std::string &str);
 
 enum Key
 {
@@ -641,6 +650,7 @@ enum Key
 	Key_Any = -1
 };
 
+Key KeyFromString(const std::string &str);
 const char *GetKeyName(Key key);
 
 enum ListenValueType
@@ -654,6 +664,7 @@ enum ListenValueType
 };
 
 extern const char *const ListenValueTypeStrings[];
+ListenValueType ListenValueTypeFromString(const std::string &str);
 
 enum StopMode
 {
@@ -667,6 +678,7 @@ enum StopMode
 };
 
 extern const char *const StopModeStrings[];
+StopMode StopModeFromString(const std::string &str);
 
 enum DragMode
 {
@@ -679,6 +691,7 @@ enum DragMode
 };
 
 extern const char *const DragModeStrings[];
+DragMode DragModeFromString(const std::string &str);
 
 enum PropertyTarget
 {

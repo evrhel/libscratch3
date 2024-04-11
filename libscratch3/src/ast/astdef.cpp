@@ -58,6 +58,43 @@ const char *const SoundEffectStrings[] = {
 	"pan"
 };
 
+SoundEffect SoundEffectFromString(const std::string &str)
+{
+	for (int i = 0; i < SoundEffect_Count; i++)
+		if (str == SoundEffectStrings[i])
+			return (SoundEffect)i;
+	return SoundEffect_Unknown;
+}
+
+Key KeyFromString(const std::string &str)
+{
+	if (str.length() == 1)
+	{
+		char c = str[0];
+		if (c >= '0' && c <= '9')
+			return (Key)(Key_0 + (c - '0'));
+		if (c >= 'A' && c <= 'Z')
+			return (Key)(Key_A + (c - 'A'));
+		return Key_Unknown;
+	}
+
+	if (str == "space")
+		return Key_Space;
+	if (str == "up arrow")
+		return Key_Up;
+	if (str == "down arrow")
+		return Key_Down;
+	if (str == "left arrow")
+		return Key_Left;
+	if (str == "right arrow")
+		return Key_Right;
+
+	if (str == "any")
+		return Key_Any;
+
+	return Key_Unknown;
+}
+
 const char *GetKeyName(Key key)
 {
 	static const char *Numbers[] = {
@@ -100,18 +137,42 @@ const char *const ListenValueTypeStrings[ListenValueType_Count] = {
 	"TIMER"
 };
 
+ListenValueType ListenValueTypeFromString(const std::string &str)
+{
+	for (int i = 0; i < ListenValueType_Count; i++)
+		if (str == ListenValueTypeStrings[i])
+			return (ListenValueType)i;
+	return ListenValueType_Unknown;
+}
+
 const char *const StopModeStrings[StopMode_Count] = {
 	"unknown",
-	"ALL",
-	"THIS",
-	"OTHERS"
+	"all",
+	"this script",
+	"other scripts in sprite"
 };
+
+StopMode StopModeFromString(const std::string &str)
+{
+	for (int i = 0; i < StopMode_Count; i++)
+		if (str == StopModeStrings[i])
+			return (StopMode)i;
+	return StopMode_Unknown;
+}
 
 const char *const DragModeStrings[DragMode_Count] = {
 	"unknown",
-	"DRAGGABLE",
-	"NOTDRAGGABLE"
+	"draggable",
+	"not draggable"
 };
+
+DragMode DragModeFromString(const std::string &str)
+{
+	for (int i = 0; i < DragMode_Count; i++)
+		if (str == DragModeStrings[i])
+			return (DragMode)i;
+	return DragMode_Unknown;
+}
 
 const char *const PropertyTargetStrings[PropertyTarget_Count] = {
 	"unknown",
@@ -232,6 +293,7 @@ const char *AstTypeString(AstType type)
 	case Ast_Round: return "Round";
 	case Ast_MathFunc: return "MathFunc";
 	case Ast_VariableExpr: return "VariableExpr";
+	case Ast_BroadcastExpr: return "BroadcastExpr";
 	case Ast_ListExpr: return "ListExpr";
 	case Ast_ListAccess: return "ListAccess";
 	case Ast_IndexOf: return "IndexOf";
@@ -312,6 +374,7 @@ const char *AstTypeString(AstType type)
 	case Ast_ReplaceInList: return "ReplaceInList";
 	case Ast_ShowList: return "ShowList";
 	case Ast_HideList: return "HideList";
+	case Ast_ProcProto: return "ProcProto";
 	case Ast_DefineProc: return "DefineProc";
 	case Ast_Call: return "Call";
 	case Ast_VariableDef: return "VariableDef";

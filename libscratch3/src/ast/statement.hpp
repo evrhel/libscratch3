@@ -109,6 +109,18 @@ struct Goto : public Statement
 	AST_IMPL(Goto, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "TO")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~Goto()
 	{
 		delete e;
@@ -156,6 +168,25 @@ struct Glide : public Statement
 {
 	AST_IMPL(Glide, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "SECS")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "TO")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
 
 	inline virtual ~Glide()
 	{
@@ -242,7 +273,7 @@ struct PointTowards : public Statement
 
 	AST_INPUT_SETTER(key, val)
 	{
-		if (key == "TARGET")
+		if (key == "TOWARDS")
 		{
 			if (!e)
 				e = val->As<Expression>();
@@ -344,6 +375,18 @@ struct SetY : public Statement
 	AST_IMPL(SetY, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "Y")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~SetY()
 	{
 		delete e;
@@ -419,6 +462,18 @@ struct Say : public Statement
 	AST_IMPL(Say, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "MESSAGE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~Say()
 	{
 		delete e;
@@ -432,6 +487,25 @@ struct ThinkForSecs : public Statement
 {
 	AST_IMPL(ThinkForSecs, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "MESSAGE")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "SECS")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
 
 	inline virtual ~ThinkForSecs()
 	{
@@ -447,6 +521,18 @@ struct Think : public Statement
 {
 	AST_IMPL(Think, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "MESSAGE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~Think()
 	{
@@ -521,6 +607,18 @@ struct SwitchBackdropAndWait : public Statement
 	AST_IMPL(SwitchBackdropAndWait, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "BACKDROP")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~SwitchBackdropAndWait()
 	{
 		delete e;
@@ -541,6 +639,18 @@ struct ChangeSize : public Statement
 {
 	AST_IMPL(ChangeSize, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "CHANGE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~ChangeSize()
 	{
@@ -582,6 +692,29 @@ struct ChangeGraphicEffect : public Statement
 	AST_IMPL(ChangeGraphicEffect, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "CHANGE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "EFFECT")
+		{
+			effect = GraphicEffectFromString(value);
+			return true;
+		}
+
+		return false;
+	}
+
 	inline virtual ~ChangeGraphicEffect()
 	{
 		delete e;
@@ -611,8 +744,6 @@ struct SetGraphicEffect : public Statement
 
 	AST_FIELD_SETTER(key, value, id)
 	{
-		(void)id;
-
 		if (key == "EFFECT")
 		{
 			effect = GraphicEffectFromString(value);
@@ -657,6 +788,26 @@ struct GotoLayer : public Statement
 {
 	AST_IMPL(GotoLayer, Statement);
 	AST_ACCEPTOR;
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "FRONT_BACK")
+		{
+			if (layer != LayerType_Unknown)
+				return false;
+
+			if (value == "front")
+				layer = LayerType_Front;
+			else if (value == "back")
+				layer = LayerType_Back;
+			else
+				return false;
+
+			return true;
+		}
+
+		return false;
+	}
 
 	LayerType layer = LayerType_Unknown;
 };
@@ -713,6 +864,18 @@ struct PlaySoundUntilDone : public Statement
 	AST_IMPL(PlaySoundUntilDone, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "SOUND_MENU")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~PlaySoundUntilDone()
 	{
 		delete e;
@@ -726,6 +889,18 @@ struct StartSound : public Statement
 {
 	AST_IMPL(StartSound, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "SOUND_MENU")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~StartSound()
 	{
@@ -748,6 +923,31 @@ struct ChangeSoundEffect : public Statement
 	AST_IMPL(ChangeSoundEffect, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "VALUE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "EFFECT")
+		{
+			if (effect != SoundEffect_Unknown)
+				return false;
+			effect = SoundEffectFromString(value);
+			return true;
+		}
+
+		return false;
+	}
+
 	inline virtual ~ChangeSoundEffect()
 	{
 		delete e;
@@ -762,6 +962,31 @@ struct SetSoundEffect : public Statement
 {
 	AST_IMPL(SetSoundEffect, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "VALUE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "EFFECT")
+		{
+			if (effect != SoundEffect_Unknown)
+				return false;
+			effect = SoundEffectFromString(value);
+			return true;
+		}
+
+		return false;
+	}
 
 	inline virtual ~SetSoundEffect()
 	{
@@ -784,6 +1009,18 @@ struct ChangeVolume : public Statement
 {
 	AST_IMPL(ChangeVolume, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "VOLUME")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~ChangeVolume()
 	{
@@ -832,7 +1069,20 @@ struct OnKeyPressed : public Statement
 	AST_IMPL(OnKeyPressed, Statement);
 	AST_ACCEPTOR;
 
-	std::string key;
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "KEY_OPTION")
+		{
+			if (this->key != Key_Unknown)
+				return false;
+			this->key = KeyFromString(value);
+			return this->key != Key_Unknown;
+		}
+
+		return false;
+	}
+
+	Key key = Key_Unknown;
 };
 
 // [when this sprite clicked]
@@ -855,6 +1105,17 @@ struct OnBackdropSwitch : public Statement
 	AST_IMPL(OnBackdropSwitch, Statement);
 	AST_ACCEPTOR;
 
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "BACKDROP")
+		{
+			backdrop = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	std::string backdrop;
 };
 
@@ -864,13 +1125,38 @@ struct OnGreaterThan : public Statement
 	AST_IMPL(OnGreaterThan, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "VALUE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "WHENGREATERTHANMENU")
+		{
+			if (this->value != ListenValueType_Unknown)
+				return false;
+			this->value = ListenValueTypeFromString(value);
+			return this->value != ListenValueType_Unknown;
+		}
+
+		return false;
+	}
+
 	inline virtual ~OnGreaterThan()
 	{
 		delete e;
 	}
 
-	ListenValueType value;
-	Expression *e;
+	ListenValueType value = ListenValueType_Unknown;
+	Expression *e = nullptr;
 };
 
 // [when I receive ?message]
@@ -878,6 +1164,17 @@ struct OnEvent : public Statement
 {
 	AST_IMPL(OnEvent, Statement);
 	AST_ACCEPTOR;
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "BROADCAST_OPTION")
+		{
+			message = value;
+			return true;
+		}
+
+		return false;
+	}
 
 	std::string message;
 };
@@ -887,6 +1184,18 @@ struct Broadcast : public Statement
 {
 	AST_IMPL(Broadcast, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "BROADCAST_INPUT")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~Broadcast()
 	{
@@ -901,6 +1210,18 @@ struct BroadcastAndWait : public Statement
 {
 	AST_IMPL(BroadcastAndWait, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "BROADCAST_INPUT")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~BroadcastAndWait()
 	{
@@ -943,6 +1264,25 @@ struct Repeat : public Statement
 {
 	AST_IMPL(Repeat, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "TIMES")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		if (key == "SUBSTACK")
+		{
+			if (!sl)
+				sl = val->As<StatementList>();
+			return !!sl;
+		}
+
+		return false;
+	}
 
 	inline virtual ~Repeat()
 	{
@@ -1077,6 +1417,18 @@ struct WaitUntil : public Statement
 	AST_IMPL(WaitUntil, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "CONDITION")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~WaitUntil()
 	{
 		delete e;
@@ -1128,7 +1480,20 @@ struct Stop : public Statement
 	AST_IMPL(Stop, Statement);
 	AST_ACCEPTOR;
 
-	std::string mode;
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "STOP_OPTION")
+		{
+			if (mode != StopMode_Unknown)
+				return false;
+			mode = StopModeFromString(value);
+			return true;
+		}
+
+		return false;
+	}
+
+	StopMode mode = StopMode_Unknown;
 };
 
 // [when I start as a clone]
@@ -1143,6 +1508,18 @@ struct CreateClone : public Statement
 {
 	AST_IMPL(CreateClone, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "CLONE_OPTION")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
 
 	inline virtual ~CreateClone()
 	{
@@ -1165,6 +1542,18 @@ struct AskAndWait : public Statement
 	AST_IMPL(AskAndWait, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "QUESTION")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
 	inline virtual ~AskAndWait()
 	{
 		delete e;
@@ -1178,6 +1567,19 @@ struct SetDragMode : public Statement
 {
 	AST_IMPL(SetDragMode, Statement);
 	AST_ACCEPTOR;
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "DRAG_MODE")
+		{
+			if (mode != DragMode_Unknown)
+				return false;
+			mode = DragModeFromString(value);
+			return true;
+		}
+
+		return false;
+	}
 
 	DragMode mode = DragMode_Unknown;
 };
@@ -1279,6 +1681,20 @@ struct ShowVariable : public Statement
 	AST_IMPL(ShowVariable, Statement);
 	AST_ACCEPTOR;
 
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "VARIABLE")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	std::string id, name;
 };
 
@@ -1288,6 +1704,20 @@ struct HideVariable : public Statement
 	AST_IMPL(HideVariable, Statement);
 	AST_ACCEPTOR;
 
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "VARIABLE")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	std::string id, name;
 };
 
@@ -1296,6 +1726,32 @@ struct AppendToList : public Statement
 {
 	AST_IMPL(AppendToList, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "ITEM")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
 
 	inline virtual ~AppendToList()
 	{
@@ -1312,6 +1768,32 @@ struct DeleteFromList : public Statement
 	AST_IMPL(DeleteFromList, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "INDEX")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	inline virtual ~DeleteFromList()
 	{
 		delete e;
@@ -1327,6 +1809,20 @@ struct DeleteAllList : public Statement
 	AST_IMPL(DeleteAllList, Statement);
 	AST_ACCEPTOR;
 
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	std::string id, name;
 };
 
@@ -1335,6 +1831,39 @@ struct InsertInList : public Statement
 {
 	AST_IMPL(InsertInList, Statement);
 	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "ITEM")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "INDEX")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
 
 	inline virtual ~InsertInList()
 	{
@@ -1352,6 +1881,39 @@ struct ReplaceInList : public Statement
 	AST_IMPL(ReplaceInList, Statement);
 	AST_ACCEPTOR;
 
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "INDEX")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+
+		if (key == "ITEM")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
 	inline virtual ~ReplaceInList()
 	{
 		delete e1;
@@ -1359,7 +1921,7 @@ struct ReplaceInList : public Statement
 	}
 
 	Expression *e1 = nullptr;
-	std::string id;
+	std::string name, id;
 	Expression *e2 = nullptr;
 };
 
@@ -1369,7 +1931,21 @@ struct ShowList : public Statement
 	AST_IMPL(ShowList, Statement);
 	AST_ACCEPTOR;
 
-	std::string id, name;;
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
+	std::string id, name;
 };
 
 // [hide list ?id]
@@ -1378,7 +1954,47 @@ struct HideList : public Statement
 	AST_IMPL(HideList, Statement);
 	AST_ACCEPTOR;
 
-	std::string id, name;;
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "LIST")
+		{
+			if (!this->id.empty())
+				return false;
+			this->id = id;
+			this->name = value;
+			return true;
+		}
+
+		return false;
+	}
+
+	std::string id, name;
+};
+
+struct ProcProto : public Statement
+{
+	AST_IMPL(ProcProto, Statement);
+	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		// TODO: the inptus will be of the form:
+		// "argument_id": [
+		//   1,
+		//   "argument reporter block id"
+		// ]
+		return true;
+	}
+
+	// TODO: accept mutation
+
+	std::string proccode;
+
+	std::vector<std::string> argumentIds;
+	std::vector<std::string> argumentNames;
+	std::vector<std::string> argumentDefaults;
+
+	bool warp;
 };
 
 // [define ?name ?params...]
@@ -1387,8 +2003,45 @@ struct DefineProc : public Statement
 	AST_IMPL(DefineProc, Statement);
 	AST_ACCEPTOR;
 
-	std::string name;
-	std::vector<std::string> params; // ids of parameters
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "custom_block")
+		{
+			if (proto != nullptr)
+				return false;
+
+			// extract the proto from the statement list
+
+			StatementList *sl = val->As<StatementList>();
+			if (!sl)
+				return false;
+
+			if (!sl->sl.size() == 1)
+				return false;
+
+			proto = sl->sl[0]->As<ProcProto>();
+			if (!proto)
+				return false;
+
+			// remove from the list and delete
+			sl->sl.clear();
+			delete sl;
+
+			return true;
+		}
+
+		return false;
+	}
+
+	inline virtual ~DefineProc()
+	{
+		delete proto;
+		// delete sl;
+	}
+
+	ProcProto *proto = nullptr;
+
+	// StatementList *sl = nullptr;
 };
 
 // [?name ?args...]
@@ -1397,11 +2050,28 @@ struct Call : public Statement
 	AST_IMPL(Call, Statement);
 	AST_ACCEPTOR;
 
-	inline virtual ~Call()
+	AST_INPUT_SETTER(key, val)
 	{
-		delete args;
+		auto it = args.find(key);
+		if (it != args.end())
+			return false;
+
+		Expression *expr = val->As<Expression>();
+		if (!expr)
+			return false;
+
+		args[key] = expr;
+		return true;
 	}
 
-	std::string name;
-	ExpressionList *args = nullptr;
+	// TODO: accept mutation
+
+	inline virtual ~Call()
+	{
+		for (auto &p : args)
+			delete p.second;
+	}
+
+	std::string proccode; // proccode
+	std::unordered_map<std::string, Expression *> args;
 };
