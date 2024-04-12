@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cassert>
 #include <cmath>
+#include <stdexcept>
 
 #include <rapidjson/document.h>
 #include <rapidjson/error/en.h>
@@ -28,79 +29,6 @@ static bool IsEventHandler(const std::string &opcode);
 //! opcode is unknown or unsupported.
 static ASTNode *NodeFromOpcode(const std::string &opcode);
 
-//! \brief Interpret a string as a literal value.
-//! 
-//! Tries to interpret a JSON string as a literal value. The function
-//! will attempt to parse the string as an integer, double, boolean,
-//! or null. If the string is not a literal value, it will be interpreted
-//! as a string.
-//! 
-//! \param v The JSON value to interpret. Must be a string.
-//! 
-//! \return A Constexpr node representing the literal value. Never returns
-//! nullptr.
-static Constexpr *InterpretString(rapidjson::Value &v)
-{
-	std::string val = v.GetString();
-
-	// empty string is a None
-	if (val.empty())
-		return new None();
-
-	// attempt to parse as a positive integer
-	if (val.find_first_not_of("0123456789") == std::string::npos)
-	{
-		PositiveInt *pi = new PositiveInt();
-		pi->value = val;
-		return pi;
-	}
-
-	// attempt to parse as an integer
-	if (val[0] == '-' && val.find_first_not_of("0123456789", 1) == std::string::npos)
-	{
-		Int *i = new Int();
-		i->value = val;
-		return i;
-	}
-
-	// attempt to parse as a positive number
-	if (val.find_first_not_of("0123456789.") == std::string::npos)
-	{
-		PositiveNumber *pn = new PositiveNumber();
-		pn->value = val;
-		return pn;
-	}
-
-	// attempt to parse as a number
-	if (val[0] == '-' && val.find_first_not_of("0123456789.", 1) == std::string::npos)
-	{
-		Number *n = new Number();
-		n->value = val;
-		return n;
-	}
-
-	// attempt to parse a "true" or "false" boolean literal
-	if (val == "true")
-	{
-		True *t = new True();
-		t->value = val;
-		return t;
-	}
-
-	if (val == "false")
-	{
-		False *f = new False();
-		f->value = val;
-		return f;
-	}
-
-	// finally, it's just a string
-
-	String *s = new String();
-	s->value = v.GetString();
-	return s;
-}
-
 //! \brief Parse a literal value from a JSON value.
 //! 
 //! Tries to parse a literal value from a JSON value. The value can be
@@ -115,78 +43,18 @@ static Constexpr *InterpretString(rapidjson::Value &v)
 static Constexpr *ParseLiteral(rapidjson::Value &v)
 {
 	if (v.IsString())
-		return InterpretString(v);
-	
-	// std::to_string does not give a minimal representation
-	const auto to_string = [](double val)
-	{
-		size_t len = snprintf(NULL, 0, "%g", val);
-		std::string str(len, '\0');
-		sprintf_s(&str[0], len + 1, "%g", val);
-		return str;
-	};
+		return Constexpr::OfString(v.GetString());
 
 	if (v.IsInt())
-	{
-		int ival = v.GetInt();
-		if (ival >= 0)
-		{
-			PositiveInt *pi = new PositiveInt();
-			pi->value = std::to_string(ival);
-			return pi;
-		}
-		else
-		{
-			Int *i = new Int();
-			i->value = std::to_string(ival);
-			return i;
-		
-		}
-	}
+		return Constexpr::OfInt(v.GetInt());
 
 	if (v.IsDouble())
-	{
-		double dval = v.GetDouble();
-		if (dval >= 0)
-		{
-			PositiveNumber *pn = new PositiveNumber();
-			pn->value = to_string(dval);
-			return pn;
-		}
-		else
-		{
-			Number *n = new Number();
-			n->value = to_string(dval);
-			return n;
-		}
-	}
+		return Constexpr::OfNumber(v.GetDouble());
 
 	if (v.IsBool())
-	{
-		bool bval = v.GetBool();
-		if (bval)
-		{
-			True *t = new True();
-			t->value = "true";
-			return t;
-		}
-		else
-		{
-			False *f = new False();
-			f->value = "false";
-			return f;
-		}
-	}
+		return Constexpr::OfBool(v.GetBool());
 
-	if (v.IsNull())
-	{
-		None *n = new None();
-		n->value = "";
-		return n;
-	}
-
-	// Unsupported literal type
-	return nullptr;
+	return new Constexpr();
 }
 
 class Parser
@@ -678,7 +546,7 @@ private:
 
 			// add the statement to the list
 			sl->sl.push_back(s);
-			s = Release(s);
+			s = nullptr;
 
 			// go to the next block
 
@@ -813,6 +681,18 @@ private:
 					continue;
 				}
 
+				// attempt to collapse the expression
+				Expression *e = val->As<Expression>();
+				if (e)
+				{
+					Expression *opt = e->Collapse();
+					if (opt != e)
+					{
+						delete val, e = nullptr;
+						val = opt;
+					}
+				}
+
 				// set the input in the node
 				if (!n->SetInput(key, val))
 				{
@@ -912,7 +792,7 @@ private:
 
 		// we discard top-level targets that are not statements
 
-		_defs[id] = Retain(n);
+		_defs[id] = n;
 		return n;
 	}
 
@@ -1014,23 +894,7 @@ private:
 
 			return ParseBlock(blocks, v[1].GetString(), true);
 		}
-		case BlockType_Color: {
-			if (v.Size() < 2)
-			{
-				Error("Expected value parsing color block");
-				return nullptr;
-			}
-
-			if (!v[1].IsString())
-			{
-				Error("Expected string parsing color block");
-				return nullptr;
-			}
-
-			Color *c = new Color();
-			c->value = v[1].GetString();
-			return c;
-		}
+		case BlockType_Color:
 		case BlockType_Number:
 		case BlockType_PositiveNumber:
 		case BlockType_PositiveInt:

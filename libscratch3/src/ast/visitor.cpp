@@ -16,56 +16,30 @@ public:
 		_indent--;
 	}
 
-	virtual void Visit(Number *node)
+	virtual void Visit(Constexpr *node)
 	{
-		Printf("\033[32m%s\033[0m -> %s\n",
-			node->value.c_str(),
-			node->syminfo.ToString().c_str());
-	}
+		switch (node->syminfo.type)
+		{
+		default:
+		case SymbolType_String:
+			Printf("\033[33;1m\"%s\"\033[0m",
+				node->value.c_str());
+			break;
+		case SymbolType_Bool:
+			Printf("\033[35m%s\033[0m",
+				node->value.c_str());
+			break;
+		case SymbolType_Number:
+			Printf("\033[32m%s\033[0m",
+				node->value.c_str());
+			break;
+		case SymbolType_Int:
+			Printf("\033[32m%s\033[0m",
+				node->value.c_str());
+			break;
+		}
 
-	virtual void Visit(PositiveNumber *node)
-	{
-		Printf("\033[32m%s\033[0m\n", node->value.c_str());
-	}
-
-	virtual void Visit(PositiveInt *node)
-	{
-		Printf("\033[32m%s\033[0m\n", node->value.c_str());
-	}
-
-	virtual void Visit(Int *node)
-	{
-		Printf("\033[32m%s\033[0m\n", node->value.c_str());
-	}
-
-	virtual void Visit(Angle *node)
-	{
-		Printf("\033[32m%s\033[0m deg\n", node->value.c_str());
-	}
-
-	virtual void Visit(Color *node)
-	{
-		Printf("%s\n", node->value.c_str());
-	}
-
-	virtual void Visit(String *node)
-	{
-		Printf("\033[33;1m\"%s\"\033[0m\n", node->value.c_str());
-	}
-
-	virtual void Visit(True *node)
-	{
-		Printf("\033[35;1mtrue\033[0m\n");
-	}
-
-	virtual void Visit(False *node)
-	{
-		Printf("\033[35;1mfalse\033[0m\n");
-	}
-
-	virtual void Visit(None *node)
-	{
-		Printf("\033[1mNone\033[0m\n");
+		printf(" -> %s\n", node->syminfo.ToString().c_str());
 	}
 
 	virtual void Visit(XPos *node)

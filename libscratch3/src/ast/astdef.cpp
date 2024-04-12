@@ -102,9 +102,9 @@ const char *GetKeyName(Key key)
 	};
 
 	static const char *Letters[] = {
-		"A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
-		"K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
-		"U", "V", "W", "X", "Y", "Z"
+		"a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+		"k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+		"u", "v", "w", "x", "y", "z"
 	};
 
 	if (key >= Key_0 && key <= Key_9)
@@ -251,16 +251,6 @@ const char *AstTypeString(AstType type)
 	case Ast_Consteval: return "Consteval";
 	case Ast_Constexpr: return "Constexpr";
 	case Ast_ExpressionList: return "ExpressionList";
-	case Ast_Number: return "Number";
-	case Ast_PositiveNumber: return "PositiveNumber";
-	case Ast_PositiveInt: return "PositiveInt";
-	case Ast_Int: return "Int";
-	case Ast_Angle: return "Angle";
-	case Ast_Color: return "Color";
-	case Ast_String: return "String";
-	case Ast_True: return "True";
-	case Ast_False: return "False";
-	case Ast_None: return "None";
 	case Ast_XPos: return "XPos";
 	case Ast_YPos: return "YPos";
 	case Ast_Direction: return "Direction";

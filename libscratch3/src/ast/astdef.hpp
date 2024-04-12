@@ -25,18 +25,6 @@ struct Consteval;
 struct Constexpr;
 struct ExpressionList;
 
-// Literals
-struct Number;
-struct PositiveNumber;
-struct PositiveInt;
-struct Int;
-struct Angle;
-struct Color;
-struct String;
-struct True;
-struct False;
-struct None;
-
 // Motion Expressions
 struct XPos;
 struct YPos;
@@ -304,17 +292,6 @@ enum AstType
 	Ast_Consteval,
 	Ast_Constexpr,
 	Ast_ExpressionList,
-
-	Ast_Number,
-	Ast_PositiveNumber,
-	Ast_PositiveInt,
-	Ast_Int,
-	Ast_Angle,
-	Ast_Color,
-	Ast_String,
-	Ast_True,
-	Ast_False,
-	Ast_None,
 
 	Ast_XPos,
 	Ast_YPos,

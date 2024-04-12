@@ -10,16 +10,7 @@ public:
 	//
 
 	inline virtual void Visit(ExpressionList *node) {}
-	inline virtual void Visit(Number *node) {}
-	inline virtual void Visit(PositiveNumber *node) {}
-	inline virtual void Visit(PositiveInt *node) {}
-	inline virtual void Visit(Int *node) {}
-	inline virtual void Visit(Angle *node) {}
-	inline virtual void Visit(Color *node) {}
-	inline virtual void Visit(String *node) {}
-	inline virtual void Visit(True *node) {}
-	inline virtual void Visit(False *node) {}
-	inline virtual void Visit(None *node) {}
+	inline virtual void Visit(Constexpr *node) {}
 	inline virtual void Visit(XPos *node) {}
 	inline virtual void Visit(YPos *node) {}
 	inline virtual void Visit(Direction *node) {}

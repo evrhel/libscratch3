@@ -7,7 +7,6 @@
 #include "expression.hpp"
 #include "program.hpp"
 #include "statement.hpp"
-#include "syminfo.hpp"
 #include "visitor.hpp"
 
 //! Parse JSON string into AST.

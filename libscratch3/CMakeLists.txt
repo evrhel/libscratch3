@@ -7,8 +7,9 @@ set(src "src")
 set(SOURCES
 	${src}/ast/ast.cpp
 	${src}/ast/astdef.cpp
-	${src}/ast/syminfo.cpp
 	${src}/ast/visitor.cpp
+	${src}/semantics/invariant.cpp
+	${src}/semantics/syminfo.cpp
 	${src}/ref.cpp
 	${src}/core.cpp
 	${src}/resource.cpp)

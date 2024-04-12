@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include <ref.hpp>
+#include <semantics/invariant.hpp>
 
 #include "visitor.hpp"
 
