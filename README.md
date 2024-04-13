@@ -2,7 +2,7 @@
 
 libscratch3 is a library for running Scratch 3 projects. It comes with a command line interface that can run Scratch 3 projects from the command line.
 
-Currently, all it does is parse a project file and convert it to an Abstract Syntax Tree (AST). Not all blocks are supported.
+Currently, some projects will run, but there is no way to interact with them or get graphical output. This is a work in progress.
 
 The library adheres to the unofficial [Scratch 3 JSON project format](https://en.scratch-wiki.info/wiki/Scratch_File_Format).
 
@@ -96,5 +96,3 @@ To run a Scratch 3 project, use the `scratch3` command line tool. It takes a sin
 ```bash
 scratch3 path/to/project.sb3
 ```
-
-**Note**: This will only print the AST.

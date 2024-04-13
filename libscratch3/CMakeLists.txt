@@ -8,8 +8,8 @@ set(SOURCES
 	${src}/ast/ast.cpp
 	${src}/ast/astdef.cpp
 	${src}/ast/visitor.cpp
-	${src}/semantics/invariant.cpp
 	${src}/semantics/syminfo.cpp
+	${src}/vm/vm.cpp
 	${src}/ref.cpp
 	${src}/core.cpp
 	${src}/resource.cpp)

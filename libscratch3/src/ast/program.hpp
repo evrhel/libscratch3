@@ -10,6 +10,8 @@ struct VariableDef : public ASTNode
 
 	std::string id, name;
 	AutoRelease<Constexpr> value;
+
+	bool isMember = false;
 };
 
 // list of variable definitions
@@ -37,6 +39,8 @@ struct ListDef : public ASTNode
 
 	std::string id, name;
 	std::vector<AutoRelease<Constexpr>> value;
+
+	bool isMember = false;
 };
 
 // list of list definitions
@@ -76,7 +80,7 @@ struct SpriteDef : public ASTNode
 	AutoRelease<ListDefList> lists;
 	AutoRelease<StatementListList> scripts;
 
-	int64_t currentCostume;
+	int64_t currentCostume = 1;
 
 	double volume = 100.0;
 	int64_t layer = 1;

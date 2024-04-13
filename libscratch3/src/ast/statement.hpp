@@ -1740,7 +1740,7 @@ struct ProcProto : public Statement
 	std::vector<std::string> argumentNames;
 	std::vector<std::string> argumentDefaults;
 
-	bool warp;
+	bool warp = false;
 };
 
 // [define ?name ?params...]

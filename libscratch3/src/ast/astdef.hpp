@@ -23,7 +23,6 @@ struct SymbolName;
 struct Expression;
 struct Consteval;
 struct Constexpr;
-struct ExpressionList;
 
 // Motion Expressions
 struct XPos;
@@ -291,7 +290,6 @@ enum AstType
 	Ast_Expression,
 	Ast_Consteval,
 	Ast_Constexpr,
-	Ast_ExpressionList,
 
 	Ast_XPos,
 	Ast_YPos,

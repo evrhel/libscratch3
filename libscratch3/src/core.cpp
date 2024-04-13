@@ -4,6 +4,7 @@
 
 #include "resource.hpp"
 #include "ast/ast.hpp"
+#include "vm/vm.hpp"
 
 static void StdoutLogCallback(void *up, Scratch3_Severity severity, const char *message)
 {
@@ -140,15 +141,26 @@ int Scratch3::Compile()
 
 int Scratch3::Run()
 {
-	if (!_program)
+	if (!_program || _vm)
 		return -1;
 
-	return -1;
+	_vm = new VirtualMachine();
+
+	int rc = _vm->Load(_program);
+	if (rc == -1)
+	{
+		delete _vm;
+		return -1;
+	}
+
+	_vm->VMStart();
+
+	return 0;
 }
 
 int Scratch3::Suspend()
 {
-	if (!_program)
+	if (!_vm)
 		return -1;
 
 	return -1;
@@ -156,7 +168,7 @@ int Scratch3::Suspend()
 
 int Scratch3::Resume()
 {
-	if (!_program)
+	if (!_vm)
 		return -1;
 
 	return -1;
@@ -164,28 +176,41 @@ int Scratch3::Resume()
 
 int Scratch3::Stop()
 {
-	if (!_program)
+	if (!_vm)
 		return -1;
-
-	return -1;
+	_vm->VMTerminate();
+	return 0;
 }
 
 int Scratch3::Wait(unsigned long ms)
 {
-	if (!_program)
-		return -1;
+	int rc;
 
-	return -1;
+	if (!_vm)
+		return 0;
+	
+	rc = _vm->VMWait(ms);
+	if (rc == 0)
+	{
+		delete _vm;
+		_vm = nullptr;
+	}
+	
+	return rc;
 }
 
 Scratch3::Scratch3(Loader *loader, Scratch3_LogCallback log, void *up) :
 	_log(log),
 	_up(up),
 	_loader(loader),
-	_program(nullptr) {}
+	_program(nullptr),
+	_vm(nullptr) {}
 
 Scratch3::~Scratch3()
 {
-	delete _loader;
+	if (_vm)
+		delete _vm;
+
 	Release(_program);
+	delete _loader;
 }

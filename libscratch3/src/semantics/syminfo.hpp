@@ -5,9 +5,8 @@
 enum SymbolType
 {
 	SymbolType_String = 0x01,
-	SymbolType_Bool = 0x02,
-	SymbolType_Int = 0x04,
-	SymbolType_Number = 0x08,
+	SymbolType_Number = 0x02,
+	SymbolType_Bool = 0x04,
 
 	SymbolType_Any = 0x00ff,
 

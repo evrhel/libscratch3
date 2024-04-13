@@ -4,6 +4,7 @@
 
 class Loader;
 struct Program;
+class VirtualMachine;
 
 class Scratch3 final
 {
@@ -27,4 +28,5 @@ private:
     void *_up; // user pointer
 	Loader *_loader;
 	Program *_program;
+	VirtualMachine *_vm;
 };

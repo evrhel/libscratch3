@@ -9,7 +9,6 @@ public:
 	// Expressions
 	//
 
-	inline virtual void Visit(ExpressionList *node) {}
 	inline virtual void Visit(Constexpr *node) {}
 	inline virtual void Visit(XPos *node) {}
 	inline virtual void Visit(YPos *node) {}

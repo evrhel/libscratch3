@@ -250,7 +250,6 @@ const char *AstTypeString(AstType type)
 	case Ast_Expression: return "Expression";
 	case Ast_Consteval: return "Consteval";
 	case Ast_Constexpr: return "Constexpr";
-	case Ast_ExpressionList: return "ExpressionList";
 	case Ast_XPos: return "XPos";
 	case Ast_YPos: return "YPos";
 	case Ast_Direction: return "Direction";

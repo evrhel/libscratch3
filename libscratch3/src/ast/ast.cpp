@@ -46,7 +46,7 @@ static Constexpr *ParseLiteral(rapidjson::Value &v)
 		return Constexpr::OfString(v.GetString());
 
 	if (v.IsInt())
-		return Constexpr::OfInt(v.GetInt());
+		return Constexpr::OfNumber(static_cast<double>(v.GetInt()));
 
 	if (v.IsDouble())
 		return Constexpr::OfNumber(v.GetDouble());
@@ -679,18 +679,6 @@ private:
 					Warn("Null input `%s` in block `%s` (%s)",
 						key.c_str(), id.c_str(), opcode.GetString());
 					continue;
-				}
-
-				// attempt to collapse the expression
-				Expression *e = val->As<Expression>();
-				if (e)
-				{
-					Expression *opt = e->Collapse();
-					if (opt != e)
-					{
-						delete val, e = nullptr;
-						val = opt;
-					}
 				}
 
 				// set the input in the node

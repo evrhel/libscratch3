@@ -5,25 +5,11 @@
 #include <stdexcept>
 
 #include <semantics/syminfo.hpp>
-#include <semantics/invariant.hpp>
-
-#define S3_DEG_TO_RAD (3.14159265358979323846 / 180.0)
-#define S3_RAD_TO_DEG (180.0 / 3.14159265358979323846)
 
 // expression
 struct Expression : public ASTNode
 {
 	AST_IMPL(Expression, ASTNode);
-
-	//! \brief Attempt to collapse the expression into a constant expression.
-	//! 
-	//! \return The collapsed expression, or this if the expression cannot be collapsed.
-	inline virtual Expression *Collapse() { return this; }
-
-	constexpr bool IsNumeric() const
-	{
-		return syminfo.type == SymbolType_Int || syminfo.type == SymbolType_Number;
-	}
 
 	SymInfo syminfo = SymbolType_Any;
 };
@@ -66,22 +52,6 @@ struct Constexpr : public Consteval
 			return ce;
 		}
 
-		// attempt to parse as a integer
-		try
-		{
-			size_t idx;
-			int ival = std::stoi(value, &idx);
-			if (idx != value.size())
-				throw std::invalid_argument("invalid integer literal");
-
-			ce->ivalue = static_cast<int64_t>(ival);
-			ce->dvalue = static_cast<double>(ival);
-			ce->syminfo = SymbolType_Int;
-			return ce;
-		}
-		catch (std::invalid_argument) {}
-		catch (std::out_of_range) {}
-
 		// attempt to parse as a number
 		try
 		{
@@ -91,7 +61,6 @@ struct Constexpr : public Consteval
 				throw std::invalid_argument("invalid number literal");
 
 			ce->dvalue = dval;
-			ce->ivalue = static_cast<int64_t>(dval);
 			ce->syminfo = SymbolType_Number;
 			return ce;
 		}
@@ -104,23 +73,8 @@ struct Constexpr : public Consteval
 		return ce;
 	}
 
-	static inline Constexpr *OfInt(int64_t value)
-	{
-		Constexpr *ce = new Constexpr();
-
-		ce->value = std::to_string(value);
-		ce->dvalue = static_cast<double>(value);
-		ce->bvalue = false;
-		ce->syminfo = SymbolType_Int;
-		return ce;
-	}
-
 	static inline Constexpr *OfNumber(double value)
 	{
-		// check if the number is an integer
-		if (floor(value) == value)
-			return OfInt(static_cast<int64_t>(value));
-
 		Constexpr *ce = new Constexpr();
 
 		size_t len = snprintf(NULL, 0, "%.11g", value);
@@ -128,7 +82,6 @@ struct Constexpr : public Consteval
 		sprintf_s(&str[0], len + 1, "%.11g", value);
 
 		ce->value = str;
-		ce->ivalue = static_cast<int64_t>(value);
 		ce->dvalue = value;
 		ce->bvalue = false;
 		ce->syminfo = SymbolType_Number;
@@ -143,7 +96,6 @@ struct Constexpr : public Consteval
 			ce->value = "true";
 		else
 			ce->value = "false";
-		ce->ivalue = 0;
 		ce->dvalue = 0.0;
 		ce->bvalue = value;
 		ce->syminfo = SymbolType_Bool;
@@ -154,18 +106,8 @@ struct Constexpr : public Consteval
 	AST_ACCEPTOR;
 
 	std::string value;
-	int64_t ivalue = 0;
 	double dvalue = 0.0;
 	bool bvalue = false;
-};
-
-// list of expressions
-struct ExpressionList : public ASTNode
-{
-	AST_IMPL(ExpressionList, ASTNode);
-	AST_ACCEPTOR;
-
-	std::vector<AutoRelease<Expression>> expressions;
 };
 
 // (x position)
@@ -589,20 +531,6 @@ struct Add : public Consteval
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-			return Constexpr::OfNumber(c1->dvalue + c2->dvalue);
-
-		return this;
-	}
-
 	AutoRelease<Expression> e1; // number
 	AutoRelease<Expression> e2; // number
 };
@@ -630,20 +558,6 @@ struct Sub : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-			return Constexpr::OfNumber(c1->dvalue - c2->dvalue);
-
-		return this;
 	}
 
 	AutoRelease<Expression> e1; // number
@@ -675,20 +589,6 @@ struct Mul : public Consteval
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-			return Constexpr::OfNumber(c1->dvalue * c2->dvalue);
-
-		return this;
-	}
-
 	AutoRelease<Expression> e1; // number
 	AutoRelease<Expression> e2; // number
 };
@@ -716,20 +616,6 @@ struct Div : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-			return Constexpr::OfNumber(c1->dvalue / c2->dvalue);
-
-		return this;
 	}
 
 	AutoRelease<Expression> e1; // number
@@ -761,13 +647,6 @@ struct Random : public Expression
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-		return this;
-	}
-
 	AutoRelease<Expression> e1; // number
 	AutoRelease<Expression> e2; // number
 };
@@ -795,19 +674,6 @@ struct Greater : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		// TODO: handle string comparison, its not as simple as numeric comparison
-		
-		return this;
 	}
 
 	AutoRelease<Expression> e1; // number
@@ -839,19 +705,6 @@ struct Less : public Consteval
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		// TODO: same thing as Greater
-
-		return this;
-	}
-
 	AutoRelease<Expression> e1; // number
 	AutoRelease<Expression> e2; // number
 };
@@ -879,26 +732,6 @@ struct Equal : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-		{
-			if (c1->IsNumeric() && c2->IsNumeric())
-				return Constexpr::OfBool(c1->dvalue == c2->dvalue);
-
-			// TODO: case insensitive string comparison
-			return Constexpr::OfBool(c1->value == c2->value);
-		}
-
-		return this;
 	}
 
 	AutoRelease<Expression> e1; // any
@@ -930,20 +763,6 @@ struct LogicalAnd : public Consteval
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-			return Constexpr::OfBool(c1->bvalue && c2->bvalue);
-
-		return this;
-	}
-
 	AutoRelease<Expression> e1; // bool
 	AutoRelease<Expression> e2; // bool
 };
@@ -973,20 +792,6 @@ struct LogicalOr : public Consteval
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-			return Constexpr::OfBool(c1->bvalue || c2->bvalue);
-
-		return this;
-	}
-
 	AutoRelease<Expression> e1; // bool
 	AutoRelease<Expression> e2; // bool
 };
@@ -1007,18 +812,6 @@ struct LogicalNot : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e = e->Collapse();
-
-		Constexpr *c = e->As<Constexpr>();
-
-		if (c)
-			return Constexpr::OfBool(c->bvalue);
-
-		return this;
 	}
 
 	AutoRelease<Expression> e; // bool
@@ -1047,20 +840,6 @@ struct Concat : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-			return Constexpr::OfString(c1->value + c2->value);
-
-		return this;
 	}
 
 	AutoRelease<Expression> e1; // string
@@ -1092,25 +871,6 @@ struct CharAt : public Consteval
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-		{
-			int64_t index = static_cast<int64_t>(round(c1->dvalue));
-			if (index < 1 || index >= (int64_t)c2->value.size())
-				return new Constexpr(); // empty string
-			return Constexpr::OfString(std::string(1, c2->value[index - 1]));
-		}
-
-		return this;
-	}
-
 	AutoRelease<Expression> e1; // number
 	AutoRelease<Expression> e2; // string
 };
@@ -1118,7 +878,7 @@ struct CharAt : public Consteval
 // (length of $e)
 struct StringLength : public Consteval
 {
-	EXPR_IMPL(StringLength, Consteval, SymbolType_Int);
+	EXPR_IMPL(StringLength, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -1131,18 +891,6 @@ struct StringLength : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e = e->Collapse();
-
-		Constexpr *c = e->As<Constexpr>();
-
-		if (c)
-			return Constexpr::OfInt(c->value.size());
-
-		return this;
 	}
 
 	AutoRelease<Expression> e; // string
@@ -1171,23 +919,6 @@ struct StringContains : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-		{
-			size_t pos = c1->value.find(c2->value);
-			return Constexpr::OfBool(pos != std::string::npos);
-		}
-
-		return this;
 	}
 
 	AutoRelease<Expression> e1; // string
@@ -1219,20 +950,6 @@ struct Mod : public Consteval
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e1 = e1->Collapse();
-		e2 = e2->Collapse();
-
-		Constexpr *c1 = e1->As<Constexpr>();
-		Constexpr *c2 = e2->As<Constexpr>();
-
-		if (c1 && c2)
-			return Constexpr::OfNumber(fmod(c1->dvalue, c2->dvalue));
-
-		return this;
-	}
-
 	AutoRelease<Expression> e1; // number
 	AutoRelease<Expression> e2; // number
 };
@@ -1240,7 +957,7 @@ struct Mod : public Consteval
 // (round $e)
 struct Round : public Consteval
 {
-	EXPR_IMPL(Round, Consteval, SymbolType_Int);
+	EXPR_IMPL(Round, Consteval, SymbolType_Number);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -1253,18 +970,6 @@ struct Round : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e = e->Collapse();
-
-		Constexpr *c = e->As<Constexpr>();
-
-		if (c)
-			return Constexpr::OfNumber(round(c->dvalue));
-
-		return this;
 	}
 
 	AutoRelease<Expression> e; // number
@@ -1299,51 +1004,6 @@ struct MathFunc : public Consteval
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e = e->Collapse();
-		Constexpr *c = e->As<Constexpr>();
-
-		if (c)
-		{
-			switch (func)
-			{
-			case MathFuncType_Abs:
-				return Constexpr::OfNumber(fabs(c->dvalue));
-			case MathFuncType_Floor:
-				return Constexpr::OfNumber(floor(c->dvalue));
-			case MathFuncType_Ceil:
-				return Constexpr::OfNumber(ceil(c->dvalue));
-			case MathFuncType_Sqrt:
-				return Constexpr::OfNumber(sqrt(c->dvalue));
-			case MathFuncType_Sin:
-				return Constexpr::OfNumber(sin(c->dvalue * S3_DEG_TO_RAD));
-			case MathFuncType_Cos:
-				return Constexpr::OfNumber(cos(c->dvalue * S3_DEG_TO_RAD));
-			case MathFuncType_Tan:
-				return Constexpr::OfNumber(tan(c->dvalue * S3_DEG_TO_RAD));
-			case MathFuncType_Asin:
-				return Constexpr::OfNumber(asin(c->dvalue) * S3_RAD_TO_DEG);
-			case MathFuncType_Acos:
-				return Constexpr::OfNumber(acos(c->dvalue) * S3_RAD_TO_DEG);
-			case MathFuncType_Atan:
-				return Constexpr::OfNumber(atan(c->dvalue) * S3_RAD_TO_DEG);
-			case MathFuncType_Ln:
-				return Constexpr::OfNumber(log(c->dvalue));
-			case MathFuncType_Log:
-				return Constexpr::OfNumber(log10(c->dvalue));
-			case MathFuncType_Exp:
-				return Constexpr::OfNumber(exp(c->dvalue));
-			case MathFuncType_Exp10:
-				return Constexpr::OfNumber(pow(10, c->dvalue));
-			default:
-				break; // runtime error
-			}
-		}
-
-		return this;
 	}
 
 	MathFuncType func = MathFuncType_Unknown;
@@ -1409,12 +1069,6 @@ struct ListAccess : public Expression
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e = e->Collapse();
-		return this;
-	}
-
 	AutoRelease<Expression> e; // positive int
 	std::string id, name;
 };
@@ -1422,7 +1076,7 @@ struct ListAccess : public Expression
 // (item # of $e in ?id)
 struct IndexOf : public Expression
 {
-	EXPR_IMPL(IndexOf, Expression, SymbolType_Int);
+	EXPR_IMPL(IndexOf, Expression, SymbolType_Number);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -1451,12 +1105,6 @@ struct IndexOf : public Expression
 		return false;
 	}
 
-	inline virtual Expression *Collapse() override
-	{
-		e = e->Collapse();
-		return this;
-	}
-
 	AutoRelease<Expression> e; // any
 	std::string id, name;
 };
@@ -1464,7 +1112,7 @@ struct IndexOf : public Expression
 // (length of ?id)
 struct ListLength : public Expression
 {
-	EXPR_IMPL(ListLength, Expression, SymbolType_Int);
+	EXPR_IMPL(ListLength, Expression, SymbolType_Number);
 	AST_ACCEPTOR;
 
 	AST_FIELD_SETTER(key, value, id)
@@ -1514,12 +1162,6 @@ struct ListContains : public Expression
 		}
 
 		return false;
-	}
-
-	inline virtual Expression *Collapse() override
-	{
-		e = e->Collapse();
-		return this;
 	}
 	
 	std::string id, name;

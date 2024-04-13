@@ -7,15 +7,6 @@
 class DumpVisitor : public Visitor
 {
 public:
-	virtual void Visit(ExpressionList *node)
-	{
-		Printf("ExpressionList\n");
-		_indent++;
-		for (auto &expr : node->expressions)
-			expr->Accept(this);
-		_indent--;
-	}
-
 	virtual void Visit(Constexpr *node)
 	{
 		switch (node->syminfo.type)
@@ -30,10 +21,6 @@ public:
 				node->value.c_str());
 			break;
 		case SymbolType_Number:
-			Printf("\033[32m%s\033[0m",
-				node->value.c_str());
-			break;
-		case SymbolType_Int:
 			Printf("\033[32m%s\033[0m",
 				node->value.c_str());
 			break;
