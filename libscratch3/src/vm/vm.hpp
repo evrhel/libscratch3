@@ -43,7 +43,6 @@ enum ExceptionType
 	OutOfMemory,
 	StackOverflow,
 	StackUnderflow,
-	InvalidProgramCounter,
 	VariableNotFound,
 	IllegalOperation,
 	InvalidArgument,
@@ -104,10 +103,10 @@ struct Sprite
 	std::string message;
 	int messageState = MESSAGE_STATE_NONE;
 
-	int64_t costume = 1;
+	int64_t costume = 1, ccostumes = 1;
 	double size = 100.0;
 	bool visible = true;
-	int64_t layer;
+	int64_t layer = 0;
 
 	struct
 	{
@@ -260,10 +259,34 @@ public:
 	Value &SetBool(Value &lhs, bool rhs);
 	Value &SetString(Value &lhs, const std::string &rhs);
 	Value &SetParsedString(Value &lhs, const std::string &rhs);
+	Value &SetEmpty(Value &lhs);
+
+	//! \brief Convert a value to a string
+	//! 
+	//! Will replace the value with a string representation. If the
+	//! operation fails, the value will remain unchanged.
+	//! 
+	//! \param v Value to convert
+	void CvtString(Value &v);
 
 	int64_t ToInteger(const Value &val);
 	double ToReal(const Value &val);
 	std::string ToString(const Value &val);
+
+	//! \brief Allocate a string
+	//! 
+	//! Allocates a string of the specified length. The string's
+	//! reference count is set to 1. Its bytes are zeroed. The
+	//! input value's reference count is decremented. If the
+	//! operation failed, the contents of the input value are
+	//! undefined.
+	//! 
+	//! \param v Value in which to store the string
+	//! \param len Length of the string to allocate, not including
+	//! the null terminator
+	//! 
+	//! \return v, or _exception if the operation failed
+	Value &AllocString(Value &v, size_t len);
 
 	Value &RetainValue(Value &val);
 	void ReleaseValue(Value &val);
@@ -292,6 +315,8 @@ private:
 	std::vector<Script> _scripts; // All scripts
 
 	Value _emptyString; // empty string
+	Value _trueString; // true string
+	Value _falseString; // false string
 	
 	//
 	/////////////////////////////////////////////////////////////////

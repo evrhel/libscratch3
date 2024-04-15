@@ -150,6 +150,7 @@ int Scratch3::Run()
 	if (rc == -1)
 	{
 		delete _vm;
+		_vm = nullptr;
 		return -1;
 	}
 
