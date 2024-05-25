@@ -115,7 +115,7 @@ protected:
 	{
 		std::string filename = _dirname + "/" + name;
 
-		ls_handle file = ls_open(filename.c_str(), LS_A_READ, LS_S_READ, LS_OPEN_EXISTING);
+		ls_handle file = ls_open(filename.c_str(), LS_FILE_READ, LS_SHARE_READ, LS_OPEN_EXISTING);
 		if (!file)
 			return nullptr;
 
@@ -144,7 +144,7 @@ protected:
 				return nullptr;
 			}
 
-			size = ls_read(file, data, size, nullptr);
+			size = ls_read(file, data, size);
 			if (size == -1)
 			{
 				free(data);

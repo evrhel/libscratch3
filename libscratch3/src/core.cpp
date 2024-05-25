@@ -30,18 +30,10 @@ Scratch3 *Scratch3_Create(const char *path, Scratch3_LogCallback log, void *up)
 	struct ls_stat st;
 	int rc;
 
-	rc = ls_init(NULL);
-	if (rc == -1)
-		return nullptr;
-
 	// Get type of input file
 	rc = ls_stat(path, &st);
 	if (rc == -1)
-	{
-		// doesn't exist
-		ls_shutdown();
 		return nullptr;
-	}
 
 	// Create loader
 	Loader *loader = nullptr;
@@ -51,10 +43,7 @@ Scratch3 *Scratch3_Create(const char *path, Scratch3_LogCallback log, void *up)
 		loader = CreateDirectoryLoader(path);
 
 	if (!loader)
-	{
-		ls_shutdown();
 		return nullptr;
-	}
 
 	// Create the instance
 	return new Scratch3(loader, log, up);
@@ -64,7 +53,6 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT
 void Scratch3_Destroy(Scratch3 *scratch3)
 {
 	delete scratch3;
-	ls_shutdown();
 }
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT
