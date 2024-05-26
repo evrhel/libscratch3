@@ -277,7 +277,7 @@ public:
 			vm->Pop();
 			vm->Pop();
 
-			double r = f + (t - f) * (rand() / (double)RAND_MAX);
+			double r = f + (ls_rand_double() * (t - f));
 
 			vm->SetReal(vm->Push(), r);
 		}
@@ -296,7 +296,7 @@ public:
 			vm->Pop();
 			vm->Pop();
 
-			int64_t r = f + (rand() % (t - f + 1));
+			int64_t r = f + (ls_rand_uint64() % (t - f + 1));
 
 			vm->SetInteger(vm->Push(), r);
 		}
@@ -1479,7 +1479,7 @@ void VirtualMachine::TerminateScript(unsigned long id)
 
 static void DumpScript(Script *script)
 {
-	static const const char *STATES[] = {
+	static const char *STATES[] = {
 		"EMBRYO",
 		"RUNNABLE",
 		"WAITING",
@@ -1632,7 +1632,10 @@ void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 
 	if (sl == nullptr)
 	{
-		Raise(InvalidArgument);
+		// empty loop
+		_current->frames[_current->fp].pc -= 1; // loop back to the same statement
+
+		// Raise(InvalidArgument);
 		return;
 	}
 
@@ -2173,7 +2176,6 @@ void VirtualMachine::Scheduler()
 	ls_cond_signal(_cond);
 
 	nextFrame = ls_time64();
-	srand(static_cast<unsigned int>(nextFrame));
 	for (;;)
 	{
 		if (_exception.u.exception != Exception_None)
