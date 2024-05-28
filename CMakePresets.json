@@ -1,12 +1,15 @@
 {
     "version": 2,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 20,
+        "patch": 0
+    },
     "configurePresets": [
         {
             "name": "default",
             "displayName": "Default Config",
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-            }
+            "toolchainFile": "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
         }
     ]
 }

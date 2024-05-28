@@ -3,3 +3,5 @@ build
 vcpkg_installed
 
 scratch3/demo
+
+CMakeUserPresets.json

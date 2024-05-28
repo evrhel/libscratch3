@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.20)
 
 project(libscratch3)
 
@@ -23,3 +23,4 @@ target_include_directories(libscratch3 PRIVATE ${src})
 
 target_link_libraries(libscratch3 PRIVATE liblysys)
 target_link_libraries(libscratch3 PRIVATE zip)
+target_link_libraries(libscratch3 cairo::cairo)
