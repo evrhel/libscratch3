@@ -7,6 +7,9 @@
 
 #include <ast/ast.hpp>
 
+#include <cairo/cairo.h>
+#include <SDL.h>
+
 #include "value.hpp"
 
 // Script has been created but not yet started
@@ -301,6 +304,17 @@ public:
 	constexpr double GetLoudness() const { return _loudness; }
 	constexpr double GetTimer() const { return _timer; }
 	constexpr const Value &GetUsername() const { return _username; }
+	
+	bool GetKey(int scancode) const
+	{
+		if (scancode == -1)
+			return _keysPressed > 0;
+		if (scancode < 0 || scancode >= SDL_NUM_SCANCODES)
+			return false;
+		return _keyStates[scancode];
+	}
+
+	constexpr bool IsHeadless() const { return !_hasGraphics; }
 
 	void ResetTimer();
 
@@ -320,12 +334,26 @@ private:
 	
 	//
 	/////////////////////////////////////////////////////////////////
+	// Graphics
+	//
+
+	bool _hasGraphics; // graphics enabled
+	SDL_Window *_window; // window
+	SDL_Renderer *_sdlRenderer; // renderer
+	SDL_Surface *_sdlSurface; // SDL surface
+	cairo_surface_t *_cairoSurface; // cairo surface
+	cairo_t *_cairo; // cairo context
+
+	//
+	/////////////////////////////////////////////////////////////////
 	// I/O
 	//
 
 	Value _answer; // answer
 	bool _mouseDown; // mouse button state
 	int64_t _mouseX, _mouseY; // mouse position
+	bool _keyStates[SDL_NUM_SCANCODES]; // key states
+	int _keysPressed; // number of keys pressed
 	double _loudness; // loudness
 	double _timer; // timer value
 	Value _username; // username
@@ -349,6 +377,19 @@ private:
 
 	ls_handle _lock;
 	ls_handle _cond;
+
+	//
+	/////////////////////////////////////////////////////////////////
+	// Graphics Internals
+	//
+
+	bool InitGraphics();
+
+	void DestroyGraphics();
+
+	void PollEvents();
+
+	void Render();
 
 	//
 	/////////////////////////////////////////////////////////////////

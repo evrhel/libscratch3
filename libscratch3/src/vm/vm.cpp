@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cinttypes>
+#include <algorithm>
 
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
@@ -106,8 +107,57 @@ public:
 
 	virtual void Visit(KeyPressed *node)
 	{
-		// TODO: implement
-		vm->SetBool(vm->Push(), false);
+		node->e->Accept(this);
+
+		Value &key = vm->StackAt(0);
+		if (key.type != ValueType_String)
+		{
+			vm->Pop();
+			vm->SetBool(vm->Push(), false);
+			return;
+		}
+
+		std::string s( key.u.string->str, key.u.string->len );
+
+		vm->Pop();
+
+		// convert to lowercase
+		std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+
+		// convert to scancode
+		int scancode;
+		if (s.size() == 1)
+		{
+			char c = s[0];
+			if (c >= 'a' && c <= 'z')
+				scancode = SDL_SCANCODE_A + (c - 'a');
+			else if (c >= '0' && c <= '9')
+				scancode = SDL_SCANCODE_0 + (c - '0');
+			else
+			{
+				vm->SetBool(vm->Push(), false);
+				return;
+			}
+		}
+		else if (s == "space")
+			scancode = SDL_SCANCODE_SPACE;
+		else if (s == "up arrow")
+			scancode = SDL_SCANCODE_UP;
+		else if (s == "down arrow")
+			scancode = SDL_SCANCODE_DOWN;
+		else if (s == "right arrow")
+			scancode = SDL_SCANCODE_RIGHT;
+		else if (s == "left arrow")
+			scancode = SDL_SCANCODE_LEFT;
+		else if (s == "any")
+			scancode = -1;
+		else
+		{
+			vm->SetBool(vm->Push(), false);
+			return;
+		}
+
+		vm->SetBool(vm->Push(), vm->GetKey(scancode));
 	}
 
 	virtual void Visit(MouseDown *node)
@@ -2098,6 +2148,13 @@ VirtualMachine::VirtualMachine()
 {
 	_prog = nullptr;
 
+	_hasGraphics = false;
+	_window = nullptr;
+	_sdlRenderer = nullptr;
+	_sdlSurface = nullptr;
+	_cairoSurface = nullptr;
+	_cairo = nullptr;
+
 	_answer = { 0 };
 	_mouseDown = false;
 	_mouseX = 0;
@@ -2152,6 +2209,134 @@ VirtualMachine::~VirtualMachine()
 	ls_close(_lock);
 }
 
+bool VirtualMachine::InitGraphics()
+{
+	if (SDL_Init(SDL_INIT_VIDEO) != 0)
+		return false;
+	_hasGraphics = true;
+
+	_window = SDL_CreateWindow("Scratch 3", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_SHOWN);
+	if (!_window)
+	{
+		DestroyGraphics();
+		return false;
+	}
+
+	_sdlRenderer = SDL_CreateRenderer(_window, -1, SDL_RENDERER_ACCELERATED);
+	if (!_sdlRenderer)
+	{
+		DestroyGraphics();
+		return false;
+	}
+
+	_sdlSurface = SDL_GetWindowSurface(_window);
+	if (!_sdlSurface)
+	{
+		DestroyGraphics();
+		return false;
+	}
+
+	_cairoSurface = cairo_image_surface_create_for_data(
+		(unsigned char *)_sdlSurface->pixels,
+		CAIRO_FORMAT_RGB24,
+		_sdlSurface->w,
+		_sdlSurface->h,
+		_sdlSurface->pitch);
+	if (cairo_surface_status(_cairoSurface) != CAIRO_STATUS_SUCCESS)
+	{
+		DestroyGraphics();
+		return false;
+	}
+
+	_cairo = cairo_create(_cairoSurface);
+	if (cairo_status(_cairo) != CAIRO_STATUS_SUCCESS)
+	{
+		DestroyGraphics();
+		return false;
+	}
+
+	cairo_select_font_face(_cairo, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+
+	return true;
+}
+
+void VirtualMachine::DestroyGraphics()
+{
+	if (_cairo)
+		cairo_destroy(_cairo), _cairo = nullptr;
+
+	if (_cairoSurface)
+		cairo_surface_destroy(_cairoSurface), _cairoSurface = nullptr;
+
+	if (_sdlSurface)
+		SDL_FreeSurface(_sdlSurface), _cairoSurface = nullptr;
+
+	if (_sdlRenderer)
+		SDL_DestroyRenderer(_sdlRenderer), _sdlRenderer = nullptr;
+
+	if (_window)
+		SDL_DestroyWindow(_window), _window = nullptr;
+
+	if (_hasGraphics)
+		SDL_Quit(), _hasGraphics = false;
+}
+
+void VirtualMachine::PollEvents()
+{
+	if (!_hasGraphics)
+		return;
+
+	SDL_Event evt;
+
+	while (SDL_PollEvent(&evt))
+	{
+		switch (evt.type)
+		{
+		case SDL_QUIT:
+			VMTerminate();
+			break;
+		case SDL_MOUSEBUTTONDOWN:
+			if (evt.button.button == SDL_BUTTON_LEFT)
+				_mouseDown = true;
+			break;
+		case SDL_MOUSEBUTTONUP:
+			if (evt.button.button == SDL_BUTTON_LEFT)
+				_mouseDown = false;
+			break;
+		case SDL_MOUSEMOTION:
+			_mouseX = evt.motion.x;
+			_mouseY = evt.motion.y;
+			break;
+		case SDL_KEYDOWN:
+			if (!_keyStates[evt.key.keysym.scancode])
+				_keysPressed++;
+
+			_keyStates[evt.key.keysym.scancode] = true;
+			break;
+		case SDL_KEYUP:
+			if (_keyStates[evt.key.keysym.scancode])
+				_keysPressed--;
+			_keyStates[evt.key.keysym.scancode] = false;
+			break;
+		}
+	}
+}
+
+void VirtualMachine::Render()
+{
+	cairo_set_source_rgb(_cairo, 1, 1, 1);
+	cairo_paint(_cairo);
+
+	for (auto &p : _sprites)
+	{
+		//Sprite *sprite = p.second;
+		
+	}
+
+	// update the window surface
+	SDL_UpdateWindowSurface(_window);
+}
+
 void VirtualMachine::Cleanup()
 {
 	for (auto &p : _variables)
@@ -2172,6 +2357,9 @@ void VirtualMachine::Scheduler()
 	executor.vm = this;
 
 	ls_lock(_lock);
+
+	InitGraphics();
+
 	_running = true;
 	ls_cond_signal(_cond);
 
@@ -2190,6 +2378,8 @@ void VirtualMachine::Scheduler()
 		// Nothing running and threads are waiting
 		if (_activeScripts == 0 && _waitCount != 0)
 			break;
+
+		PollEvents();
 
 		ls_unlock(_lock);
 
@@ -2308,6 +2498,9 @@ void VirtualMachine::Scheduler()
 		{
 			// TODO: do something with rendering
 
+			if (_hasGraphics)
+				Render();
+
 			nextFrame = _time + 1.0 / FRAMERATE;
 		}
 
@@ -2320,6 +2513,8 @@ void VirtualMachine::Scheduler()
 
 	_activeScripts = 0;
 	_running = false;
+
+	DestroyGraphics(); // clean up graphics resources
 
 	ls_cond_broadcast(_cond); // notify waiting threads
 	ls_unlock(_lock);

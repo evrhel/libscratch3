@@ -3,6 +3,8 @@
     "name": "scratch3",
     "version": "1.0.0",
     "dependencies": [
-        "cairo"
+        "cairo",
+        "pkgconf",
+        "sdl2"
     ]
 }
