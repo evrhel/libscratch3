@@ -1,4 +1,5 @@
 build
 .vscode
+vcpkg_installed
 
 scratch3/demo
