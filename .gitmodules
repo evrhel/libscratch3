@@ -7,3 +7,6 @@
 [submodule "lysys"]
 	path = lysys
 	url = https://github.com/evrhel/lysys.git
+[submodule "MatrixUtil"]
+	path = MatrixUtil
+	url = git@github.com:evrhel/MatrixUtil.git
