@@ -6,6 +6,7 @@
         "cairo",
         "pkgconf",
         "sdl2",
-        "librsvg"
+        "librsvg",
+        "imgui"
     ]
 }
