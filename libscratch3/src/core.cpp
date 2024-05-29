@@ -1,6 +1,7 @@
 #include "core.hpp"
 
 #include <lysys/lysys.hpp>
+#include <glib.h>
 
 #include "resource.hpp"
 #include "ast/ast.hpp"
@@ -29,6 +30,8 @@ Scratch3 *Scratch3_Create(const char *path, Scratch3_LogCallback log, void *up)
 {
 	struct ls_stat st;
 	int rc;
+
+	g_type_init();
 
 	// Get type of input file
 	rc = ls_stat(path, &st);

@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cmath>
 #include <stdexcept>
+#include <algorithm>
 
 #include <rapidjson/document.h>
 #include <rapidjson/error/en.h>
@@ -509,6 +510,9 @@ private:
 			cd->md5ext = md5ext.GetString();
 			cd->rotationCenterX = rotationCenterX.GetDouble();
 			cd->rotationCenterY = rotationCenterY.GetDouble();
+			
+			// convert data format to lowercase
+			std::transform(cd->dataFormat.begin(), cd->dataFormat.end(), cd->dataFormat.begin(), ::tolower);
 
 			cdl->costumes.push_back(cd);
 		}

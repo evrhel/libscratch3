@@ -2,29 +2,7 @@
 
 #include <lysys/lysys.hpp>
 
-#include "mesh.hpp"
 #include "shader.hpp"
-
-static Mesh *CreateQuad()
-{
-    // 0: position, 1: texcoord
-    const Vector4 vertices[] = {
-        Vector4(-0.5f, -0.5f, 0.0f, 0.0f),
-        Vector4(0.5f, -0.5f, 1.0f, 0.0f),
-        Vector4(0.5f, 0.5f, 1.0f, 1.0f),
-        Vector4(-0.5f, 0.5f, 0.0f, 1.0f)
-    };
-
-    const uint32_t indices[] = {
-        0, 1, 2,
-        2, 3, 0
-    };
-
-    Mesh *mesh = new Mesh();
-    mesh->Load(vertices, 4, indices, 6);
-
-    return mesh;
-}
 
 static char *ReadFile(const char *path, size_t *size)
 {
@@ -62,21 +40,35 @@ static SpriteShader *CreateSpriteShader()
     return ss;
 }
 
+Vector3 RGBToHSV(const Vector3 &c)
+{
+    constexpr Vector4 K(0.0f, -1.0f / 3.0f, 2.0f / 3.0f, -1.0f);
+    constexpr float e = 1.0e-10f;
+
+    Vector4 p = c.g < c.b ? Vector4(c.b, c.g, K.w, K.z) : Vector4(c.g, c.b, K.x, K.y);
+    Vector4 q = c.r < p.x ? Vector4(p.x, p.y, p.w, c.r) : Vector4(c.r, p.y, p.z, p.x);
+
+    float d = q.x - min(q.w, q.y);
+    return Vector3(mutil::abs(q.z + (q.w - q.y) / (6.0f * d + e)), d / (q.x + e), q.x);
+}
+
+Vector3 HSVToRGB(const Vector3 &c)
+{
+    constexpr Vector4 K(1.0f, 2.0f / 3.0f, 1.0f / 3.0f, 3.0f);
+    
+    Vector3 p = abs(fract(Vector3(c.x) + Vector3(K)) * 6.0f - Vector3(K.w));
+    return c.z * lerp(Vector3(K.x), clamp(p - Vector3(K.x), 0.0f, 1.0f), c.y);
+}
+
+Vector3 ColorToRGB(int64_t c)
+{
+    constexpr float minBrightness = 0.11f / 2.0f;
+    constexpr float minSaturation = 0.09f;
+}
+
 void SpriteRenderInfo::Update(SpriteShader *ss)
 {
-    if (_dirty)
-    {
-        // recompute the model matrix
-
-        _model = mutil::translate(Matrix4(), Vector3(_position, 0.0f));
-        
-        Quaternion q = mutil::rotateaxis(Vector3(0.0f, 0.0f, 1.0f), _rotation); 
-        _model = _model * mutil::torotation(q);
-
-        _dirty = false;
-    }
-
-    ss->SetModel(_model);
+    ss->SetModel(model);
     ss->SetColorEffect(colorEffect);
     ss->SetBrightnessEffect(brightnessEffect);
     ss->SetFisheyeEffect(fisheyeEffect);
@@ -89,9 +81,9 @@ void SpriteRenderInfo::Update(SpriteShader *ss)
 }
 
 SpriteRenderInfo::SpriteRenderInfo() :
-    _rotation(0.0f),
-    _dirty(true)
+    _layer(-1)
 {
+    model = Matrix4();
     colorEffect = 0.0f;
     brightnessEffect = 0.0f;
     fisheyeEffect = 0.0f;
@@ -105,51 +97,87 @@ SpriteRenderInfo::SpriteRenderInfo() :
 
 SpriteRenderInfo::~SpriteRenderInfo() { }
 
-SpriteRenderInfo *GLRenderer::GetLayer(int64_t layer)
+intptr_t GLRenderer::CreateSprite()
 {
-    if (layer == STAGE_LAYER)
-        return _sprites;
+    for (int64_t i = 1; i < _spriteCount; i++)
+    {
+        SpriteRenderInfo *s = _sprites + i;
+        if (s->_layer == -1)
+        {            
+            // find empty slot in render order
+            for (int64_t j = 1; j < _spriteCount; j++)
+            {
+                if (_renderOrder[j] == -1)
+                {
+                    _renderOrder[j] = i;
+                    s->_layer = j;
+                    return i;
+                }
+            }
 
-    if (layer < 1 || layer > _spriteCount)
-        return nullptr;
+            // should never happen
+            abort();
+            return -1;
+        }
+    }
 
-    return _sprites + layer;
+    return -1;
 }
 
-void GLRenderer::MoveLayer(int64_t layer, int64_t distance)
+SpriteRenderInfo *GLRenderer::GetRenderInfo(intptr_t sprite)
 {
-    layer--; // layers are 1-indexed
+    if (sprite > _spriteCount)
+        return nullptr;
+    return _sprites + sprite; // skip stage sprite
+}
 
-    if (layer < 0 || layer >= _spriteCount)
+void GLRenderer::SetLayer(intptr_t sprite, int64_t layer)
+{
+    if (sprite <= SPRITE_STAGE || sprite >= _spriteCount || layer == 0)
         return;
 
-    int64_t newLayer = layer + distance;
-    if (newLayer < 0)
-        newLayer = 0;
-    else if (newLayer >= _spriteCount)
-        newLayer = _spriteCount - 1;
+    int64_t newLayer;
+    if (layer < 0)
+        newLayer = _spriteCount + layer + 1; // relative to back
+    
+    if (newLayer < 1 || newLayer >= _spriteCount)
+        return; // out of bounds
 
-    if (newLayer == layer)
-        return;
+    SpriteRenderInfo *s = _sprites + sprite;
+    if (s->_layer == newLayer)
+        return; // already at target layer
 
-    SpriteRenderInfo *sprites = _sprites + 1; // skip stage sprite
+    // iterators
+    int64_t *end = _renderOrder + _spriteCount;
+    int64_t *start = _renderOrder + s->_layer;
+    int64_t *target = _renderOrder + newLayer;
 
-    SpriteRenderInfo tmp = sprites[layer];
-
-    // shift layers
-    if (newLayer < layer)
+    // shift elements to make room for the sprite
+    if (start < target)
     {
-        for (int64_t i = layer; i > newLayer; i--)
-            sprites[i] = sprites[i - 1];
+        // shift elements down
+        for (int64_t *i = start; i < target; i++)
+            *i = *(i + 1);
     }
     else
     {
-        for (int64_t i = layer; i < newLayer; i++)
-            sprites[i] = sprites[i + 1];
+        // shift elements up
+        for (int64_t *i = start; i > target; i--)
+            *i = *(i - 1);
     }
 
-    // insert
-    sprites[newLayer] = tmp;
+    // insert the sprite
+    *target = sprite;
+    s->_layer = newLayer;
+}
+
+bool GLRenderer::TouchingColor(intptr_t sprite, const Vector3 &color)
+{
+    if (sprite < 1 || sprite >= _spriteCount)
+        return false;
+
+    // TODO: implement
+    return true;
 }
 
 void GLRenderer::SetLogicalSize(int left, int right, int bottom, int top)
@@ -169,6 +197,11 @@ void GLRenderer::Render()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_STENCIL_TEST);
+    glDepthMask(GL_FALSE);
+
     glViewport(0, 0, width, height);
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -176,18 +209,18 @@ void GLRenderer::Render()
     _spriteShader->Use();
     _spriteShader->SetProj(_proj);
 
-    // draw stage sperately
+    // draw stage sperately, pen is on top of stage, but below sprites
     _sprites[0].Update(_spriteShader);
-    _quad->Render();
+    DrawQuad();
 
     // TODO: draw pen
 
-    // draw sprites (+1 to skip stage sprite)
-    SpriteRenderInfo *end = _sprites + _spriteCount + 1;
-    for (SpriteRenderInfo *s = _sprites + 1; s < end; s++)
+    // draw sprites
+    int64_t *end = _renderOrder + _spriteCount;
+    for (int64_t *it = _renderOrder + 1; _renderOrder < end; it++)
     {
-        s->Update(_spriteShader);
-        _quad->Render();
+        _sprites[*it].Update(_spriteShader);
+        DrawQuad();
     }
 }
 
@@ -196,7 +229,7 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
     _context(nullptr),
     _left(0), _right(0),
     _bottom(0), _top(0),
-    _quad(nullptr), _spriteShader(nullptr),
+    _spriteShader(nullptr),
     _sprites(nullptr), _spriteCount(0)
 {
     SDL_Init(SDL_INIT_VIDEO);
@@ -225,7 +258,11 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
         return;
     }
 
-    SDL_GL_MakeCurrent(_window, _context);
+    if (SDL_GL_MakeCurrent(_window, _context) != 0)
+    {
+        Cleanup();
+        return;
+    }
     
     if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress))
     {
@@ -233,12 +270,25 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
         return;
     }
 
-    _quad = CreateQuad();
+    memset(&_quad, 0, sizeof(_quad));
+    CreateQuad();
 
     _spriteShader = CreateSpriteShader();
 
-    _sprites = new SpriteRenderInfo[spriteCount + 1];
-    _spriteCount = spriteCount;
+    _spriteCount = spriteCount + 1; // +1 for stage
+    _sprites = new SpriteRenderInfo[_spriteCount];
+    _renderOrder = new int64_t[_spriteCount];
+
+    // initialize render order
+    for (int64_t i = 1; i < _spriteCount; i++)
+        _renderOrder[i] = -1;
+
+    // stage always at the bottom
+    _renderOrder[0] = 0;
+    _sprites[0]._layer = 0;
+
+    SetLogicalSize(-VIEWPORT_WIDTH / 2, VIEWPORT_WIDTH / 2,
+        -VIEWPORT_HEIGHT / 2, VIEWPORT_HEIGHT / 2);
 }
 
 GLRenderer::~GLRenderer()
@@ -254,8 +304,7 @@ void GLRenderer::Cleanup()
     if (_spriteShader)
         delete _spriteShader, _spriteShader = nullptr;
 
-    if (_quad)
-        delete _quad, _quad = nullptr;
+    DestroyQuad();
 
     if (_context)
         SDL_GL_DeleteContext(_context), _context = nullptr;
@@ -265,4 +314,57 @@ void GLRenderer::Cleanup()
         SDL_DestroyWindow(_window), _window = nullptr;
         SDL_Quit();
     }
+}
+
+void GLRenderer::CreateQuad()
+{
+    const Vector4 vertices[] = {
+        Vector4(-0.5f, -0.5f, 0.0f, 0.0f),
+        Vector4(0.5f, -0.5f, 1.0f, 0.0f),
+        Vector4(0.5f, 0.5f, 1.0f, 1.0f),
+        Vector4(-0.5f, 0.5f, 0.0f, 1.0f)
+    };
+
+    const uint32_t indices[] = {
+        0, 1, 2,
+        2, 3, 0
+    };
+
+    glGenVertexArrays(1, &_quad.vao);
+    glGenBuffers(1, &_quad.vbo);
+    glGenBuffers(1, &_quad.ebo);
+
+    glBindVertexArray(_quad.vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, _quad.vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // <vec2 position, vec2 texcoord>
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quad.ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    _quad.indexCount = 6;
+}
+
+void GLRenderer::DrawQuad()
+{
+    glBindVertexArray(_quad.vao);
+    glDrawElements(GL_TRIANGLES, _quad.indexCount, GL_UNSIGNED_INT, 0);
+}
+
+void GLRenderer::DestroyQuad()
+{
+    if (_quad.vao)
+        glDeleteVertexArrays(1, &_quad.vao);
+
+    if (_quad.vbo)
+        glDeleteBuffers(1, &_quad.vbo);
+
+    if (_quad.ebo)
+        glDeleteBuffers(1, &_quad.ebo);
+
+    memset(&_quad, 0, sizeof(_quad));
 }

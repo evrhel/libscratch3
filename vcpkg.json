@@ -7,6 +7,9 @@
         "pkgconf",
         "sdl2",
         "librsvg",
-        "imgui"
+        "imgui",
+        "libpng",
+        "stb",
+        "glib"
     ]
 }

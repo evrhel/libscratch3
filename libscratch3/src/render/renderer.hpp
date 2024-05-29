@@ -10,32 +10,31 @@
 #define VIEWPORT_WIDTH 480
 #define VIEWPORT_HEIGHT 360
 
-// The layer of the stage sprite
-#define STAGE_LAYER 0
+// ID of the stage sprite
+#define SPRITE_STAGE ((intptr_t)0)
 
 using namespace mutil;
 
-class Mesh;
+class GLRenderer;
 
 class SpriteRenderer;
 class SpriteShader;
 
+Vector3 RGBToHSV(const Vector3 &c);
+Vector3 HSVToRGB(const Vector3 &c);
+Vector3 ColorToRGB(int64_t c);
+
 class SpriteRenderInfo final
 {
 public:
-    constexpr const Vector2 &GetPosition() const { return _position; }
-    constexpr void SetPosition(const Vector2 &position) { _position = position, _dirty = true; }
-
-    constexpr float GetRotation() const { return _rotation; }
-    constexpr void SetRotation(float rotation) { _rotation = rotation, _dirty = true; }
-
-    constexpr const Matrix4 &GetModel() const { return _model; }
+    constexpr int64_t GetLayer() const { return _layer; }
 
     void Update(SpriteShader *ss);
 
     SpriteRenderInfo();
     ~SpriteRenderInfo();
 
+    Matrix4 model;
     float colorEffect;
     float brightnessEffect;
     float fisheyeEffect;
@@ -46,12 +45,9 @@ public:
     GLuint texture;
     Vector4 color;
 private:
-    Vector2 _position;
-    float _rotation;
+    int64_t _layer;
 
-    bool _dirty;
-
-    Matrix4 _model;
+    friend class GLRenderer;
 };
 
 class GLRenderer
@@ -61,23 +57,34 @@ public:
 
     constexpr bool HasError() const { return _window == nullptr; }
    
-    //! \brief Get a sprite at a layer
-    //!
-    //! \param layer The layer of the sprite or STAGE_LAYER for the
-    //! stage sprite
-    //!
-    //! \return The sprite at the layer, nullptr if the layer is
-    //! invalid
-    SpriteRenderInfo *GetLayer(int64_t layer);
+    constexpr SpriteShader *GetSpriteShader() const { return _spriteShader; }
 
-    //! \brief Move a sprite at a layer a certain distance
+    //! \brief Create a new sprite
     //!
-    //! Does nothing if the layer is invalid, the distance is 0, or
-    //! the stage sprite is targeted
+    //! \return A positive integer representing the sprite ID,
+    //! or negative if the maximum number of sprites has been reached
+    intptr_t CreateSprite();
+
+    //! \brief Get the render info of a sprite
     //!
-    //! \param layer The layer of the sprite
-    //! \param distance The distance to move the sprite
-    void MoveLayer(int64_t layer, int64_t distance);
+    //! \param sprite ID of the sprite
+    SpriteRenderInfo *GetRenderInfo(intptr_t sprite);
+
+    //! \brief Set the layer of a sprite
+    //!
+    //! \param sprite ID of the sprite to set the layer of
+    //! \param layer The new layer of the sprite, use negative values
+    //! to move the sprite relative to the back layer. Layers are 1-indexed.
+    //! 0 is an invalid layer, as it is reserved for the stage.
+    void SetLayer(intptr_t sprite, int64_t layer);
+
+    //! \brief Test whether a sprite is touching a color
+    //!
+    //! \param sprite ID of the sprite to test
+    //! \param color The color to test
+    //!
+    //! \return Whether the sprite is touching the color
+    bool TouchingColor(intptr_t sprite, const Vector3 &color);
 
     //! \brief Set the logical size of the renderer
     //!
@@ -90,6 +97,10 @@ public:
     //! \brief Render everything
     void Render();
 
+    //! \brief Create a new renderer
+    //!
+    //! \param spriteCount The maximum number of sprites to render,
+    //! excluding the stage sprite
     GLRenderer(int64_t spriteCount);
     ~GLRenderer();
 private:
@@ -101,12 +112,21 @@ private:
 
     Matrix4 _proj;
 
-    Mesh *_quad;
+    struct
+    {
+        GLuint vao, vbo, ebo;
+        GLuint indexCount;
+    } _quad;
 
     SpriteShader *_spriteShader;
 
-    SpriteRenderInfo *_sprites;
-    int64_t _spriteCount;
+    SpriteRenderInfo *_sprites; // length _spriteCount
+    int64_t *_renderOrder; // length _spriteCount, array of indices into _sprites
+    int64_t _spriteCount; // max number of sprites, includes stage
 
     void Cleanup();
+
+    void CreateQuad();
+    void DrawQuad();
+    void DestroyQuad();
 };
