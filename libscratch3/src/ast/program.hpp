@@ -68,6 +68,27 @@ struct StatementListList : public ASTNode
 	std::vector<AutoRelease<StatementList>> sll;
 };
 
+struct CostumeDef : public ASTNode
+{
+	AST_IMPL(CostumeDef, ASTNode);
+	AST_ACCEPTOR;
+
+	std::string name;
+	int bitmapResolution = 2;
+	std::string dataFormat;
+	std::string md5ext;
+	double rotationCenterX = 0.0;
+	double rotationCenterY = 0.0;
+};
+
+struct CostumeDefList : public ASTNode
+{
+	AST_IMPL(CostumeDefList, ASTNode);
+	AST_ACCEPTOR;
+
+	std::vector<AutoRelease<CostumeDef>> costumes;
+};
+
 // sprite definition
 struct SpriteDef : public ASTNode
 {
@@ -79,9 +100,11 @@ struct SpriteDef : public ASTNode
 	AutoRelease<VariableDefList> variables;
 	AutoRelease<ListDefList> lists;
 	AutoRelease<StatementListList> scripts;
+	AutoRelease<CostumeDefList> costumes;
 
 	int64_t currentCostume = 1;
 
+	bool isStage = false;
 	double volume = 100.0;
 	int64_t layer = 1;
 	bool visible = true;

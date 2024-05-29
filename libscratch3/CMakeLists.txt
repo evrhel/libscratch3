@@ -14,6 +14,7 @@ set(SOURCES
 	${src}/ast/astdef.cpp
 	${src}/ast/visitor.cpp
 	${src}/semantics/syminfo.cpp
+	${src}/vm/costume.cpp
 	${src}/vm/vm.cpp
 	${src}/ref.cpp
 	${src}/core.cpp

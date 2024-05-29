@@ -5,6 +5,8 @@
 #include <cinttypes>
 #include <algorithm>
 
+#include "../resource.hpp"
+
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
 
@@ -927,10 +929,10 @@ public:
 		switch (costume.type)
 		{
 		case ValueType_Integer:
-			script->sprite->costume = costume.u.integer % script->sprite->ccostumes;
+			script->sprite->costume = costume.u.integer % script->sprite->costumes.size();
 			break;
 		case ValueType_Real:
-			script->sprite->costume = static_cast<int64_t>(round(costume.u.real)) % script->sprite->ccostumes;
+			script->sprite->costume = static_cast<int64_t>(round(costume.u.real)) % script->sprite->costumes.size();
 			break;
 		case ValueType_String:
 			// TODO: lookup costume by name
@@ -944,7 +946,7 @@ public:
 
 	virtual void Visit(NextCostume *node)
 	{
-		script->sprite->costume = (script->sprite->costume + 1) % script->sprite->ccostumes;
+		script->sprite->costume = (script->sprite->costume + 1) % script->sprite->costumes.size();
 	}
 
 	virtual void Visit(SwitchBackdrop *node)
@@ -1358,6 +1360,23 @@ public:
 	Script *script = nullptr;
 };
 
+static void LoadCostume(VirtualMachine *vm, Sprite *sprite, const CostumeDef *cd)
+{
+	Costume *costume = new Costume();
+
+	if (cd->dataFormat == "png")
+	{
+		Loader *loader = vm->GetLoader();
+		costume->LoadPNG(loader, cd->md5ext, cd->bitmapResolution);
+	}
+	else
+	{
+		printf("Unsupported costume format: %s\n", cd->dataFormat.c_str());
+	}
+
+	sprite->costumes.push_back(costume);
+}
+
 static std::string trim(const std::string &str, const std::string &ws = " \t\n\r")
 {
 	size_t start = str.find_first_not_of(ws);
@@ -1368,12 +1387,14 @@ static std::string trim(const std::string &str, const std::string &ws = " \t\n\r
 	return str.substr(start, end - start + 1);
 }
 
-int VirtualMachine::Load(Program *prog, const std::string &name)
+int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 {
 	if (_prog || !prog)
 		return -1;
 
 	std::vector<AutoRelease<SpriteDef>> &defs = prog->sprites->sprites;
+
+	_loader = loader;
 	
 	for (AutoRelease<SpriteDef> &def : defs)
 	{
@@ -1385,8 +1406,16 @@ int VirtualMachine::Load(Program *prog, const std::string &name)
 			return -1;
 		}
 
-		Sprite &sprite = _sprites[def->name];
+		Sprite &sprite = def->isStage ? _stage : _sprites[def->name];
+		if (sprite.isStage)
+		{
+			// multiple stages
+			Cleanup();
+			return -1;
+		}
+
 		sprite.name = def->name;
+		sprite.isStage = def->isStage;
 		sprite.x = def->x;
 		sprite.y = def->y;
 		sprite.direction = def->direction;
@@ -1452,6 +1481,12 @@ int VirtualMachine::Load(Program *prog, const std::string &name)
 
 				_scripts.push_back(script);
 			}
+		}
+
+		if (def->costumes)
+		{
+			for (AutoRelease<CostumeDef> &cd : def->costumes->costumes)
+				LoadCostume(this, &sprite, *cd);
 		}
 	}
 
@@ -2215,6 +2250,7 @@ void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
 VirtualMachine::VirtualMachine()
 {
 	_prog = nullptr;
+	_loader = nullptr;
 
 	_hasGraphics = false;
 	_window = nullptr;
@@ -2285,7 +2321,7 @@ bool VirtualMachine::InitGraphics()
 		return false;
 	_hasGraphics = true;
 
-	_window = SDL_CreateWindow(_progName.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_SHOWN);
+	_window = SDL_CreateWindow(_progName.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 480*2, 360*2, SDL_WINDOW_SHOWN);
 	if (!_window)
 	{
 		DestroyGraphics();
@@ -2402,25 +2438,79 @@ void VirtualMachine::Render()
 	cairo_set_source_rgb(_cairo, 1, 1, 1);
 	cairo_paint(_cairo);
 
-	int surfaceWidth = cairo_image_surface_get_width(_cairoSurface);
-	int surfaceHeight = cairo_image_surface_get_height(_cairoSurface);
+	double surfaceWidth = cairo_image_surface_get_width(_cairoSurface);
+	double surfaceHeight = cairo_image_surface_get_height(_cairoSurface);
+
+	if (_stage.costume > 0 && _stage.costume <= _stage.costumes.size())
+	{
+		Costume *c = _stage.costumes[_stage.costume - 1];
+		if (c)
+		{
+			double res = c->GetResolution();
+			double xScale = surfaceWidth / res / 480;
+			double yScale = surfaceHeight / res / 360;
+
+			c->Render(_cairo, 0, 0, 90, xScale, yScale);
+		}
+	}
 
 	for (auto &p : _sprites)
 	{
 		Sprite &sprite = p.second;
+		if (!sprite.visible)
+			continue;
 
-		// coordinates are relative to the center of the window
-		double x = surfaceWidth / 2 + sprite.x;
-		double y = surfaceHeight / 2 - sprite.y; // y-axis is inverted
+		if (sprite.costume > 0 && sprite.costume <= sprite.costumes.size())
+		{
+			Costume *c = sprite.costumes[sprite.costume - 1];
+			if (c)
+			{
+				// costume parameters
+				const double costumeWidth = c->GetWidth();
+				const double costumeHeight = c->GetHeight();
+				const double costumeResolution = c->GetResolution();
 
-		char text[256];
-		snprintf(text, sizeof(text), "%s (%d, %d)", sprite.name.c_str(), (int)sprite.x, (int)sprite.y);
+				// sprite's scale is relative to 100%
+				double uniformScale = sprite.size / 100.0;
 
-		// display the sprite's name at its location
-		cairo_set_font_size(_cairo, 12);
-		cairo_set_source_rgb(_cairo, 0, 0, 0);
-		cairo_move_to(_cairo, x, y);
-		cairo_show_text(_cairo, text);
+				// normalize the sprite's coordinates to the range [0, 1]
+				double ndcX = (sprite.x + 240) / 480;
+				double ndcY = (sprite.y + 180) / 360;
+				ndcY = 1 - ndcY; // y-axis is inverted
+
+				// costume width and height in normalized device coordinates
+				double costumeWidthNDC = uniformScale * costumeWidth / costumeResolution / 480;
+				double costumeHeightNDC = uniformScale * costumeHeight / costumeResolution / 360;
+
+				// coordinates are relative to center of the sprite, but rendering
+				// is done from the top-left corner of the image
+				double renderNDCx = ndcX - costumeWidthNDC / 2;
+				double renderNDCy = ndcY - costumeHeightNDC / 2;
+
+				// convert normalized device coordinates to screen coordinates
+				double renderX = renderNDCx * surfaceWidth;
+				double renderY = renderNDCy * surfaceHeight;
+
+				// scale the costume to the sprite's size
+				double renderWidth = costumeWidthNDC * surfaceWidth;
+				double renderHeight = costumeHeightNDC * surfaceHeight;
+
+				// render scale factors
+				double xScale = renderWidth / costumeWidth;
+				double yScale = renderHeight / costumeHeight;			
+
+				c->Render(_cairo, renderX, renderY, sprite.direction, xScale, yScale);
+
+				char text[256];
+				snprintf(text, sizeof(text), "%s (%d, %d)", sprite.name.c_str(), (int)sprite.x, (int)sprite.y);
+
+				// display the sprite's name at its location
+				cairo_set_font_size(_cairo, 12);
+				cairo_set_source_rgb(_cairo, 0, 0, 0);
+				cairo_move_to(_cairo, renderX, renderY);
+				cairo_show_text(_cairo, text);
+			}
+		}
 	}
 
 	// update the window surface
@@ -2437,6 +2527,19 @@ void VirtualMachine::Cleanup()
 		ls_close(script.lock);
 		free(script.stack);
 	}
+
+	for (auto &p : _sprites)
+	{
+		Sprite &s = p.second;
+		for (Costume *c : s.costumes)
+			delete c;
+	}
+	_sprites.clear();
+
+	for (Costume *c : _stage.costumes)
+		delete c;
+
+	_loader = nullptr;
 }
 
 void VirtualMachine::Scheduler()

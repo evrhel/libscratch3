@@ -144,7 +144,7 @@ int Scratch3::Run()
 
 	_vm = new VirtualMachine();
 
-	int rc = _vm->Load(_program, _programName);
+	int rc = _vm->Load(_program, _programName, _loader);
 	if (rc == -1)
 	{
 		delete _vm;

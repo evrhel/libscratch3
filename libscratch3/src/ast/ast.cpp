@@ -232,6 +232,19 @@ private:
 		sd->variables = new VariableDefList();
 		sd->lists = new ListDefList();
 		sd->scripts = new StatementListList();
+		sd->costumes = new CostumeDefList();
+
+		if (target.HasMember("isStage"))
+		{
+			rapidjson::Value &isStage = target["isStage"];
+			if (!isStage.IsBool())
+			{
+				Error("Expected boolean parsing `isStage` member in target");
+				goto failure;
+			}
+
+			sd->isStage = isStage.GetBool();
+		}
 
 		if (!target.HasMember("name"))
 		{
@@ -365,6 +378,20 @@ private:
 		}
 		else
 			Warn("Missing `blocks` member in target");
+		
+		if (target.HasMember("costumes"))
+		{
+			rapidjson::Value &costumes = target["costumes"];
+			if (!costumes.IsArray())
+			{
+				Error("Expected array parsing costumes in target");
+				goto failure;
+			}
+
+			ParseCostumes(costumes, *sd->costumes);
+		}
+		else
+			Warn("Missing `costumes` member in target");
 
 		// TODO: parse other members
 
@@ -372,6 +399,119 @@ private:
 	failure:
 		delete sd;
 		return nullptr;
+	}
+
+	void ParseCostumes(rapidjson::Value &costumes, CostumeDefList *cdl)
+	{
+		// Iterate over all costumes in the target
+		//
+		// Costumes are defined in the format:
+		// {
+		//		"name": [costume name],
+		//		"bitmapResolution": [bitmap resolution],
+		//		"dataFormat": [data format],
+		//		"md5ext": [path to costume file],
+		//		"rotationCenterX": [rotation center x],
+		//		"rotationCenterY": [rotation center y]
+		// }
+		for (auto it = costumes.Begin(); it != costumes.End(); ++it)
+		{
+			rapidjson::Value &costume = *it;
+			if (!costume.IsObject())
+			{
+				Error("Expected object parsing costume");
+				continue;
+			}
+
+			if (!costume.HasMember("name"))
+			{
+				Error("Missing `name` member in costume");
+				continue;
+			}
+
+			if (!costume.HasMember("bitmapResolution"))
+			{
+				Error("Missing `bitmapResolution` member in costume");
+				continue;
+			}
+
+			if (!costume.HasMember("dataFormat"))
+			{
+				Error("Missing `dataFormat` member in costume");
+				continue;
+			}
+
+			if (!costume.HasMember("md5ext"))
+			{
+				Error("Missing `md5ext` member in costume");
+				continue;
+			}
+
+			if (!costume.HasMember("rotationCenterX"))
+			{
+				Error("Missing `rotationCenterX` member in costume");
+				continue;
+			}
+
+			if (!costume.HasMember("rotationCenterY"))
+			{
+				Error("Missing `rotationCenterY` member in costume");
+				continue;
+			}
+
+			rapidjson::Value &name = costume["name"];
+			rapidjson::Value &bitmapResolution = costume["bitmapResolution"];
+			rapidjson::Value &dataFormat = costume["dataFormat"];
+			rapidjson::Value &md5ext = costume["md5ext"];
+			rapidjson::Value &rotationCenterX = costume["rotationCenterX"];
+			rapidjson::Value &rotationCenterY = costume["rotationCenterY"];
+
+			if (!name.IsString())
+			{
+				Error("Expected string parsing name in costume");
+				continue;
+			}
+
+			if (!bitmapResolution.IsInt())
+			{
+				Error("Expected integer parsing bitmapResolution in costume");
+				continue;
+			}
+
+			if (!dataFormat.IsString())
+			{
+				Error("Expected string parsing dataFormat in costume");
+				continue;
+			}
+
+			if (!md5ext.IsString())
+			{
+				Error("Expected string parsing md5ext in costume");
+				continue;
+			}
+
+			if (!rotationCenterX.IsNumber())
+			{
+				Error("Expected number parsing rotationCenterX in costume");
+				continue;
+			}
+
+			if (!rotationCenterY.IsNumber())
+			{
+				Error("Expected number parsing rotationCenterY in costume");
+				continue;
+			}
+
+			CostumeDef *cd = new CostumeDef();
+			cd->name = name.GetString();
+			cd->bitmapResolution = bitmapResolution.GetInt();
+			cd->dataFormat = dataFormat.GetString();
+			cd->md5ext = md5ext.GetString();
+			cd->rotationCenterX = rotationCenterX.GetDouble();
+			cd->rotationCenterY = rotationCenterY.GetDouble();
+
+			cdl->costumes.push_back(cd);
+		}
 	}
 
 	//! \brief Parse the "variables" member of a target

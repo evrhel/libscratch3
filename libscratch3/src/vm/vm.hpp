@@ -12,6 +12,7 @@
 #include <SDL.h>
 
 #include "value.hpp"
+#include "costume.hpp"
 
 // Script has been created but not yet started
 #define EMBRYO 0
@@ -37,6 +38,7 @@
 // Rate at which scripts are executed
 #define FRAMERATE 60
 
+class Loader;
 class VirtualMachine;
 struct Sprite;
 struct GlideInfo;
@@ -108,6 +110,7 @@ struct GlideInfo
 struct Sprite
 {
 	std::string name;
+	bool isStage = false;
 
 	double x = 0.0, y = 0.0;
 	double direction = 90.0;
@@ -117,7 +120,9 @@ struct Sprite
 	std::string message;
 	int messageState = MESSAGE_STATE_NONE;
 
-	int64_t costume = 1, ccostumes = 1;
+	int64_t costume = 1;
+	std::vector<Costume *> costumes;
+
 	double size = 100.0;
 	bool visible = true;
 	int64_t layer = 0;
@@ -146,9 +151,10 @@ public:
 	//! 
 	//! \param prog Program to load
 	//! \param name Name of the program
+	//! \param loader Loader for the program
 	//! 
 	//! \return 0 on success, -1 on failure.
-	int Load(Program *prog, const std::string &name);
+	int Load(Program *prog, const std::string &name, Loader *loader);
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -338,14 +344,19 @@ public:
 
 	void Glide(Sprite *sprite, double x, double y, double s);
 
+	constexpr Loader *GetLoader() const { return _loader; }
+
 	VirtualMachine();
 	~VirtualMachine();
 private:
 	Program *_prog; // Program to run
 	std::string _progName; // Name of the program
+	Loader *_loader; // Loader for the program
 
 	std::unordered_map<std::string, Sprite> _sprites;
 	std::unordered_map<std::string, Value> _variables;
+
+	Sprite _stage; // Stage sprite
 
 	std::vector<Script> _scripts; // All scripts
 

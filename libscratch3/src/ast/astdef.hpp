@@ -225,6 +225,9 @@ struct ListDefList;
 
 struct StatementListList;
 
+struct CostumeDef;
+struct CostumeDefList;
+
 struct SpriteDef;
 struct SpriteDefList;
 struct StageDef;
@@ -457,6 +460,9 @@ enum AstType
 	Ast_ListDefList,
 
 	Ast_StatementListList,
+
+	Ast_CostumeDef,
+	Ast_CostumeDefList,
 
 	Ast_SpriteDef,
 	Ast_SpriteDefList,

@@ -5,6 +5,7 @@
     "dependencies": [
         "cairo",
         "pkgconf",
-        "sdl2"
+        "sdl2",
+        "librsvg"
     ]
 }
