@@ -45,8 +45,18 @@ Scratch3 *Scratch3_Create(const char *path, Scratch3_LogCallback log, void *up)
 	if (!loader)
 		return nullptr;
 
+	std::string name;
+	char buf[1024];
+	size_t len;
+
+	len = ls_basename(path, buf, sizeof(buf));
+	if (len == -1)
+		name = path;
+	else
+		name = std::string(buf, len);
+
 	// Create the instance
-	return new Scratch3(loader, log, up);
+	return new Scratch3(name, loader, log, up);
 }
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT
@@ -134,7 +144,7 @@ int Scratch3::Run()
 
 	_vm = new VirtualMachine();
 
-	int rc = _vm->Load(_program);
+	int rc = _vm->Load(_program, _programName);
 	if (rc == -1)
 	{
 		delete _vm;
@@ -188,11 +198,12 @@ int Scratch3::Wait(unsigned long ms)
 	return rc;
 }
 
-Scratch3::Scratch3(Loader *loader, Scratch3_LogCallback log, void *up) :
+Scratch3::Scratch3(const std::string &programName, Loader *loader, Scratch3_LogCallback log, void *up) :
 	_log(log),
 	_up(up),
 	_loader(loader),
 	_program(nullptr),
+	_programName(programName),
 	_vm(nullptr) {}
 
 Scratch3::~Scratch3()

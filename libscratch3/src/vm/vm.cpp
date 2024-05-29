@@ -117,7 +117,7 @@ public:
 			return;
 		}
 
-		std::string s( key.u.string->str, key.u.string->len );
+		std::string s(key.u.string->str, key.u.string->len);
 
 		vm->Pop();
 
@@ -721,12 +721,56 @@ public:
 
 	virtual void Visit(Glide *node)
 	{
-		// TODO: implement
+		node->e1->Accept(this); // seconds
+		node->e2->Accept(this); // destination
+
+		double secs = vm->ToReal(vm->StackAt(1));
+		std::string dest = vm->ToString(vm->StackAt(0));
+
+		double x = 0, y = 0;
+
+		std::transform(dest.begin(), dest.end(), dest.begin(), ::tolower);
+		if (dest == "random position")
+		{
+			x = ls_rand_int(-240, 240);
+			y = ls_rand_int(-180, 180);
+		}
+		else if (dest == "mouse-pointer")
+		{
+			x = vm->GetMouseX();
+			y = vm->GetMouseY();
+		}
+		else
+		{
+			Sprite *s = vm->FindSprite(dest);
+			if (s != nullptr)
+			{
+				x = s->x;
+				y = s->y;
+			}
+		}
+
+		vm->Glide(script->sprite, x, y, secs);
+
+		vm->Pop();
+		vm->Pop();
 	}
 
 	virtual void Visit(GlideXY *node)
 	{
-		// TODO: implement
+		node->e1->Accept(this); // seconds
+		node->e2->Accept(this); // x
+		node->e3->Accept(this); // y
+
+		double secs = vm->ToReal(vm->StackAt(2));
+		double x = vm->ToReal(vm->StackAt(1));
+		double y = vm->ToReal(vm->StackAt(0));
+
+		vm->Glide(script->sprite, x, y, secs);
+
+		vm->Pop();
+		vm->Pop();
+		vm->Pop();
 	}
 
 	virtual void Visit(PointDir *node)
@@ -1324,7 +1368,7 @@ static std::string trim(const std::string &str, const std::string &ws = " \t\n\r
 	return str.substr(start, end - start + 1);
 }
 
-int VirtualMachine::Load(Program *prog)
+int VirtualMachine::Load(Program *prog, const std::string &name)
 {
 	if (_prog || !prog)
 		return -1;
@@ -1412,6 +1456,7 @@ int VirtualMachine::Load(Program *prog)
 	}
 
 	_prog = Retain(prog);
+	_progName = name;
 	return 0;
 }
 
@@ -1503,9 +1548,9 @@ void VirtualMachine::WaitUntil(Expression *expr)
 	_current->waitExpr = expr;
 	_current->state = WAITING;
 
-	printf("%p in %s is waiting\n",
-		_current,
-		_current->sprite->name.c_str());
+	//printf("%p in %s is waiting\n",
+	//	_current,
+	//	_current->sprite->name.c_str());
 }
 
 void VirtualMachine::AskAndWait()
@@ -2122,7 +2167,7 @@ void VirtualMachine::FreeValue(Value &val)
 	{
 		assert(val.u.string->ref.count == 0);
 		
-		printf("Free: `%s`\n", val.u.string->str);
+		// printf("Free: `%s`\n", val.u.string->str);
 		
 		free(val.u.string);
 
@@ -2139,9 +2184,32 @@ Value &VirtualMachine::FindVariable(const std::string &id)
 	return it->second;
 }
 
+Sprite *VirtualMachine::FindSprite(const std::string &name)
+{
+	auto it = _sprites.find(name);
+	return it != _sprites.end() ? &it->second : nullptr;
+}
+
 void VirtualMachine::ResetTimer()
 {
 	_timerStart = _time;
+}
+
+void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
+{
+	if (s <= 0.0)
+	{
+		sprite->x = x;
+		sprite->y = y;
+		return;
+	}
+
+	sprite->glide.x0 = sprite->x;
+	sprite->glide.y0 = sprite->y;
+	sprite->glide.x1 = x;
+	sprite->glide.y1 = y;
+	sprite->glide.start = _time;
+	sprite->glide.end = _time + s;
 }
 
 VirtualMachine::VirtualMachine()
@@ -2159,6 +2227,8 @@ VirtualMachine::VirtualMachine()
 	_mouseDown = false;
 	_mouseX = 0;
 	_mouseY = 0;
+	memset(_keyStates, 0, sizeof(_keyStates));
+	_keysPressed = 0;
 	_loudness = 0.0;
 	_timer = 0.0;
 	_username = { 0 };
@@ -2215,7 +2285,7 @@ bool VirtualMachine::InitGraphics()
 		return false;
 	_hasGraphics = true;
 
-	_window = SDL_CreateWindow("Scratch 3", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_SHOWN);
+	_window = SDL_CreateWindow(_progName.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_SHOWN);
 	if (!_window)
 	{
 		DestroyGraphics();
@@ -2256,6 +2326,11 @@ bool VirtualMachine::InitGraphics()
 	}
 
 	cairo_select_font_face(_cairo, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+
+	_mouseX = 0;
+	_mouseY = 0;
+	memset(_keyStates, 0, sizeof(_keyStates));
+	_keysPressed = 0;
 
 	return true;
 }
@@ -2327,10 +2402,25 @@ void VirtualMachine::Render()
 	cairo_set_source_rgb(_cairo, 1, 1, 1);
 	cairo_paint(_cairo);
 
+	int surfaceWidth = cairo_image_surface_get_width(_cairoSurface);
+	int surfaceHeight = cairo_image_surface_get_height(_cairoSurface);
+
 	for (auto &p : _sprites)
 	{
-		//Sprite *sprite = p.second;
-		
+		Sprite &sprite = p.second;
+
+		// coordinates are relative to the center of the window
+		double x = surfaceWidth / 2 + sprite.x;
+		double y = surfaceHeight / 2 - sprite.y; // y-axis is inverted
+
+		char text[256];
+		snprintf(text, sizeof(text), "%s (%d, %d)", sprite.name.c_str(), (int)sprite.x, (int)sprite.y);
+
+		// display the sprite's name at its location
+		cairo_set_font_size(_cairo, 12);
+		cairo_set_source_rgb(_cairo, 0, 0, 0);
+		cairo_move_to(_cairo, x, y);
+		cairo_show_text(_cairo, text);
 	}
 
 	// update the window surface
@@ -2494,15 +2584,42 @@ void VirtualMachine::Scheduler()
 			ls_unlock(script.lock);
 		}
 
-		if (_time >= nextFrame)
+		for (auto &p : _sprites)
 		{
+			Sprite &s = p.second;
+			GlideInfo &g = s.glide;
+
+			if (g.start < 0.0)
+				continue; // not gliding
+
+			double t = (_time - g.start) / (g.end - g.start);
+			if (t >= 1.0)
+			{
+				// done gliding
+				s.x = g.x1;
+				s.y = g.y1;
+				g.start = -1.0;
+			}
+			else
+			{
+				// linear interpolation
+				s.x = g.x0 + (g.x1 - g.x0) * t;
+				s.y = g.y0 + (g.y1 - g.y0) * t;
+			}
+		}
+
+		//if (_time >= nextFrame)
+		//{
 			// TODO: do something with rendering
 
-			if (_hasGraphics)
-				Render();
+		if (_hasGraphics)
+			Render();
 
-			nextFrame = _time + 1.0 / FRAMERATE;
-		}
+		// Wait for the next frame
+		ls_sleep((unsigned long)(1000.0 / FRAMERATE));
+
+			//nextFrame = _time + 1.0 / FRAMERATE;
+		//}
 
 		ls_lock(_lock);
 

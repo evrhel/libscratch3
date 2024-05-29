@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <string>
 
 #include <lysys/lysys.hpp>
 
@@ -38,6 +39,7 @@
 
 class VirtualMachine;
 struct Sprite;
+struct GlideInfo;
 
 enum ExceptionType
 {
@@ -91,6 +93,13 @@ struct Script
 	uintptr_t fp; // Frame pointer (grows downwards)
 };
 
+struct GlideInfo
+{
+	double x0 = 0.0, y0 = 0.0; // Source glide position
+	double x1 = 0.0, y1 = 0.0; // Target glide position
+	double start = -1.0, end = 0.0; // Start and end times
+};
+
 #define MESSAGE_STATE_NONE 0
 #define MESSAGE_STATE_SAY 1
 #define MESSAGE_STATE_THINK 2
@@ -102,6 +111,8 @@ struct Sprite
 
 	double x = 0.0, y = 0.0;
 	double direction = 90.0;
+
+	GlideInfo glide;
 
 	std::string message;
 	int messageState = MESSAGE_STATE_NONE;
@@ -134,9 +145,10 @@ public:
 	//! Will fail if the VM alreadu has a program loaded.
 	//! 
 	//! \param prog Program to load
+	//! \param name Name of the program
 	//! 
 	//! \return 0 on success, -1 on failure.
-	int Load(Program *prog);
+	int Load(Program *prog, const std::string &name);
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -297,6 +309,8 @@ public:
 
 	Value &FindVariable(const std::string &id);
 
+	constexpr double GetTime() const { return _time; }
+
 	constexpr const Value &GetAnswer() const { return _answer; }
 	constexpr bool GetMouseDown() const { return _mouseDown; }
 	constexpr int64_t GetMouseX() const { return _mouseX; }
@@ -307,6 +321,8 @@ public:
 	
 	bool GetKey(int scancode) const
 	{
+		if (!_hasGraphics)
+			return false;
 		if (scancode == -1)
 			return _keysPressed > 0;
 		if (scancode < 0 || scancode >= SDL_NUM_SCANCODES)
@@ -316,12 +332,17 @@ public:
 
 	constexpr bool IsHeadless() const { return !_hasGraphics; }
 
+	Sprite *FindSprite(const std::string &name);
+
 	void ResetTimer();
+
+	void Glide(Sprite *sprite, double x, double y, double s);
 
 	VirtualMachine();
 	~VirtualMachine();
 private:
 	Program *_prog; // Program to run
+	std::string _progName; // Name of the program
 
 	std::unordered_map<std::string, Sprite> _sprites;
 	std::unordered_map<std::string, Value> _variables;

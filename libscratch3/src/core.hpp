@@ -1,6 +1,7 @@
 #pragma once
 
 #include <scratch3/scratch3.h>
+#include <string>
 
 class Loader;
 struct Program;
@@ -21,12 +22,13 @@ public:
 	int Stop();
 	int Wait(unsigned long ms);
 
-	Scratch3(Loader *loader, Scratch3_LogCallback log, void *up);
+	Scratch3(const std::string &programName, Loader *loader, Scratch3_LogCallback log, void *up);
     ~Scratch3();
 private:
 	Scratch3_LogCallback _log;
     void *_up; // user pointer
 	Loader *_loader;
 	Program *_program;
+	std::string _programName;
 	VirtualMachine *_vm;
 };
