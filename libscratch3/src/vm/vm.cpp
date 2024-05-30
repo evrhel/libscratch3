@@ -6,15 +6,18 @@
 #include <algorithm>
 
 #include "../resource.hpp"
+#include "../render/renderer.hpp"
+
+#include "sprite.hpp"
 
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
 
-static const char TRUE[4] = {
+static const char True[4] = {
 	't', 'r', 'u', 'e'
 };
 
-static const char FALSE[5] = {
+static const char False[5] = {
 	'f', 'a', 'l', 's', 'e'
 };
 
@@ -34,17 +37,17 @@ public:
 
 	virtual void Visit(XPos *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->x);
+		vm->SetReal(vm->Push(), script->sprite->GetX());
 	}
 
 	virtual void Visit(YPos *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->y);
+		vm->SetReal(vm->Push(), script->sprite->GetY());
 	}
 
 	virtual void Visit(Direction *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->direction);
+		vm->SetReal(vm->Push(), script->sprite->GetDirection());
 	}
 
 	virtual void Visit(CurrentCostume *node)
@@ -57,7 +60,7 @@ public:
 			vm->Raise(InvalidArgument);
 			break;
 		case PropGetType_Number:
-			vm->SetInteger(val, script->sprite->costume);
+			vm->SetInteger(val, script->sprite->GetCostume());
 			break;
 		case PropGetType_Name:
 			// TODO: implement
@@ -70,12 +73,12 @@ public:
 
 	virtual void Visit(Size *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->size);
+		vm->SetReal(vm->Push(), script->sprite->GetSize());
 	}
 
 	virtual void Visit(Volume *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->volume);
+		vm->SetReal(vm->Push(), script->sprite->GetVolume());
 	}
 
 	virtual void Visit(Touching *node)
@@ -687,22 +690,28 @@ public:
 		double steps = vm->ToReal(vm->StackAt(0));
 		vm->Pop();
 
-		const double dir = script->sprite->direction * DEG2RAD;
-		script->sprite->x += steps * cos(dir);
-		script->sprite->y += steps * sin(dir);
+		Sprite *s = script->sprite;
+
+		const double dir = s->GetDirection() * DEG2RAD;
+		double dx = steps * cos(dir);
+		double dy = steps * sin(dir);
+
+		s->SetXY(s->GetX() + dx, s->GetY() + dy);
 	}
 
 	virtual void Visit(TurnDegrees *node)
 	{
 		node->e->Accept(this);
-		script->sprite->direction += vm->ToReal(vm->StackAt(0));
+		Sprite *s = script->sprite;
+		s->SetDirection(s->GetDirection() + vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(TurnNegDegrees *node)
 	{
 		node->e->Accept(this);
-		script->sprite->direction -= vm->ToReal(vm->StackAt(0));
+		Sprite *s = script->sprite;
+		s->SetDirection(s->GetDirection() - vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -715,8 +724,8 @@ public:
 	{
 		node->e1->Accept(this);
 		node->e2->Accept(this);
-		script->sprite->x = vm->ToReal(vm->StackAt(1));
-		script->sprite->y =	vm->ToReal(vm->StackAt(0));
+		Sprite *s = script->sprite;
+		s->SetXY(vm->ToReal(vm->StackAt(1)), vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 		vm->Pop();
 	}
@@ -747,8 +756,8 @@ public:
 			Sprite *s = vm->FindSprite(dest);
 			if (s != nullptr)
 			{
-				x = s->x;
-				y = s->y;
+				x = s->GetX();
+				y = s->GetY();
 			}
 		}
 
@@ -778,7 +787,7 @@ public:
 	virtual void Visit(PointDir *node)
 	{
 		node->e->Accept(this);
-		script->sprite->direction = vm->ToReal(vm->StackAt(0));
+		script->sprite->SetDirection(vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	
 	}
@@ -791,28 +800,30 @@ public:
 	virtual void Visit(ChangeX *node)
 	{
 		node->e->Accept(this);
-		script->sprite->x += vm->ToReal(vm->StackAt(0));
+		Sprite *s = script->sprite;
+		s->SetX(s->GetX() + vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(SetX *node)
 	{
 		node->e->Accept(this);
-		script->sprite->x = vm->ToReal(vm->StackAt(0));
+		script->sprite->SetX(vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(ChangeY *node)
 	{
 		node->e->Accept(this);
-		script->sprite->y += vm->ToReal(vm->StackAt(0));
+		Sprite *s = script->sprite;
+		s->SetY(s->GetY() + vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(SetY *node)
 	{
 		node->e->Accept(this);
-		script->sprite->y = vm->ToReal(vm->StackAt(0));
+		script->sprite->SetY(vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -841,14 +852,14 @@ public:
 		vm->Pop();
 
 		printf("%s saying \"%s\" for %g secs\n",
-			script->sprite->name.c_str(),
+			script->sprite->GetName().c_str(),
 			mstr.c_str(),
 			secs);
 
 		if (mstr.size())
-			script->sprite->messageState = MESSAGE_STATE_SAY;
+			script->sprite->SetMessage(mstr, MESSAGE_STATE_SAY);
 		else
-			script->sprite->messageState = MESSAGE_STATE_NONE;
+			script->sprite->ClearMessage();
 
 		vm->Sleep(secs);
 	}
@@ -864,13 +875,13 @@ public:
 		vm->Pop();
 
 		printf("%s saying \"%s\"\n",
-			script->sprite->name.c_str(),
+			script->sprite->GetName().c_str(),
 			mstr.c_str());
 
 		if (mstr.size())
-			script->sprite->messageState = MESSAGE_STATE_SAY;
+			script->sprite->SetMessage(mstr, MESSAGE_STATE_SAY);
 		else
-			script->sprite->messageState = MESSAGE_STATE_NONE;
+			script->sprite->ClearMessage();
 	}
 
 	virtual void Visit(ThinkForSecs *node)
@@ -888,14 +899,14 @@ public:
 		vm->Pop();
 
 		printf("%s thinking \"%s\" for %g secs\n",
-			script->sprite->name.c_str(),
+			script->sprite->GetName().c_str(),
 			mstr.c_str(),
 			secs);
 
 		if (mstr.size())
-			script->sprite->messageState = MESSAGE_STATE_THINK;
+			script->sprite->SetMessage(mstr, MESSAGE_STATE_THINK);
 		else
-			script->sprite->messageState = MESSAGE_STATE_NONE;
+			script->sprite->ClearMessage();
 
 		vm->Sleep(secs);
 	}
@@ -911,13 +922,13 @@ public:
 		vm->Pop();
 
 		printf("%s thinking \"%s\"\n",
-			script->sprite->name.c_str(),
+			script->sprite->GetName().c_str(),
 			mstr.c_str());
 
 		if (mstr.size())
-			script->sprite->messageState = MESSAGE_STATE_THINK;
+			script->sprite->SetMessage(mstr, MESSAGE_STATE_THINK);
 		else
-			script->sprite->messageState = MESSAGE_STATE_NONE;
+			script->sprite->ClearMessage();
 	}
 
 	virtual void Visit(SwitchCostume *node)
@@ -929,10 +940,10 @@ public:
 		switch (costume.type)
 		{
 		case ValueType_Integer:
-			script->sprite->costume = costume.u.integer % script->sprite->costumes.size();
+			script->sprite->SetCostume(costume.u.integer);
 			break;
 		case ValueType_Real:
-			script->sprite->costume = static_cast<int64_t>(round(costume.u.real)) % script->sprite->costumes.size();
+			script->sprite->SetCostume(static_cast<int64_t>(costume.u.real));
 			break;
 		case ValueType_String:
 			// TODO: lookup costume by name
@@ -946,7 +957,8 @@ public:
 
 	virtual void Visit(NextCostume *node)
 	{
-		script->sprite->costume = (script->sprite->costume + 1) % script->sprite->costumes.size();
+		Sprite *s = script->sprite;
+		s->SetCostume(s->GetCostume() + 1);
 	}
 
 	virtual void Visit(SwitchBackdrop *node)
@@ -975,14 +987,15 @@ public:
 	virtual void Visit(ChangeSize *node)
 	{
 		node->e->Accept(this);
-		script->sprite->size += vm->ToReal(vm->StackAt(0));
+		Sprite *s = script->sprite;
+		s->SetSize(s->GetSize() + vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(SetSize *node)
 	{
 		node->e->Accept(this);
-		script->sprite->size = vm->ToReal(vm->StackAt(0));
+		script->sprite->SetSize(vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -992,32 +1005,32 @@ public:
 		double val = vm->ToReal(vm->StackAt(0));
 		vm->Pop();
 
-		auto &g = script->sprite->graphics;
+		Sprite *s = script->sprite;
 		switch (node->effect)
 		{
 		default:
 			vm->Raise(InvalidArgument);
 			break;
 		case GraphicEffect_Color:
-			g.color += val;
+			s->SetColorEffect(s->GetColorEffect() + val);
 			break;
 		case GraphicEffect_Fisheye:
-			g.fisheye += val;
+			s->SetFisheyeEffect(s->GetFisheyeEffect() + val);
 			break;
 		case GraphicEffect_Whirl:
-			g.whirl += val;
+			s->SetWhirlEffect(s->GetWhirlEffect() + val);
 			break;
 		case GraphicEffect_Pixelate:
-			g.pixelate += val;
+			s->SetPixelateEffect(s->GetPixelateEffect() + val);
 			break;
 		case GraphicEffect_Mosaic:
-			g.mosaic += val;
+			s->SetMosaicEffect(s->GetMosaicEffect() + val);
 			break;
 		case GraphicEffect_Brightness:
-			g.brightness += val;
+			s->SetBrightnessEffect(s->GetBrightnessEffect() + val);
 			break;
 		case GraphicEffect_Ghost:
-			g.ghost += val;
+			s->SetGhostEffect(s->GetGhostEffect() + val);
 			break;
 		}
 	}
@@ -1028,54 +1041,72 @@ public:
 		double val = vm->ToReal(vm->StackAt(0));
 		vm->Pop();
 
-		auto &g = script->sprite->graphics;
+		Sprite *s = script->sprite;
 		switch (node->effect)
 		{
 		default:
 			vm->Raise(InvalidArgument);
 			break;
 		case GraphicEffect_Color:
-			g.color = val;
+			s->SetColorEffect(val);
 			break;
 		case GraphicEffect_Fisheye:
-			g.fisheye = val;
+			s->SetFisheyeEffect(val);
 			break;
 		case GraphicEffect_Whirl:
-			g.whirl = val;
+			s->SetWhirlEffect(val);
 			break;
 		case GraphicEffect_Pixelate:
-			g.pixelate = val;
+			s->SetPixelateEffect(val);
 			break;
 		case GraphicEffect_Mosaic:
-			g.mosaic = val;
+			s->SetMosaicEffect(val);
 			break;
 		case GraphicEffect_Brightness:
-			g.brightness = val;
+			s->SetBrightnessEffect(val);
 			break;
 		case GraphicEffect_Ghost:
-			g.ghost = val;
+			s->SetGhostEffect(val);
 			break;
 		}
 	}
 
 	virtual void Visit(ClearGraphicEffects *node)
 	{
-		memset(&script->sprite->graphics, 0, sizeof(script->sprite->graphics));
+		Sprite *s = script->sprite;
+		s->SetColorEffect(0);
+		s->SetFisheyeEffect(0);
+		s->SetWhirlEffect(0);
+		s->SetPixelateEffect(0);
+		s->SetMosaicEffect(0);
+		s->SetBrightnessEffect(0);
+		s->SetGhostEffect(0);
 	}
 
 	virtual void Visit(ShowSprite *node)
 	{
-		script->sprite->visible = true;
+		script->sprite->SetShown(true);
 	}
 
 	virtual void Visit(HideSprite *node)
 	{
-		script->sprite->visible	= false;
+		script->sprite->SetShown(false);
 	}
 
 	virtual void Visit(GotoLayer *node)
 	{
-		// TODO: implement
+		switch (node->layer)
+		{
+		default:
+			vm->Raise(InvalidArgument);
+			break;
+		case LayerType_Front:
+			script->sprite->SetLayer(1);
+			break;
+		case LayerType_Back:
+			script->sprite->SetLayer(-1);
+			break;
+		}
 	}
 
 	virtual void Visit(MoveLayer *node)
@@ -1090,10 +1121,10 @@ public:
 			vm->Raise(InvalidArgument);
 			break;
 		case LayerDir_Forward:
-			script->sprite->layer += amount;
+			script->sprite->MoveLayer(amount);
 			break;
 		case LayerDir_Backward:
-			script->sprite->layer -= amount;
+			script->sprite->MoveLayer(-amount);
 			break;
 		}
 	}
@@ -1109,14 +1140,15 @@ public:
 	virtual void Visit(ChangeVolume *node)
 	{
 		node->e->Accept(this);
-		script->sprite->volume += vm->ToReal(vm->StackAt(0));
+		Sprite *s = script->sprite;
+		s->SetVolume(s->GetVolume() + vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(SetVolume *node)
 	{
 		node->e->Accept(this);
-		script->sprite->volume = vm->ToReal(vm->StackAt(0));
+		script->sprite->SetVolume(vm->ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -1360,23 +1392,6 @@ public:
 	Script *script = nullptr;
 };
 
-static void LoadCostume(VirtualMachine *vm, Sprite *sprite, const CostumeDef *cd)
-{
-	Costume *costume = new Costume();
-
-	if (cd->dataFormat == "png")
-	{
-		Loader *loader = vm->GetLoader();
-		costume->LoadPNG(loader, cd->md5ext, cd->bitmapResolution);
-	}
-	else
-	{
-		printf("Unsupported costume format: %s\n", cd->dataFormat.c_str());
-	}
-
-	sprite->costumes.push_back(costume);
-}
-
 static std::string trim(const std::string &str, const std::string &ws = " \t\n\r")
 {
 	size_t start = str.find_first_not_of(ws);
@@ -1406,22 +1421,8 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 			return -1;
 		}
 
-		Sprite &sprite = def->isStage ? _stage : _sprites[def->name];
-		if (sprite.isStage)
-		{
-			// multiple stages
-			Cleanup();
-			return -1;
-		}
-
-		sprite.name = def->name;
-		sprite.isStage = def->isStage;
-		sprite.x = def->x;
-		sprite.y = def->y;
-		sprite.direction = def->direction;
-		sprite.costume = def->currentCostume;
-		sprite.size = def->size;
-		sprite.volume = def->volume;
+		Sprite *sprite = new Sprite(*def);
+		_sprites[sprite->GetName()] = sprite;
 
 		if (def->variables)
 		{
@@ -1453,7 +1454,7 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 				Script script = { 0 };
 
 				script.state = EMBRYO;
-				script.sprite = &sprite;
+				script.sprite = sprite;
 				script.entry = *sl;
 				//script.pc = 1;
 
@@ -1481,12 +1482,6 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 				_scripts.push_back(script);
 			}
-		}
-
-		if (def->costumes)
-		{
-			for (AutoRelease<CostumeDef> &cd : def->costumes->costumes)
-				LoadCostume(this, &sprite, *cd);
 		}
 	}
 
@@ -1599,7 +1594,7 @@ void VirtualMachine::Terminate()
 
 	printf("%p in %s terminated\n",
 		_current,
-		_current->sprite->name.c_str());
+		_current->sprite->GetName().c_str());
 }
 
 void VirtualMachine::TerminateScript(unsigned long id)
@@ -1624,7 +1619,7 @@ static void DumpScript(Script *script)
 	else
 		printf("    state = Unknown\n");
 
-	printf("    sprite = %s\n", script->sprite ? script->sprite->name.c_str() : "(null)");
+	printf("    sprite = %s\n", script->sprite ? script->sprite->GetName().c_str() : "(null)");
 
 	printf("    sleepUntil = %g\n", script->sleepUntil);
 	printf("    waitExpr = %p (%s)\n", script->waitExpr, script->waitExpr ? AstTypeString(script->waitExpr->GetType()) : "null");
@@ -1797,7 +1792,7 @@ bool VirtualMachine::Truth(const Value &val)
 
 		for (size_t i = 0; i < 4; i++)
 		{
-			if (tolower(val.u.string->str[i]) != TRUE[i])
+			if (tolower(val.u.string->str[i]) != True[i])
 				return false;
 		}
 
@@ -2016,7 +2011,7 @@ Value &VirtualMachine::SetParsedString(Value &lhs, const std::string &rhs)
 		{
 			size_t i;
 			for (i = 0; i < 4; i++)
-				if (tolower(str[i]) != TRUE[i])
+				if (tolower(str[i]) != True[i])
 					break;
 
 			if (i == 4)
@@ -2027,7 +2022,7 @@ Value &VirtualMachine::SetParsedString(Value &lhs, const std::string &rhs)
 		{
 			size_t i;
 			for (i = 0; i < 5; i++)
-				if (tolower(str[i]) != FALSE[i])
+				if (tolower(str[i]) != False[i])
 					break;
 
 			if (i == 5)
@@ -2063,7 +2058,7 @@ std::string VirtualMachine::ToString(const Value &val)
 		return std::string(buf, cch);
 	}
 	case ValueType_Bool:
-		return val.u.boolean ? std::string(TRUE, 4) : std::string(FALSE, 5);
+		return val.u.boolean ? std::string(True, 4) : std::string(False, 5);
 	case ValueType_String:
 		return std::string(val.u.string->str, val.u.string->len);
 	}
@@ -2222,7 +2217,7 @@ Value &VirtualMachine::FindVariable(const std::string &id)
 Sprite *VirtualMachine::FindSprite(const std::string &name)
 {
 	auto it = _sprites.find(name);
-	return it != _sprites.end() ? &it->second : nullptr;
+	return it != _sprites.end() ? it->second : nullptr;
 }
 
 void VirtualMachine::ResetTimer()
@@ -2234,17 +2229,18 @@ void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
 {
 	if (s <= 0.0)
 	{
-		sprite->x = x;
-		sprite->y = y;
+		sprite->SetXY(x, y);
 		return;
 	}
 
-	sprite->glide.x0 = sprite->x;
-	sprite->glide.y0 = sprite->y;
-	sprite->glide.x1 = x;
-	sprite->glide.y1 = y;
-	sprite->glide.start = _time;
-	sprite->glide.end = _time + s;
+	GlideInfo &glide = *sprite->GetGlide();
+
+	glide.x0 = sprite->GetX();
+	glide.y0 = sprite->GetY();
+	glide.x1 = x;
+	glide.y1 = y;
+	glide.start = _time;
+	glide.end = _time + s;
 }
 
 VirtualMachine::VirtualMachine()
@@ -2252,12 +2248,7 @@ VirtualMachine::VirtualMachine()
 	_prog = nullptr;
 	_loader = nullptr;
 
-	_hasGraphics = false;
-	_window = nullptr;
-	_sdlRenderer = nullptr;
-	_sdlSurface = nullptr;
-	_cairoSurface = nullptr;
-	_cairo = nullptr;
+	_renderer = nullptr;
 
 	_answer = { 0 };
 	_mouseDown = false;
@@ -2288,14 +2279,14 @@ VirtualMachine::VirtualMachine()
 	AllocString(_emptyString, 0);
 
 	_trueString = {};
-	AllocString(_trueString, sizeof(TRUE));
+	AllocString(_trueString, sizeof(True));
 	if (_trueString.type == ValueType_String)
-		memcpy(_trueString.u.string->str, TRUE, sizeof(TRUE));
+		memcpy(_trueString.u.string->str, True, sizeof(True));
 
 	_falseString = {};
-	AllocString(_falseString, sizeof(FALSE));
+	AllocString(_falseString, sizeof(False));
 	if (_falseString.type == ValueType_String)
-		memcpy(_falseString.u.string->str, FALSE, sizeof(FALSE));
+		memcpy(_falseString.u.string->str, False, sizeof(False));
 }
 
 VirtualMachine::~VirtualMachine()
@@ -2317,84 +2308,18 @@ VirtualMachine::~VirtualMachine()
 
 bool VirtualMachine::InitGraphics()
 {
-	if (SDL_Init(SDL_INIT_VIDEO) != 0)
-		return false;
-	_hasGraphics = true;
-
-	_window = SDL_CreateWindow(_progName.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 480*2, 360*2, SDL_WINDOW_SHOWN);
-	if (!_window)
-	{
-		DestroyGraphics();
-		return false;
-	}
-
-	_sdlRenderer = SDL_CreateRenderer(_window, -1, SDL_RENDERER_ACCELERATED);
-	if (!_sdlRenderer)
-	{
-		DestroyGraphics();
-		return false;
-	}
-
-	_sdlSurface = SDL_GetWindowSurface(_window);
-	if (!_sdlSurface)
-	{
-		DestroyGraphics();
-		return false;
-	}
-
-	_cairoSurface = cairo_image_surface_create_for_data(
-		(unsigned char *)_sdlSurface->pixels,
-		CAIRO_FORMAT_RGB24,
-		_sdlSurface->w,
-		_sdlSurface->h,
-		_sdlSurface->pitch);
-	if (cairo_surface_status(_cairoSurface) != CAIRO_STATUS_SUCCESS)
-	{
-		DestroyGraphics();
-		return false;
-	}
-
-	_cairo = cairo_create(_cairoSurface);
-	if (cairo_status(_cairo) != CAIRO_STATUS_SUCCESS)
-	{
-		DestroyGraphics();
-		return false;
-	}
-
-	cairo_select_font_face(_cairo, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-
-	_mouseX = 0;
-	_mouseY = 0;
-	memset(_keyStates, 0, sizeof(_keyStates));
-	_keysPressed = 0;
-
-	return true;
+	return false;
 }
 
 void VirtualMachine::DestroyGraphics()
 {
-	if (_cairo)
-		cairo_destroy(_cairo), _cairo = nullptr;
-
-	if (_cairoSurface)
-		cairo_surface_destroy(_cairoSurface), _cairoSurface = nullptr;
-
-	if (_sdlSurface)
-		SDL_FreeSurface(_sdlSurface), _cairoSurface = nullptr;
-
-	if (_sdlRenderer)
-		SDL_DestroyRenderer(_sdlRenderer), _sdlRenderer = nullptr;
-
-	if (_window)
-		SDL_DestroyWindow(_window), _window = nullptr;
-
-	if (_hasGraphics)
-		SDL_Quit(), _hasGraphics = false;
+	if (_renderer)
+		delete _renderer, _renderer = nullptr;
 }
 
 void VirtualMachine::PollEvents()
 {
-	if (!_hasGraphics)
+	if (!_renderer)
 		return;
 
 	SDL_Event evt;
@@ -2435,86 +2360,7 @@ void VirtualMachine::PollEvents()
 
 void VirtualMachine::Render()
 {
-	cairo_set_source_rgb(_cairo, 1, 1, 1);
-	cairo_paint(_cairo);
-
-	double surfaceWidth = cairo_image_surface_get_width(_cairoSurface);
-	double surfaceHeight = cairo_image_surface_get_height(_cairoSurface);
-
-	if (_stage.costume > 0 && _stage.costume <= _stage.costumes.size())
-	{
-		Costume *c = _stage.costumes[_stage.costume - 1];
-		if (c)
-		{
-			double res = c->GetResolution();
-			double xScale = surfaceWidth / res / 480;
-			double yScale = surfaceHeight / res / 360;
-
-			c->Render(_cairo, 0, 0, 90, xScale, yScale);
-		}
-	}
-
-	for (auto &p : _sprites)
-	{
-		Sprite &sprite = p.second;
-		if (!sprite.visible)
-			continue;
-
-		if (sprite.costume > 0 && sprite.costume <= sprite.costumes.size())
-		{
-			Costume *c = sprite.costumes[sprite.costume - 1];
-			if (c)
-			{
-				// costume parameters
-				const double costumeWidth = c->GetWidth();
-				const double costumeHeight = c->GetHeight();
-				const double costumeResolution = c->GetResolution();
-
-				// sprite's scale is relative to 100%
-				double uniformScale = sprite.size / 100.0;
-
-				// normalize the sprite's coordinates to the range [0, 1]
-				double ndcX = (sprite.x + 240) / 480;
-				double ndcY = (sprite.y + 180) / 360;
-				ndcY = 1 - ndcY; // y-axis is inverted
-
-				// costume width and height in normalized device coordinates
-				double costumeWidthNDC = uniformScale * costumeWidth / costumeResolution / 480;
-				double costumeHeightNDC = uniformScale * costumeHeight / costumeResolution / 360;
-
-				// coordinates are relative to center of the sprite, but rendering
-				// is done from the top-left corner of the image
-				double renderNDCx = ndcX - costumeWidthNDC / 2;
-				double renderNDCy = ndcY - costumeHeightNDC / 2;
-
-				// convert normalized device coordinates to screen coordinates
-				double renderX = renderNDCx * surfaceWidth;
-				double renderY = renderNDCy * surfaceHeight;
-
-				// scale the costume to the sprite's size
-				double renderWidth = costumeWidthNDC * surfaceWidth;
-				double renderHeight = costumeHeightNDC * surfaceHeight;
-
-				// render scale factors
-				double xScale = renderWidth / costumeWidth;
-				double yScale = renderHeight / costumeHeight;			
-
-				c->Render(_cairo, renderX, renderY, sprite.direction, xScale, yScale);
-
-				char text[256];
-				snprintf(text, sizeof(text), "%s (%d, %d)", sprite.name.c_str(), (int)sprite.x, (int)sprite.y);
-
-				// display the sprite's name at its location
-				cairo_set_font_size(_cairo, 12);
-				cairo_set_source_rgb(_cairo, 0, 0, 0);
-				cairo_move_to(_cairo, renderX, renderY);
-				cairo_show_text(_cairo, text);
-			}
-		}
-	}
-
-	// update the window surface
-	SDL_UpdateWindowSurface(_window);
+	
 }
 
 void VirtualMachine::Cleanup()
@@ -2529,15 +2375,8 @@ void VirtualMachine::Cleanup()
 	}
 
 	for (auto &p : _sprites)
-	{
-		Sprite &s = p.second;
-		for (Costume *c : s.costumes)
-			delete c;
-	}
+		delete p.second;
 	_sprites.clear();
-
-	for (Costume *c : _stage.costumes)
-		delete c;
 
 	_loader = nullptr;
 }
@@ -2551,7 +2390,12 @@ void VirtualMachine::Scheduler()
 
 	ls_lock(_lock);
 
-	InitGraphics();
+	int64_t spriteCount = _sprites.size();
+	_renderer = new GLRenderer(spriteCount);
+
+	// Initialize graphics resources
+	for (auto &p : _sprites)
+		p.second->InitGraphics(_loader, _renderer);
 
 	_running = true;
 	ls_cond_signal(_cond);
@@ -2689,8 +2533,8 @@ void VirtualMachine::Scheduler()
 
 		for (auto &p : _sprites)
 		{
-			Sprite &s = p.second;
-			GlideInfo &g = s.glide;
+			Sprite *s = p.second;
+			GlideInfo &g = *s->GetGlide();
 
 			if (g.start < 0.0)
 				continue; // not gliding
@@ -2699,30 +2543,22 @@ void VirtualMachine::Scheduler()
 			if (t >= 1.0)
 			{
 				// done gliding
-				s.x = g.x1;
-				s.y = g.y1;
+				s->SetXY(g.x1, g.y1);
 				g.start = -1.0;
 			}
 			else
 			{
 				// linear interpolation
-				s.x = g.x0 + (g.x1 - g.x0) * t;
-				s.y = g.y0 + (g.y1 - g.y0) * t;
+				s->SetXY(g.x0 + (g.x1 - g.x0) * t, g.y0 + (g.y1 - g.y0) * t);
 			}
 		}
 
-		//if (_time >= nextFrame)
-		//{
-			// TODO: do something with rendering
-
-		if (_hasGraphics)
+		if (_renderer)
 			Render();
 
 		// Wait for the next frame
 		ls_sleep((unsigned long)(1000.0 / FRAMERATE));
 
-			//nextFrame = _time + 1.0 / FRAMERATE;
-		//}
 
 		ls_lock(_lock);
 

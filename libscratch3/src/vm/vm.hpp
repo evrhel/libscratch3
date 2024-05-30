@@ -40,8 +40,8 @@
 
 class Loader;
 class VirtualMachine;
-struct Sprite;
-struct GlideInfo;
+class Sprite;
+class GLRenderer;
 
 enum ExceptionType
 {
@@ -93,52 +93,6 @@ struct Script
 
 	Frame frames[SCRIPT_DEPTH]; // Execution frames
 	uintptr_t fp; // Frame pointer (grows downwards)
-};
-
-struct GlideInfo
-{
-	double x0 = 0.0, y0 = 0.0; // Source glide position
-	double x1 = 0.0, y1 = 0.0; // Target glide position
-	double start = -1.0, end = 0.0; // Start and end times
-};
-
-#define MESSAGE_STATE_NONE 0
-#define MESSAGE_STATE_SAY 1
-#define MESSAGE_STATE_THINK 2
-
-// Sprite state
-struct Sprite
-{
-	std::string name;
-	bool isStage = false;
-
-	double x = 0.0, y = 0.0;
-	double direction = 90.0;
-
-	GlideInfo glide;
-
-	std::string message;
-	int messageState = MESSAGE_STATE_NONE;
-
-	int64_t costume = 1;
-	std::vector<Costume *> costumes;
-
-	double size = 100.0;
-	bool visible = true;
-	int64_t layer = 0;
-
-	struct
-	{
-		double color = 0;
-		double fisheye = 0;
-		double whirl = 0;
-		double pixelate = 0;
-		double mosaic = 0;
-		double brightness = 0;
-		double ghost = 0;
-	} graphics;
-
-	double volume = 100.0;
 };
 
 class VirtualMachine final
@@ -327,7 +281,7 @@ public:
 	
 	bool GetKey(int scancode) const
 	{
-		if (!_hasGraphics)
+		if (!_renderer)
 			return false;
 		if (scancode == -1)
 			return _keysPressed > 0;
@@ -335,8 +289,6 @@ public:
 			return false;
 		return _keyStates[scancode];
 	}
-
-	constexpr bool IsHeadless() const { return !_hasGraphics; }
 
 	Sprite *FindSprite(const std::string &name);
 
@@ -353,10 +305,8 @@ private:
 	std::string _progName; // Name of the program
 	Loader *_loader; // Loader for the program
 
-	std::unordered_map<std::string, Sprite> _sprites;
+	std::unordered_map<std::string, Sprite *> _sprites;
 	std::unordered_map<std::string, Value> _variables;
-
-	Sprite _stage; // Stage sprite
 
 	std::vector<Script> _scripts; // All scripts
 
@@ -369,12 +319,7 @@ private:
 	// Graphics
 	//
 
-	bool _hasGraphics; // graphics enabled
-	SDL_Window *_window; // window
-	SDL_Renderer *_sdlRenderer; // renderer
-	SDL_Surface *_sdlSurface; // SDL surface
-	cairo_surface_t *_cairoSurface; // cairo surface
-	cairo_t *_cairo; // cairo context
+	GLRenderer *_renderer; // Renderer
 
 	//
 	/////////////////////////////////////////////////////////////////

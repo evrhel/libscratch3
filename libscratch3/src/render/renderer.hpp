@@ -78,6 +78,8 @@ public:
     //! 0 is an invalid layer, as it is reserved for the stage.
     void SetLayer(intptr_t sprite, int64_t layer);
 
+    void MoveLayer(intptr_t sprite, int64_t direction);
+
     //! \brief Test whether a sprite is touching a color
     //!
     //! \param sprite ID of the sprite to test

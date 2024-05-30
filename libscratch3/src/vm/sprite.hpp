@@ -18,17 +18,41 @@ struct AABB
     Vector2 lo, hi;
 };
 
+struct GlideInfo
+{
+	double x0 = 0.0, y0 = 0.0; // Source glide position
+	double x1 = 0.0, y1 = 0.0; // Target glide position
+	double start = -1.0, end = 0.0; // Start and end times
+};
+
+#define MESSAGE_STATE_NONE 0
+#define MESSAGE_STATE_SAY 1
+#define MESSAGE_STATE_THINK 2
+
 class Sprite
 {
 public:
     constexpr const std::string &GetName() const { return _name; }
+    constexpr bool IsStage() const { return _isStage; }
+    
+    constexpr const std::string &GetMessage() const { return _message; }
+    constexpr int GetMessageState() const { return _messageState; }
+    inline void SetMessage(const std::string &message, int state) { _message = message, _messageState = state; }
+    inline void ClearMessage() { _message.clear(), _messageState = MESSAGE_STATE_NONE; }
+
+    constexpr GlideInfo *GetGlide() { return &_glide; }
 
     constexpr bool IsShown() const { return _shown; }
     constexpr void SetShown(bool shown) { _shown = shown; }
 
     constexpr double GetX() const { return _x; }
+    constexpr void SetX(double x) { _x = x, _transDirty = true; }
     constexpr double GetY() const { return _y; }
+    constexpr void SetY(double y) { _y = y, _transDirty = true; }
     constexpr void SetXY(double x, double y) { _x = x, _y = y, _transDirty = true; }
+
+    void SetLayer(int64_t layer);
+    void MoveLayer(int64_t amount);
 
     constexpr double GetSize() const { return _size; }
     constexpr void SetSize(double size) { _size = size, _transDirty = true; }
@@ -39,11 +63,8 @@ public:
     constexpr int64_t GetCostume() const { return _costume; }
     constexpr void SetCostume(int64_t costume)
     {
-        // clamp costume number
-        if (costume < 1)
-            costume = 1;
-        else if (costume > _nCostumes)
-            costume = _nCostumes;
+        // wrap around
+        costume = (costume - 1) % _nCostumes + 1;
 
         if (_costume != costume)
         {
@@ -73,28 +94,36 @@ public:
     constexpr double GetGhostEffect() const { return _ghostEffect; }
     constexpr void SetGhostEffect(double ghostEffect) { _ghostEffect = ghostEffect, _effectDirty = true; }
 
-    bool TouchingColor(GLRenderer *renderer, int64_t color) const;
+    constexpr double GetVolume() const { return _volume; }
+    constexpr void SetVolume(double volume) { _volume = volume; }
+
+    bool TouchingColor(int64_t color) const;
 
     bool TouchingSprite(const Sprite *sprite) const;
 
     bool TouchingPoint(const Vector2 &point) const;
 
-    void Validate();
+    void Update();
 
-    void PrepareRender(GLRenderer *renderer);
+    // call from the renderer thread
+    void InitGraphics(Loader *loader, GLRenderer *renderer);
 
-    bool Load(Loader *loader, SpriteDef *def);
-
-    Sprite();
+    Sprite(SpriteDef *def);
     ~Sprite();
 private:
     std::string _name;
+    bool _isStage = false;
 
     bool _shown = true;
 
     double _x = 0.0, _y = 0.0;
     double _size = 100.0;
     double _direction = 90.0;
+
+    GlideInfo _glide;
+
+	std::string _message;
+	int _messageState = MESSAGE_STATE_NONE;
     
     int64_t _costume = 1;
     Costume *_costumes = nullptr;
@@ -112,8 +141,14 @@ private:
     double _ghostEffect = 0.0;
     bool _effectDirty = true;
 
+    double _volume = 100.0;
+
     Matrix4 _model, _invModel;
     AABB _bbox;
+
+    GLRenderer *_renderer = nullptr;
+
+    SpriteDef *_node = nullptr; // weak ref to source node
 
     bool CheckSpriteAdv(const Sprite *sprite) const;
     bool CheckPointAdv(const Vector2 &point) const;

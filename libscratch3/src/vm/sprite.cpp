@@ -1,6 +1,7 @@
 #include "sprite.hpp"
 
 #include "../render/renderer.hpp"
+#include "../ast/ast.hpp"
 
 // create AABB at the origin with the given size
 static constexpr AABB &CenterAABB(AABB &self, const Vector2 &size)
@@ -62,11 +63,26 @@ static constexpr bool AABBContains(const AABB &a, const Vector2 &p)
            p.y >= a.lo.y && p.y <= a.hi.y;
 }
 
-bool Sprite::TouchingColor(GLRenderer *renderer, int64_t color) const
+void Sprite::SetLayer(int64_t layer)
 {
-    if (!renderer)
-        return true;
+    if (!_renderer)
+        return;
+    _renderer->SetLayer(_drawable, layer);
+}
 
+void Sprite::MoveLayer(int64_t amount)
+{
+    if (!_renderer)
+        return;
+    _renderer->MoveLayer(_drawable, amount);
+}
+
+bool Sprite::TouchingColor(int64_t color) const
+{
+    if (!_renderer)
+        return true;
+        
+    // TODO: implement
     return true;
 }
 
@@ -92,7 +108,7 @@ bool Sprite::TouchingPoint(const Vector2 &point) const
     return CheckPointAdv(point);
 }
 
-void Sprite::Validate()
+void Sprite::Update()
 {
     if (_transDirty)
     {
@@ -114,21 +130,56 @@ void Sprite::Validate()
         // compute bounding box
         ApplyTransformation(CenterAABB(_bbox, cSize), _model);
 
+        if (_renderer)
+        {
+            // update sprite render info
+            SpriteRenderInfo *s = _renderer->GetRenderInfo(_drawable);
+            s->model = _model;
+            s->colorEffect = clamp(mod(static_cast<float>(_colorEffect), 200.0f), 0.0f, 1.0f);
+            s->brightnessEffect = clamp(static_cast<float>(_brightnessEffect / 100.0), 0.0f, 1.0f);
+            s->fisheyeEffect = clamp(static_cast<float>(_fisheyeEffect / 100.0), 0.0f, 1.0f);
+            s->whirlEffect = clamp(static_cast<float>(_whirlEffect / 100.0), 0.0f, 1.0f);
+            s->pixelateEffect = clamp(static_cast<float>(_pixelateEffect / 100.0), 0.0f, 1.0f);
+            s->mosaicEffect = clamp(static_cast<float>(_mosaicEffect / 100.0), 0.0f, 1.0f);
+            s->ghostEffect = clamp(static_cast<float>(_ghostEffect / 100.0), 0.0f, 1.0f);
+            s->texture = c->GetTexture();
+            s->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+        }
+
         _transDirty = false;
     }
 }
 
-void Sprite::PrepareRender(GLRenderer *renderer)
+void Sprite::InitGraphics(Loader *loader, GLRenderer *renderer)
 {
+    _renderer = renderer;
 
+    _x = _node->x;
+    _y = _node->y;
+    _direction = _node->direction;
+    _costume = _node->currentCostume;
+    _size = _node->size;
+    _volume = _node->volume;
+
+    if (_node->costumes)
+    {
+        _nCostumes = _node->costumes->costumes.size();
+        _costumes = new Costume[_nCostumes];
+
+        size_t i = 0;
+        for (AutoRelease<CostumeDef> &cd : _node->costumes->costumes)
+        {
+            Costume &c = _costumes[i++];
+            c.Load(loader, *cd);
+        }
+    }
+    
+    SetLayer(_node->layer);
 }
 
-bool Sprite::Load(Loader *loader, SpriteDef *def)
-{
-    return false;
-}
-
-Sprite::Sprite() {}
+Sprite::Sprite(SpriteDef *def) :
+    _name(def->name), _isStage(def->isStage),
+    _node(def) { }
 
 Sprite::~Sprite()
 {

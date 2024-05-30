@@ -171,6 +171,19 @@ void GLRenderer::SetLayer(intptr_t sprite, int64_t layer)
     s->_layer = newLayer;
 }
 
+void GLRenderer::MoveLayer(intptr_t sprite, int64_t direction)
+{
+    if (sprite <= SPRITE_STAGE || sprite >= _spriteCount)
+        return;
+
+    int64_t newLayer = _sprites[sprite]._layer + direction;
+
+    if (newLayer < 1) newLayer = 1;
+    else if (newLayer >= _spriteCount) newLayer = _spriteCount - 1;
+
+    SetLayer(sprite, newLayer);
+}
+
 bool GLRenderer::TouchingColor(intptr_t sprite, const Vector3 &color)
 {
     if (sprite < 1 || sprite >= _spriteCount)
