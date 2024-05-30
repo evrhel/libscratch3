@@ -76,14 +76,17 @@ void Costume::Load(Loader *loader, CostumeDef *def)
 		rsvg_handle_get_dimensions(_handle, &dim);
 
 		// clamp to max texture size
-		_svgWidth = std::min(dim.width, MAX_TEXTURE_SIZE);
-		_svgHeight = std::min(dim.height, MAX_TEXTURE_SIZE);
+		_svgWidth = dim.width;
+		_svgHeight = dim.height;
+		_svgAspect = static_cast<double>(_svgWidth) / _svgHeight;
 
 		_logicalSize = IntVector2(_svgWidth, _svgHeight);
 
-		// pre-render SVG
-		RenderSVG(_svgWidth, _svgHeight);
+		// initial render
+		Render(1.0, 1.0);
 	}
+
+	_name = def->name;
 }
 
 bool Costume::TestCollision(int32_t x, int32_t y) const
@@ -96,17 +99,6 @@ bool Costume::TestCollision(int32_t x, int32_t y) const
 		return false;
 
 	return _mask[py * _texWidth + px];
-}
-
-void Costume::Render(double scale)
-{
-	if (!_handle)
-		return; // ignore non-SVGs
-
-	uint32_t width = static_cast<uint32_t>(_svgWidth * scale);
-	uint32_t height = static_cast<uint32_t>(_svgHeight * scale);
-
-	RenderSVG(width, height);
 }
 
 // https://graphics.stanford.edu/%7Eseander/bithacks.html#RoundUpPowerOf2
@@ -122,6 +114,21 @@ static constexpr uint32_t RoundUp2(uint32_t x)
 
 	return x;
 }
+
+void Costume::Render(double scale, double resolution)
+{
+	if (!_handle)
+		return; // ignore non-SVGs
+
+	uint32_t iscale = (uint32_t)mutil::ceil(scale * resolution);
+	iscale = RoundUp2(iscale);
+
+	uint32_t width = _svgWidth * iscale;
+	uint32_t height = _svgHeight * iscale;
+
+	RenderSVG(width, height);
+}
+
 Costume::Costume() :
 	_texture(0),
 	_texWidth(0), _texHeight(0),
@@ -129,6 +136,7 @@ Costume::Costume() :
 {
 	_handle = nullptr;
 	_svgWidth = _svgHeight = 0;
+	_svgAspect = 1.0;
 }
 
 Costume::~Costume()
@@ -160,15 +168,8 @@ void Costume::RenderSVG(uint32_t width, uint32_t height)
 	constexpr uint32_t signBit = 0x80000000;
 	if ((width & signBit) || (height & signBit))
 		return; // invalid size
-	
-	// round up to nearest power of 2
-	width = RoundUp2(width);
-	height = RoundUp2(height);
 
-	width = std::min<uint32_t>(width, MAX_TEXTURE_SIZE);
-	height = std::min<uint32_t>(height, MAX_TEXTURE_SIZE);
-
-	if (width < _svgWidth && height < _svgHeight)
+	if (width <= _texWidth && height <= _texHeight)
 		return; // already rendered a larger texture
 
 	printf("Costume::Render: Rendering SVG at %dx%d\n", width, height);
@@ -190,6 +191,11 @@ void Costume::RenderSVG(uint32_t width, uint32_t height)
 		return;
 	}
 
+	double scaleX = static_cast<double>(width) / _svgWidth;
+	double scaleY = static_cast<double>(height) / _svgHeight;
+	cairo_scale(cr, scaleX, -scaleY);
+	cairo_translate(cr, 0, -_svgHeight);
+
 	// render to cairo surface
 	if (!rsvg_handle_render_cairo(_handle, cr))
 	{
@@ -199,8 +205,10 @@ void Costume::RenderSVG(uint32_t width, uint32_t height)
 		return;
 	}
 
-	unsigned char *data = cairo_image_surface_get_data(surface);
+	// TODO: flip vertically
 
+	// generate mask
+	unsigned char *data = cairo_image_surface_get_data(surface);
 	if (!GenMaskForPixels(data, width, height))
 	{
 		printf("Costume::Render: Failed to generate mask\n");
@@ -210,9 +218,9 @@ void Costume::RenderSVG(uint32_t width, uint32_t height)
 	}
 
 	// create texture
-	GLuint texture;
-	glGenTextures(1, &texture);
-	glBindTexture(GL_TEXTURE_2D, texture);
+	if (!_texture)
+		glGenTextures(1, &_texture);
+	glBindTexture(GL_TEXTURE_2D, _texture);
 
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, data);
 
@@ -222,14 +230,11 @@ void Costume::RenderSVG(uint32_t width, uint32_t height)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+	glTexParameterf(GL_TEXTURE_2D, 0x84FE, 16); // GL_TEXTURE_MAX_ANISOTROPY
+
 	// we use mipmaps on SVGs to reduce aliasing when shrinking as we do not ever
 	// re-render at a lower resolution
 	glGenerateMipmap(GL_TEXTURE_2D);
-
-	// update properties
-	if (_texture)
-		glDeleteTextures(1, &_texture);
-	_texture = texture;
 
 	_texWidth = width;
 	_texHeight = height;

@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include <mutil/mutil.h>
 
@@ -61,8 +62,12 @@ public:
     constexpr void SetDirection(double direction) { _direction = direction, _transDirty = true; }
 
     constexpr int64_t GetCostume() const { return _costume; }
+    constexpr const std::string &GetCostumeName() const { return _costumes[_costume - 1].GetName(); }
     constexpr void SetCostume(int64_t costume)
     {
+        if (!_nCostumes)
+            return; // no costumes, prevent division by zero
+
         // wrap around
         costume = (costume - 1) % _nCostumes + 1;
 
@@ -72,6 +77,12 @@ public:
             _transDirty = true;
         }
     }
+
+    void SetCostume(const std::string &name);
+
+    constexpr int64_t CostumeCount() const { return _nCostumes; }
+
+    constexpr intptr_t GetDrawable() const { return _drawable; }
 
     constexpr double GetColorEffect() const { return _colorEffect; }
     constexpr void SetColorEffect(double colorEffect) { _colorEffect = colorEffect, _effectDirty = true; }
@@ -103,12 +114,17 @@ public:
 
     bool TouchingPoint(const Vector2 &point) const;
 
+    // call from render thread
     void Update();
 
-    // call from the renderer thread
-    void InitGraphics(Loader *loader, GLRenderer *renderer);
+    void Init(SpriteDef *def);
 
-    Sprite(SpriteDef *def);
+    // call from render thread
+    void Load(Loader *loader, GLRenderer *renderer);
+
+    void DebugUI() const;
+
+    Sprite();
     ~Sprite();
 private:
     std::string _name;
@@ -129,6 +145,8 @@ private:
     Costume *_costumes = nullptr;
     int64_t _nCostumes = 0;
 
+    std::unordered_map<std::string, int64_t> _costumeNames;
+
     bool _transDirty = true;
     intptr_t _drawable = -1; // drawable sprite
 
@@ -148,10 +166,11 @@ private:
 
     GLRenderer *_renderer = nullptr;
 
-    SpriteDef *_node = nullptr; // weak ref to source node
+    SpriteDef *_node = nullptr;
 
     bool CheckSpriteAdv(const Sprite *sprite) const;
     bool CheckPointAdv(const Vector2 &point) const;
 
+    // call from render thread
     void Cleanup();
 };

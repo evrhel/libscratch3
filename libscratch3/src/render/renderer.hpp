@@ -25,7 +25,7 @@ class SpriteRenderInfo final
 public:
     constexpr int64_t GetLayer() const { return _layer; }
 
-    void Update(SpriteShader *ss);
+    void Prepare(SpriteShader *ss);
 
     SpriteRenderInfo();
     ~SpriteRenderInfo();
@@ -62,7 +62,11 @@ public:
     constexpr int GetLogicalBottom() const { return _bottom; }
     constexpr int GetLogicalTop() const { return _top; }
 
+    constexpr double GetScale() const { return _scale; }
+
     void ScreenToStage(int x, int y, int64_t *xout, int64_t *yout) const;
+
+    void StageToScreen(int64_t x, int64_t y, int *xout, int *yout) const;
 
     //! \brief Create a new sprite
     //!
@@ -108,6 +112,8 @@ public:
 
     void EndRender();
 
+    void Resize();
+
     //! \brief Create a new renderer
     //!
     //! \param spriteCount The maximum number of sprites to render,
@@ -120,6 +126,8 @@ private:
 
     int _left, _right;
     int _bottom, _top;
+
+    double _scale;
     
     Matrix4 _proj;
 

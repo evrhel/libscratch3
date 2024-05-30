@@ -1,14 +1,15 @@
 #include "sprite.hpp"
 
+#include <imgui.h>
+
 #include "../render/renderer.hpp"
 #include "../ast/ast.hpp"
 
-// create AABB at the origin with the given size
-static constexpr AABB &CenterAABB(AABB &self, const Vector2 &size)
+// create AABB at the origin with extents [-0.5, 0.5]
+static constexpr AABB &CenterAABB(AABB &self)
 {
-    Vector2 half = size / 2.0f;
-    self.lo = -half;
-    self.hi = half;
+    self.lo = Vector2(-0.5f);
+    self.hi = Vector2(0.5f);
     return self;
 }
 
@@ -77,6 +78,13 @@ void Sprite::MoveLayer(int64_t amount)
     _renderer->MoveLayer(_drawable, amount);
 }
 
+void Sprite::SetCostume(const std::string &name)
+{
+    auto it = _costumeNames.find(name);
+    if (it != _costumeNames.end())
+        SetCostume(it->second);
+}
+
 bool Sprite::TouchingColor(int64_t color) const
 {
     if (!_renderer)
@@ -105,7 +113,9 @@ bool Sprite::TouchingPoint(const Vector2 &point) const
     // fast AABB check
     if (!AABBContains(_bbox, point))
         return false;
-    return CheckPointAdv(point);
+
+    return true;
+    //return CheckPointAdv(point);
 }
 
 void Sprite::Update()
@@ -113,55 +123,100 @@ void Sprite::Update()
     SpriteRenderInfo *s = _renderer->GetRenderInfo(_drawable);
     s->shouldRender = _shown;
 
+    double uniformScale = _size / 100;
+    Costume *c = _costumes + _costume - 1;
+
     if (_transDirty)
     {
-        Costume *c = _costumes + _costume - 1;
-
         const Vector2 &cCenter = c->GetLogicalCenter();
         const Vector2 cSize = Vector2(c->GetLogicalSize());
 
-        Vector2 size = cSize * static_cast<float>(_size / 100);
+        Vector2 size = cSize * static_cast<float>(uniformScale);
 
         // setup matrices
 
         Matrix4 scale = mutil::scale(Matrix4(), Vector3(size, 1.0f));
         Matrix4 transPos = mutil::translate(Matrix4(), Vector3(_x, _y, 0.0f));
-        Quaternion q = mutil::rotateaxis(Vector3(0.0f, 0.0f, 1.0f), mutil::radians(_direction));
+        Quaternion q = mutil::rotateaxis(Vector3(0.0f, 0.0f, 1.0f), mutil::radians(_direction - 90.0));
         Matrix4 transCenter = mutil::translate(Matrix4(), Vector3(-cCenter, 0.0f));
 
         // compute model matrix
-        _model = transPos * scale;  //scale;//transPos * mutil::torotation(q) * transCenter * scale;
+        _model = transPos * mutil::torotation(q) * transCenter * scale;
         _invModel = mutil::inverse(_model);
 
         // compute bounding box
-        ApplyTransformation(CenterAABB(_bbox, cSize), _model);
+        ApplyTransformation(CenterAABB(_bbox), _model);
 
         // update sprite render info
         s->model = _model;
-        s->colorEffect = clamp(mod(static_cast<float>(_colorEffect), 200.0f), 0.0f, 1.0f);
-        s->brightnessEffect = clamp(static_cast<float>(_brightnessEffect / 100.0), 0.0f, 1.0f);
-        s->fisheyeEffect = clamp(static_cast<float>(_fisheyeEffect / 100.0), 0.0f, 1.0f);
-        s->whirlEffect = clamp(static_cast<float>(_whirlEffect / 100.0), 0.0f, 1.0f);
-        s->pixelateEffect = clamp(static_cast<float>(_pixelateEffect / 100.0), 0.0f, 1.0f);
-        s->mosaicEffect = clamp(static_cast<float>(_mosaicEffect / 100.0), 0.0f, 1.0f);
-        s->ghostEffect = clamp(static_cast<float>(_ghostEffect / 100.0), 0.0f, 1.0f);
         s->texture = c->GetTexture();
-        s->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 
         _transDirty = false;
     }
+
+    if (_effectDirty)
+    {
+        s->colorEffect = mutil::mod(static_cast<float>(_colorEffect / 200), 1.0f);
+        s->brightnessEffect = clamp(static_cast<float>(_brightnessEffect / 100), -1.0f, 1.0f);
+        s->fisheyeEffect = mutil::max(0.0f, static_cast<float>(_fisheyeEffect + 100) / 100.0f);
+        s->whirlEffect = -_whirlEffect * MUTIL_PI / 180.0f;
+        s->pixelateEffect = mutil::abs(static_cast<float>(_pixelateEffect)) / 10;
+        s->mosaicEffect = mutil::clamp(mutil::round(mutil::abs(static_cast<float>(_mosaicEffect) + 10) / 10), 1.0f, 512.0f);
+        s->ghostEffect = clamp(static_cast<float>(_ghostEffect / 100), 0.0f, 1.0f);
+        s->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+        _effectDirty = false;
+    }
+
+    c->Render(uniformScale, _renderer->GetScale());
 }
 
-void Sprite::InitGraphics(Loader *loader, GLRenderer *renderer)
+void Sprite::Init(SpriteDef *def)
 {
-    _renderer = renderer;
+    if (_node)
+        return; // already initialized
 
-    _x = _node->x;
-    _y = _node->y;
-    _direction = _node->direction;
-    _costume = _node->currentCostume;
-    _size = _node->size;
-    _volume = _node->volume;
+    _isStage = def->isStage;
+
+    _nCostumes = def->costumes->costumes.size();
+    if (_nCostumes)
+    {
+        _costumes = new Costume[_nCostumes];
+        for (int64_t i = 0; i < _nCostumes; i++)
+        {
+            CostumeDef *cdef = *def->costumes->costumes[i];
+            _costumeNames[cdef->name] = i + 1;
+        }
+    }
+
+    _name = def->name;
+    _shown = def->visible;
+    _x = def->x;
+    _y = def->y;
+    _size = def->size;
+    _direction = def->direction;
+    SetCostume(def->currentCostume);
+    _volume = def->volume;
+
+    _colorEffect = 0.0;
+    _brightnessEffect = 0.0;
+    _fisheyeEffect = 0.0;
+    _whirlEffect = 0.0;
+    _pixelateEffect = 0.0;
+    _mosaicEffect = 0.0;
+    _ghostEffect = 0.0;
+
+    _message.clear();
+    _messageState = MESSAGE_STATE_NONE;
+
+    _node = Retain(def);
+}
+
+void Sprite::Load(Loader *loader, GLRenderer *renderer)
+{
+    if (_renderer)
+        return; // already loaded
+
+    _renderer = renderer;
 
     if (!_isStage)
     {
@@ -169,26 +224,82 @@ void Sprite::InitGraphics(Loader *loader, GLRenderer *renderer)
         SetLayer(_node->layer);
     }
     else
-        _drawable = 0;
+        _drawable = SPRITE_STAGE;
 
     if (_node->costumes)
     {
-        _nCostumes = _node->costumes->costumes.size();
-        _costumes = new Costume[_nCostumes];
-
         size_t i = 0;
         for (AutoRelease<CostumeDef> &cd : _node->costumes->costumes)
-        {
-            Costume &c = _costumes[i++];
-            c.Load(loader, *cd);
-        }
+            _costumes[i++].Load(loader, *cd);
     }
-    
+
+    // initial update
+    Update();
 }
 
-Sprite::Sprite(SpriteDef *def) :
-    _name(def->name), _isStage(def->isStage),
-    _node(def) { }
+void Sprite::DebugUI() const
+{
+    ImGui::SeparatorText("Transform");
+    ImGui::LabelText("Position", "%.0f, %.0f", _x, _y);
+    ImGui::LabelText("Direction", "%.0f", _direction);
+    ImGui::LabelText("Size", "%.0f%%", _size);
+    ImGui::LabelText("Draw Order", "%d", _renderer->GetRenderInfo(_drawable)->GetLayer());
+    ImGui::LabelText("Bounding Box", "(%.0f, %.0f) (%.0f, %.0f), size: %.0fx%.0f",
+        		(double)_bbox.lo.x, (double)_bbox.lo.y, (double)_bbox.hi.x, (double)_bbox.hi.y,
+                (double)(_bbox.hi.x - _bbox.lo.x), (double)(_bbox.hi.y - _bbox.lo.y));
+
+    ImGui::SeparatorText("Graphics");
+    ImGui::LabelText("Visible", "%s", _shown ? "true" : "false");
+    ImGui::LabelText("Costume", "%d/%d (%s)", (int)_costume, (int)_nCostumes, _costumes[_costume - 1].GetName().c_str());
+    ImGui::LabelText("Color", "%.0f", _colorEffect);
+    ImGui::LabelText("Brightness", "%.0f", _brightnessEffect);
+    ImGui::LabelText("Fisheye", "%.0f", _fisheyeEffect);
+    ImGui::LabelText("Whirl", "%.0f", _whirlEffect);
+    ImGui::LabelText("Pixelate", "%.0f", _pixelateEffect);
+    ImGui::LabelText("Mosaic", "%.0f", _mosaicEffect);
+    ImGui::LabelText("Ghost", "%.0f", _ghostEffect);
+
+    ImGui::SeparatorText("Sound");
+    ImGui::LabelText("Volume", "%.0f%%", _volume);
+
+    ImGui::SeparatorText("Costumes");
+    constexpr float kImageHeight = 64;
+    for (int64_t id = 1; id <= _nCostumes; id++)
+    {
+        Costume *c = _costumes + id - 1;
+        ImGui::Text("[%d]: '%s' (%s), origin: (%.2f, %.2f), size: %dx%d, rendered: %dx%d",
+            (int)id,
+            c->GetName().c_str(),
+            c->IsBitmap() ? "bitmap" : "vector",
+            (double)c->GetLogicalCenter().x,
+            (double)c->GetLogicalCenter().y,
+            (int)c->GetLogicalSize().x,
+            (int)c->GetLogicalSize().y,
+            (int)c->GetTextureWidth(),
+            (int)c->GetTextureHeight());
+
+        float aspect = (float)c->GetTextureWidth() / c->GetTextureHeight();
+        float imageWidth = kImageHeight * aspect;
+
+        void *tex = (void *)(intptr_t)c->GetTexture();
+        if (tex)
+        {
+            ImGui::Image((void *)(intptr_t)c->GetTexture(), ImVec2(imageWidth, kImageHeight), ImVec2(0, 1), ImVec2(1, 0));
+            if (ImGui::IsItemHovered())
+            {
+                if (ImGui::BeginTooltip())
+                {
+                    ImGui::Image((void *)(intptr_t)c->GetTexture(), ImVec2(c->GetLogicalSize().x, c->GetLogicalSize().y), ImVec2(0, 1), ImVec2(1, 0));
+                    ImGui::EndTooltip();
+                }
+            }
+        }
+        else
+            ImGui::Text("(unloaded)");
+    }
+}
+
+Sprite::Sprite() { }
 
 Sprite::~Sprite()
 {
@@ -240,5 +351,14 @@ void Sprite::Cleanup()
         _nCostumes = 0;
     }
 
+    _drawable = -1;
+
+    _renderer = nullptr;
+
+    _messageState = MESSAGE_STATE_NONE;
+    _message.clear();
+
     _name.clear();
+
+    Release(_node), _node = nullptr;
 }

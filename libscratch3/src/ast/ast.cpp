@@ -275,9 +275,6 @@ private:
 			}
 
 			ParseVariables(variables, *sd->variables);
-
-			if (sd->variables->variables.size() == 0)
-				sd->variables = nullptr;
 		}
 
 		// Lists that this target defines
@@ -293,9 +290,6 @@ private:
 			}
 
 			ParseLists(lists, *sd->lists);
-
-			if (sd->lists->lists.size() == 0)
-				sd->lists = nullptr;
 		}
 
 		// Blocks in the target
@@ -393,6 +387,90 @@ private:
 		}
 		else
 			Warn("Missing `costumes` member in target");
+
+		if (target.HasMember("currentCostume"))
+		{
+			rapidjson::Value &currentCostume = target["currentCostume"];
+			if (!currentCostume.IsInt())
+			{
+				Error("Expected integer parsing `currentCostume` in target");
+				goto failure;
+			}
+			else
+				sd->currentCostume = currentCostume.GetInt() + 1; // 1-based index
+		}
+		else
+			Warn("Missing `currentCostume` member in target");
+
+		if (target.HasMember("layerOrder"))
+		{
+			rapidjson::Value &layerOrder = target["layerOrder"];
+			if (!layerOrder.IsInt())
+			{
+				Error("Expected integer parsing `layerOrder` in target");
+				goto failure;
+			}
+			else
+				sd->layer = layerOrder.GetInt();
+		}
+		else
+			Warn("Missing `layerOrder` member in target");
+
+		if (target.HasMember("x"))
+		{
+			rapidjson::Value &x = target["x"];
+			if (!x.IsNumber())
+			{
+				Error("Expected number parsing `x` in target");
+				goto failure;
+			}
+			else
+				sd->x = x.GetDouble();
+		}
+		else
+			Warn("Missing `x` member in target");
+
+		if (target.HasMember("y"))
+		{
+			rapidjson::Value &y = target["y"];
+			if (!y.IsNumber())
+			{
+				Error("Expected number parsing `y` in target");
+				goto failure;
+			}
+			else
+				sd->y = y.GetDouble();
+		}
+		else
+			Warn("Missing `y` member in target");
+
+		if (target.HasMember("size"))
+		{
+			rapidjson::Value &size = target["size"];
+			if (!size.IsNumber())
+			{
+				Error("Expected number parsing `size` in target");
+				goto failure;
+			}
+			else
+				sd->size = size.GetDouble();
+		}
+		else
+			Warn("Missing `size` member in target");
+
+		if (target.HasMember("direction"))
+		{
+			rapidjson::Value &direction = target["direction"];
+			if (!direction.IsNumber())
+			{
+				Error("Expected number parsing `direction` in target");
+				goto failure;
+			}
+			else
+				sd->direction = direction.GetDouble();
+		}
+		else
+			Warn("Missing `direction` member in target");
 
 		// TODO: parse other members
 

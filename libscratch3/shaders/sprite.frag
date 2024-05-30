@@ -41,8 +41,8 @@ vec2 mosaicEffect(vec2 uv)
 
 vec2 pixelateEffect(vec2 uv)
 {
-    vec2 textureSize = vec2(textureSize(uTexture, 0)) / uPixelateEffect;
-    return (floor(uv * textureSize) + 0.5) / textureSize;
+    vec2 size = vec2(textureSize(uTexture, 0)) / uPixelateEffect;
+    return (floor(uv * size) + 0.5) / size;
 }
 
 vec2 whirlEffect(vec2 uv)
@@ -103,10 +103,10 @@ void main()
 {
     vec2 texCoord = TexCoords;
 
-   // texCoord = mosaicEffect(texCoord);
+    texCoord = mosaicEffect(texCoord);
     //texCoord = pixelateEffect(texCoord);
-    //texCoord = whirlEffect(texCoord);
-    //texCoord = fisheyeEffect(texCoord);
+    texCoord = whirlEffect(texCoord);
+    texCoord = fisheyeEffect(texCoord);
 
     vec4 color = texture(uTexture, texCoord);
 

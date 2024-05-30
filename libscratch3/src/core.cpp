@@ -2,6 +2,7 @@
 
 #include <lysys/lysys.hpp>
 #include <glib.h>
+#include <librsvg/rsvg.h>
 
 #include "resource.hpp"
 #include "ast/ast.hpp"
@@ -32,6 +33,7 @@ Scratch3 *Scratch3_Create(const char *path, Scratch3_LogCallback log, void *up)
 	int rc;
 
 	g_type_init();
+	rsvg_init();
 
 	// Get type of input file
 	rc = ls_stat(path, &st);
@@ -66,6 +68,8 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT
 void Scratch3_Destroy(Scratch3 *scratch3)
 {
 	delete scratch3;
+
+	rsvg_term();
 }
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT

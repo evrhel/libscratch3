@@ -44,7 +44,7 @@ static SpriteShader *CreateSpriteShader()
     return ss;
 }
 
-void SpriteRenderInfo::Update(SpriteShader *ss)
+void SpriteRenderInfo::Prepare(SpriteShader *ss)
 {
     ss->SetModel(model);
     ss->SetColorEffect(colorEffect);
@@ -83,6 +83,15 @@ void GLRenderer::ScreenToStage(int x, int y, int64_t *xout, int64_t *yout) const
 
     *xout = (x - width / 2) * (_right - _left) / width;
     *yout = (height / 2 - y) * (_top - _bottom) / height;
+}
+
+void GLRenderer::StageToScreen(int64_t x, int64_t y, int *xout, int *yout) const
+{
+    int width, height;
+	SDL_GetWindowSize(_window, &width, &height);
+
+	*xout = x * width / (_right - _left) + width / 2;
+	*yout = height / 2 - y * height / (_top - _bottom);
 }
 
 intptr_t GLRenderer::CreateSprite()
@@ -146,13 +155,19 @@ void GLRenderer::SetLayer(intptr_t sprite, int64_t layer)
     {
         // shift elements down
         for (int64_t *i = start; i < target; i++)
+        {
             *i = *(i + 1);
+            _sprites[*i]._layer--;
+        }
     }
     else
     {
         // shift elements up
         for (int64_t *i = start; i > target; i--)
+        {
             *i = *(i - 1);
+            _sprites[*i]._layer++;
+        }
     }
 
     // insert the sprite
@@ -221,12 +236,9 @@ void GLRenderer::Render()
     _spriteShader->Use();
     _spriteShader->SetProj(_proj);
 
-    int spritesVisible = 0;
-
     // draw stage sperately, pen is on top of stage, but below sprites
-    _sprites[0].Update(_spriteShader);
+    _sprites[0].Prepare(_spriteShader);
     DrawQuad();
-    spritesVisible++;
 
     // TODO: draw pen
 
@@ -237,11 +249,10 @@ void GLRenderer::Render()
         SpriteRenderInfo &s = _sprites[*it];
         if (s.shouldRender)
         {
-            s.Update(_spriteShader);
+            s.Prepare(_spriteShader);
             DrawQuad();
-            spritesVisible++;
         }
-    }    
+    }
 }
 
 void GLRenderer::EndRender()
@@ -252,11 +263,22 @@ void GLRenderer::EndRender()
     SDL_GL_SwapWindow(_window);
 }
 
+void GLRenderer::Resize()
+{
+    int width, height;
+    SDL_GL_GetDrawableSize(_window, &width, &height);
+
+    double viewWidth = _right - _left;
+    double viewHeight = _top - _bottom;
+    _scale = std::max(width / viewWidth, height / viewHeight);
+}
+
 GLRenderer::GLRenderer(int64_t spriteCount) :
     _window(nullptr),
     _context(nullptr),
     _left(0), _right(0),
     _bottom(0), _top(0),
+    _scale(0.0),
     _spriteShader(nullptr),
     _sprites(nullptr), _spriteCount(0)
 {
@@ -323,6 +345,7 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
 
     SetLogicalSize(-VIEWPORT_WIDTH / 2, VIEWPORT_WIDTH / 2,
         -VIEWPORT_HEIGHT / 2, VIEWPORT_HEIGHT / 2);
+    Resize();
 }
 
 GLRenderer::~GLRenderer()

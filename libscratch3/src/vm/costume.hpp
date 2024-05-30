@@ -23,6 +23,8 @@ class CostumeDef;
 class Costume
 {
 public:
+	constexpr const std::string &GetName() const { return _name; }
+
 	//! \brief Returns the texture of the costume
 	//!
 	//! \return An OpenGL texture
@@ -69,7 +71,10 @@ public:
 	//! \brief Render the costume to a texture of a given size
 	//!
 	//! \param scale The scale of the costume
-	void Render(double scale);
+	//! \param resolution The resolution of the viewport
+	void Render(double scale, double resolution);
+
+	constexpr bool IsBitmap() const { return _handle == nullptr; }
 
 	Costume &operator=(const Costume &) = delete;
 	Costume &operator=(Costume &&) = delete;
@@ -79,6 +84,8 @@ public:
 	Costume(Costume &&) = delete;
 	~Costume();
 private:
+	std::string _name;
+
 	GLuint _texture;
 	GLuint _texWidth, _texHeight;
 	uint8_t *_mask; // collision mask
@@ -89,6 +96,7 @@ private:
 	// svg specific
 	RsvgHandle *_handle;
 	int _svgWidth, _svgHeight;
+	double _svgAspect;
 
 	void Cleanup();
 

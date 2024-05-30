@@ -36,7 +36,7 @@
 #define SCRIPT_DEPTH 32
 
 // Rate at which scripts are executed, 0 = unlimited
-#define FRAMERATE 60
+#define FRAMERATE 30
 
 class Loader;
 class VirtualMachine;
@@ -296,6 +296,8 @@ public:
 
 	Sprite *FindSprite(const std::string &name);
 
+	Sprite *FindSprite(intptr_t id);
+
 	void ResetTimer();
 
 	void Glide(Sprite *sprite, double x, double y, double s);
@@ -309,8 +311,12 @@ private:
 	std::string _progName; // Name of the program
 	Loader *_loader; // Loader for the program
 
-	std::unordered_map<std::string, Sprite *> _sprites;
-	std::unordered_map<std::string, Value> _variables;
+	Sprite *_sprites; // All sprites
+	Sprite *_spritesEnd; // End of the sprite list
+
+	std::unordered_map<std::string, intptr_t> _spriteNames; // Sprite name lookup
+
+	std::unordered_map<std::string, Value> _variables; // Global variables
 
 	std::vector<Script> _scripts; // All scripts
 
@@ -353,13 +359,16 @@ private:
 	size_t _waitCount; // Number of threads waiting
 
 	bool _running; // VM is running
-	size_t _activeScripts; // Number of active scripts
+	int _activeScripts; // Number of active scripts
 	Value _exception; // Exception value
 
 	Script *_current; // Currently executing script
 	double _time; // VM time
 	double _lastTime; // Last time
 	double _nextExecution; // Next execution time
+	double _executionTime; // Execution time
+
+	int _allocations; // Number of allocations in a frame
 
 	ls_handle _lock;
 	ls_handle _cond;

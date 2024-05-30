@@ -1,5 +1,7 @@
 #include "astdef.hpp"
 
+#include <algorithm>
+
 const char *const RotationStyleStrings[RotationStyle_Count] = {
 	"unknown",
 	"left-right",
@@ -28,8 +30,11 @@ const char *const GraphicEffectStrings[GraphicEffect_Count] = {
 
 GraphicEffect GraphicEffectFromString(const std::string &str)
 {
+	std::string cap(str);
+	std::transform(cap.begin(), cap.end(), cap.begin(), ::toupper);
+
 	for (int i = 0; i < GraphicEffect_Count; i++)
-		if (str == GraphicEffectStrings[i])
+		if (cap == GraphicEffectStrings[i])
 			return (GraphicEffect)i;
 	return GraphicEffect_Unknown;
 }

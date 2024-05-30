@@ -89,10 +89,19 @@ public:
 		node->e->Accept(this);
 		std::string name = vm->ToString(vm->StackAt(0));
 		vm->Pop();
+
+		if (name == "_mouse_")
+		{
+			vm->SetBool(vm->Push(), script->sprite->TouchingPoint(Vector2(vm->GetMouseX(), vm->GetMouseY())));
+			return;
+		}
 			
 		Sprite *sprite = vm->FindSprite(name);
 		if (!sprite)
+		{
 			vm->SetBool(vm->Push(), false);
+			return;
+		}
 
 		vm->SetBool(vm->Push(), script->sprite->TouchingSprite(sprite));
 	}
@@ -115,8 +124,23 @@ public:
 
 	virtual void Visit(DistanceTo *node)
 	{
-		// TODO: implement
-		vm->SetReal(vm->Push(), INFINITY);
+		node->e->Accept(this);
+
+		std::string name = vm->ToString(vm->StackAt(0));
+
+		vm->Pop();
+
+		Sprite *s = vm->FindSprite(name);
+		if (!s)
+		{
+			vm->SetReal(vm->Push(), -1.0);
+			return;
+		}
+
+		double dx = s->GetX() - script->sprite->GetX();
+		double dy = s->GetY() - script->sprite->GetY();
+
+		vm->SetReal(vm->Push(), sqrt(dx * dx + dy * dy));
 	}
 
 	virtual void Visit(Answer *node)
@@ -206,8 +230,53 @@ public:
 
 	virtual void Visit(PropertyOf *node)
 	{
-		// TODO: implement
-		vm->Push(); // None
+		node->e->Accept(this);
+		std::string name = vm->ToString(vm->StackAt(0));
+		vm->Pop();
+
+		Sprite *s = vm->FindSprite(name);
+		if (!s)
+		{
+			vm->Push();
+			return;
+		}
+		
+		switch (node->target)
+		{
+		default:
+			vm->Push();
+			break;
+		case PropertyTarget_BackdropNumber:
+			vm->SetInteger(vm->Push(), 1);
+			break;
+		case PropertyTarget_BackdropName:
+			vm->SetString(vm->Push(), "backdrop1");
+			break;
+		case PropertyTarget_XPosition:
+			vm->SetReal(vm->Push(), s->GetX());
+			break;
+		case PropertyTarget_YPosition:
+			vm->SetReal(vm->Push(), s->GetY());
+			break;
+		case PropertyTarget_Direction:
+			vm->SetReal(vm->Push(), s->GetDirection());
+			break;
+		case PropertyTarget_CostumeNumber:
+			vm->SetInteger(vm->Push(), s->GetCostume());
+			break;
+		case PropertyTarget_CostumeName:
+			vm->SetString(vm->Push(), s->GetCostumeName());
+			break;
+		case PropertyTarget_Size:
+			vm->SetReal(vm->Push(), s->GetSize());
+			break;
+		case PropertyTarget_Volume:
+			vm->SetReal(vm->Push(), s->GetVolume());
+			break;
+		case PropertyTarget_Variable:
+			vm->Push();
+			break;
+		}
 	}
 
 	virtual void Visit(CurrentDate *node)
@@ -960,7 +1029,7 @@ public:
 			script->sprite->SetCostume(static_cast<int64_t>(costume.u.real));
 			break;
 		case ValueType_String:
-			// TODO: lookup costume by name
+			script->sprite->SetCostume(vm->ToString(costume));
 			break;
 		default:
 			break; // do nothing
@@ -1293,11 +1362,6 @@ public:
 		Value &var = vm->FindVariable(node->name);
 		node->e->Accept(this);
 		vm->Assign(var, vm->StackAt(0));
-
-		printf("%s = %s\n",
-			node->name.c_str(),
-			vm->ToString(vm->StackAt(0)).c_str());
-
 		vm->Pop();
 	}
 
@@ -1422,22 +1486,35 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 		return -1;
 
 	std::vector<AutoRelease<SpriteDef>> &defs = prog->sprites->sprites;
+	size_t nSprites = defs.size();
+
+	if (nSprites == 0)
+	{
+		// no sprites
+		return -1;
+	}
 
 	_loader = loader;
+
+	_sprites = new Sprite[nSprites];
+	_spritesEnd = _sprites + nSprites;
 	
 	bool foundStage = false;
+	intptr_t nextSpriteId = 1;
 	for (AutoRelease<SpriteDef> &def : defs)
 	{
-		auto it = _sprites.find(def->name);
-		if (it != _sprites.end())
+		auto it = _spriteNames.find(def->name);
+		if (it != _spriteNames.end())
 		{
 			// duplicate sprite name
 			Cleanup();
 			return -1;
 		}
 
-		Sprite *sprite = new Sprite(*def);
-		_sprites[sprite->GetName()] = sprite;
+		Sprite *sprite = _sprites + nextSpriteId - 1;
+		_spriteNames[def->name] = nextSpriteId++;
+
+		sprite->Init(*def);
 
 		if (sprite->IsStage())
 		{
@@ -1451,64 +1528,57 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 			foundStage = true;
 		}
 
-		if (def->variables)
+		for (AutoRelease<VariableDef> &vdef : def->variables->variables)
 		{
-			for (AutoRelease<VariableDef> &vdef : def->variables->variables)
+			auto it = _variables.find(vdef->name);
+			if (it != _variables.end())
 			{
-				auto it = _variables.find(vdef->name);
-				if (it != _variables.end())
-				{
-					// duplicate variable name
-					Cleanup();
-					return -1;
-				}
+				// duplicate variable name
+				Cleanup();
+				return -1;
+			}
 
-				Value &v = _variables[vdef->name] = { 0 };
-				SetParsedString(v, vdef->value->value);
+			Value &v = _variables[vdef->name] = { 0 };
+			SetParsedString(v, vdef->value->value);
 
-				if (v.type == ValueType_Exception)
-				{
-					Cleanup();
-					return -1;
-				}
+			if (v.type == ValueType_Exception)
+			{
+				Cleanup();
+				return -1;
 			}
 		}
 
-		if (def->scripts)
+		for (AutoRelease<StatementList> &sl : def->scripts->sll)
 		{
-			for (AutoRelease<StatementList> &sl : def->scripts->sll)
+			Script script = { 0 };
+
+			script.state = EMBRYO;
+			script.sprite = sprite;
+			script.entry = *sl;
+
+			script.lock = ls_lock_create();
+			if (!script.lock)
 			{
-				Script script = { 0 };
-
-				script.state = EMBRYO;
-				script.sprite = sprite;
-				script.entry = *sl;
-				//script.pc = 1;
-
-				script.lock = ls_lock_create();
-				if (!script.lock)
-				{
-					Cleanup();
-					return -1;
-				}
-
-				script.sleepUntil = 0.0;
-				script.waitExpr = nullptr;
-
-				script.stack = (Value *)malloc(sizeof(Value) * STACK_SIZE);
-				if (!script.stack)
-				{
-					Cleanup();
-					return -1;
-				}
-
-				// fill stack with garbage
-				memset(script.stack, 0xab, sizeof(Value) * STACK_SIZE);
-
-				script.sp = script.stack + STACK_SIZE;
-
-				_scripts.push_back(script);
+				Cleanup();
+				return -1;
 			}
+
+			script.sleepUntil = 0.0;
+			script.waitExpr = nullptr;
+
+			script.stack = (Value *)malloc(sizeof(Value) * STACK_SIZE);
+			if (!script.stack)
+			{
+				Cleanup();
+				return -1;
+			}
+
+			// fill stack with garbage
+			memset(script.stack, 0xab, sizeof(Value) * STACK_SIZE);
+
+			script.sp = script.stack + STACK_SIZE;
+
+			_scripts.push_back(script);
 		}
 	}
 
@@ -1517,6 +1587,15 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 		// no stage
 		Cleanup();
 		return -1;
+	}
+
+	size_t len;
+	len = ls_username(nullptr, 0);
+	if (len != -1)
+	{
+		ReleaseValue(_username);
+		AllocString(_username, len);
+		ls_username(_username.u.string->str, len);
 	}
 
 	_prog = Retain(prog);
@@ -1647,10 +1726,6 @@ void VirtualMachine::WaitUntil(Expression *expr)
 {
 	_current->waitExpr = expr;
 	_current->state = WAITING;
-
-	//printf("%p in %s is waiting\n",
-	//	_current,
-	//	_current->sprite->name.c_str());
 }
 
 void VirtualMachine::AskAndWait()
@@ -1661,15 +1736,15 @@ void VirtualMachine::AskAndWait()
 void VirtualMachine::Terminate()
 {
 	_current->state = TERMINATED;
-
-	printf("%p in %s terminated\n",
-		_current,
-		_current->sprite->GetName().c_str());
 }
 
 void VirtualMachine::TerminateScript(unsigned long id)
 {
-	// TODO: implement
+	id--; // 1-indexed
+	if (id >= _scripts.size())
+		return;
+	Script &script = _scripts[id];
+	script.state = TERMINATED;
 }
 
 static void DumpScript(Script *script)
@@ -1704,8 +1779,17 @@ static void DumpScript(Script *script)
 		printf("    frames[%lld]\n", i);
 
 		const Frame &frame = script->frames[i];
+
+		const char *astTypeString;
+		if (!frame.sl)
+			astTypeString = "null";
+		else if (frame.pc < frame.sl->sl.size())
+			astTypeString = AstTypeString(frame.sl->sl[frame.pc]->GetType());
+		else
+			astTypeString = "???";
+
 		printf("        sl = %p\n", frame.sl);
-		printf("        pc = %lld (%s)\n", frame.pc, frame.sl ? AstTypeString(frame.sl->sl[frame.pc]->GetType()) : "null");
+		printf("        pc = %lld (%s)\n", frame.pc, astTypeString);
 		printf("        count = %lld\n", frame.count);
 		printf("        flags = %x\n", frame.flags);
 	}}
@@ -1829,8 +1913,6 @@ void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 	{
 		// empty loop
 		_current->frames[_current->fp].pc -= 1; // loop back to the same statement
-
-		// Raise(InvalidArgument);
 		return;
 	}
 
@@ -2229,6 +2311,8 @@ Value &VirtualMachine::AllocString(Value &v, size_t len)
 {
 	ReleaseValue(v);
 
+	_allocations++;
+
 	v.type = ValueType_String;
 	v.u.string = (String *)calloc(1, offsetof(String, str) + len + 1);
 	if (!v.u.string)
@@ -2268,7 +2352,7 @@ void VirtualMachine::FreeValue(Value &val)
 		assert(val.u.string->ref.count == 0);
 		
 		// printf("Free: `%s`\n", val.u.string->str);
-		
+				
 		free(val.u.string);
 
 		// for safety
@@ -2286,8 +2370,16 @@ Value &VirtualMachine::FindVariable(const std::string &id)
 
 Sprite *VirtualMachine::FindSprite(const std::string &name)
 {
-	auto it = _sprites.find(name);
-	return it != _sprites.end() ? it->second : nullptr;
+	auto it = _spriteNames.find(name);
+	return it != _spriteNames.end() ? FindSprite(it->second) : nullptr;
+}
+
+Sprite *VirtualMachine::FindSprite(intptr_t id)
+{
+	Sprite *s = _sprites + id - 1;
+	if (s >= _sprites && s < _spritesEnd)
+		return s;
+	return nullptr;
 }
 
 void VirtualMachine::ResetTimer()
@@ -2318,6 +2410,9 @@ VirtualMachine::VirtualMachine()
 	_prog = nullptr;
 	_loader = nullptr;
 
+	_sprites = nullptr;
+	_spritesEnd = nullptr;
+
 	_renderer = nullptr;
 
 	_answer = { 0 };
@@ -2343,9 +2438,12 @@ VirtualMachine::VirtualMachine()
 	_exception = { 0 };
 
 	_current = nullptr;
-	_time = 0.0;
-	_lastTime = 0.0;
-	_nextExecution = 0.0;
+	_time = 0;
+	_lastTime = 0;
+	_nextExecution = 0;
+	_executionTime = 0;
+
+	_allocations = 0;
 
 	_lock = ls_lock_create();
 	_cond = ls_cond_create();
@@ -2388,9 +2486,11 @@ bool VirtualMachine::InitGraphics()
 
 void VirtualMachine::DestroyGraphics()
 {
-	for (auto &p : _sprites)
-		delete p.second;
-	_sprites.clear();
+	if (_sprites)
+	{
+		delete[] _sprites, _sprites = nullptr;
+		_spritesEnd = nullptr;
+	}
 
 	if (_renderer)
 		delete _renderer, _renderer = nullptr;
@@ -2434,6 +2534,9 @@ void VirtualMachine::PollEvents()
 				_keysPressed--;
 			_keyStates[evt.key.keysym.scancode] = false;
 			break;
+		case SDL_WINDOWEVENT:
+			if (evt.window.event == SDL_WINDOWEVENT_RESIZED)
+				_renderer->Resize();
 		}
 	}
 }
@@ -2444,10 +2547,10 @@ void VirtualMachine::Render()
 
 	int spritesVisible = 0;
 
-	for (auto &p : _sprites)
+	for (Sprite *s = _sprites; s < _spritesEnd; s++)
 	{
-		p.second->Update();
-		spritesVisible += p.second->IsShown();
+		s->Update();
+		spritesVisible += s->IsShown();
 	}
 
 	_renderer->Render();
@@ -2457,52 +2560,228 @@ void VirtualMachine::Render()
 
 	if (ImGui::Begin("Debug"))
 	{
-		SDL_Window *window = _renderer->GetWindow();
-		int width, height;
-		SDL_GL_GetDrawableSize(window, &width, &height);
-
-		int left = _renderer->GetLogicalLeft();
-		int right = _renderer->GetLogicalRight();
-		int top = _renderer->GetLogicalTop();
-		int bottom = _renderer->GetLogicalBottom();
-
-		ImGui::SeparatorText("Graphics");
-		ImGui::LabelText("Framerate", "%.2f (%d ms)", fps, (int)(dt * 1000));
-		ImGui::LabelText("Resolution", "%d x %d", width, height);
-		ImGui::LabelText("Viewport Size", "%d x %d", right - left, top - bottom);
-		ImGui::LabelText("Sprites visible", "%d/%d", spritesVisible, (int)_sprites.size());
-
-		ImGui::SeparatorText("I/O");
-		ImGui::LabelText("Mouse Down", "%s", _mouseDown ? "true" : "false");
-		ImGui::LabelText("Mouse", "%d, %d", (int)_mouseX, (int)_mouseY);
-		ImGui::LabelText("Keys Pressed", "%d", _keysPressed);
-		ImGui::LabelText("Timer", "%.2f", _timer);
-
-		ImGui::SeparatorText("Virtual Machine");
-		ImGui::LabelText("Program Name", "%s", _progName.c_str());
-		ImGui::LabelText("Active Scripts", "%d/%d", (int)_activeScripts, (int)_scripts.size());
-		ImGui::LabelText("Waiting Scripts", "%d", (int)_waitCount);
-		ImGui::LabelText("Execution Rate", "%d Hz", (int)FRAMERATE);
-		ImGui::LabelText("Variable Count", "%d", (int)_variables.size());
-
-		if (_suspend)
+		if (ImGui::BeginTabBar("DebugTabs"))
 		{
-			if (ImGui::Button("Resume"))
-				VMResume();
+			SDL_Window *window = _renderer->GetWindow();
+			int width, height;
+			SDL_GL_GetDrawableSize(window, &width, &height);
+
+			if (ImGui::BeginTabItem("System"))
+			{
+				struct ls_meminfo mi;
+				struct ls_cpuinfo ci;
+
+				ls_get_meminfo(&mi);
+				ls_get_cpuinfo(&ci);
+
+				const char *archString;
+				switch (ci.arch)
+				{
+				default:
+					archString = "unknown";
+					break;
+				case LS_ARCH_AMD64:
+					archString = "x86_64";
+					break;
+				case LS_ARCH_ARM:
+					archString = "arm";
+					break;
+				case LS_ARCH_ARM64:
+					archString = "arm64";
+					break;
+				case LS_ARCH_X86:
+					archString = "x86";
+					break;
+				case LS_ARCH_IA64:
+					archString = "ia64";
+					break;
+				}
+
+				ImGui::SeparatorText("Host");
+				ImGui::LabelText("Name", LS_OS);
+				ImGui::LabelText("Architecture", archString);
+				ImGui::LabelText("Processor Count", "%d", ci.num_cores);
+				ImGui::LabelText("Total Physical", "%llu MiB", mi.total / 1024 / 1024);
+
+				ImGui::SeparatorText("Target");
+				ImGui::LabelText("Compiler", LS_COMPILER);
+				ImGui::LabelText("Target Architecture", LS_ARCH);
+				ImGui::LabelText("Build Date", __TIMESTAMP__);
+
+				ImGui::EndTabItem();
+			}
+
+			if (ImGui::BeginTabItem("Graphics"))
+			{
+				int left = _renderer->GetLogicalLeft();
+				int right = _renderer->GetLogicalRight();
+				int top = _renderer->GetLogicalTop();
+				int bottom = _renderer->GetLogicalBottom();
+
+				ImGui::SeparatorText("Performance");
+				ImGui::LabelText("Framerate", "%.2f (%d ms)", fps, (int)(dt * 1000));
+				ImGui::LabelText("Resolution", "%dx%d", width, height);
+				ImGui::LabelText("Viewport Size", "%dx%d", right - left, top - bottom);
+				ImGui::LabelText("Visible Objects", "%d/%d", spritesVisible, (int)(_spritesEnd - _sprites));
+
+				ImGui::SeparatorText("Device");
+				ImGui::LabelText("OpenGL", "%s", glGetString(GL_VERSION));
+				ImGui::LabelText("OpenGL Vendor", "%s", glGetString(GL_VENDOR));
+				ImGui::LabelText("OpenGL Renderer", "%s", glGetString(GL_RENDERER));
+				ImGui::LabelText("OpenGL Shading Language", "%s", glGetString(GL_SHADING_LANGUAGE_VERSION));
+				ImGui::LabelText("Window Driver", "%s", SDL_GetVideoDriver(0));
+
+				ImGui::EndTabItem();
+			}
+
+			if (ImGui::BeginTabItem("I/O"))
+			{
+				ImGui::SeparatorText("Mouse");
+				ImGui::LabelText("Mouse Down", "%s", _mouseDown ? "true" : "false");
+				ImGui::LabelText("Mouse", "%d, %d", (int)_mouseX, (int)_mouseY);
+
+				ImGui::SeparatorText("Keyboard");
+				ImGui::LabelText("Keys Pressed", "%d", _keysPressed);
+
+				std::string keys;
+				for (int i = 0; i < SDL_NUM_SCANCODES; i++)
+				{
+					if (_keyStates[i])
+					{
+						if (keys.size() > 0)
+							keys += ", ";
+						keys += SDL_GetScancodeName((SDL_Scancode)i);
+					}
+				}
+				ImGui::LabelText("Keys", "%s", keys.c_str());
+
+				struct ls_timespec ts;
+				ls_get_time(&ts);
+
+				ImGui::SeparatorText("Timers");
+				ImGui::LabelText("Timer", "%.2f", _timer);
+				ImGui::LabelText("Year", "%d", ts.year);
+				ImGui::LabelText("Month", "%d", ts.month);
+				ImGui::LabelText("Date", "%d", ts.day);
+				ImGui::LabelText("Day of Week", "%d", 4); // TODO: implement
+				ImGui::LabelText("Hour", "%d", ts.hour);
+				ImGui::LabelText("Minute", "%d", ts.minute);
+				ImGui::LabelText("Second", "%d", ts.second);
+				ImGui::LabelText("Days Since 2000", "%d", 0); // TODO: implement
+
+				ImGui::SeparatorText("Sound");
+				ImGui::LabelText("Loudness", "%.2f", _loudness);
+
+				ImGui::SeparatorText("Other");
+				ImGui::LabelText("Username", "%s", ToString(_username).c_str());
+				ImGui::LabelText("Answer", "%s", ToString(_answer).c_str());
+
+				ImGui::EndTabItem();
+			}
+
+			if (ImGui::BeginTabItem("Virtual Machine"))
+			{
+				ImGui::SeparatorText("Information");
+				ImGui::LabelText("Program Name", "%s", _progName.c_str());
+
+				ImGui::SeparatorText("Performance");
+				ImGui::LabelText("Clock Speed", "%d Hz", (int)FRAMERATE);
+				ImGui::LabelText("Interpreter Time", "%d us", (int)(_executionTime * 1000 * 1000));
+				ImGui::LabelText("Allocations", "%d", _allocations);
+
+				ImGui::SeparatorText("Scheduler");
+				ImGui::LabelText("Suspended", "%s", _suspend ? "true" : "false");
+				ImGui::LabelText("Running", "%d/%d", _activeScripts, (int)_scripts.size());
+
+				ImGui::SeparatorText("Globals");
+				for (auto &p : _variables)
+				{
+					Value &v = p.second;
+					const char *name = p.first.c_str();
+
+					switch (v.type)
+					{
+					case ValueType_Exception:
+						ImGui::LabelText(name, "%s => exception (%d)\n", v.u.exception);
+						break;
+					case ValueType_None:
+						ImGui::LabelText(name, "None");
+						break;
+					case ValueType_Integer:
+						ImGui::LabelText(name, "%llu", v.u.integer);
+						break;
+					case ValueType_Real:
+						ImGui::LabelText(name, "%g", v.u.real);
+						break;
+					case ValueType_Bool:
+						ImGui::LabelText(name, "%s", v.u.boolean ? "true" : "false");
+						break;
+					case ValueType_String:
+						ImGui::LabelText(name, "\"%s\"", v.u.string->str);
+						break;
+					}
+				}
+
+				ImGui::SeparatorText("Control");
+				if (_suspend)
+				{
+					if (ImGui::Button("Resume"))
+						VMResume();
+				}
+				else
+				{
+					if (ImGui::Button("Suspend"))
+						VMSuspend();
+				}
+
+				if (ImGui::Button("Terminate"))
+					VMTerminate();
+
+				ImGui::EndTabItem();
+			}
+
+			if (ImGui::BeginTabItem("Sprites"))
+			{
+				ImGui::SeparatorText("Information");
+				ImGui::LabelText("Sprite Count", "%d", (int)(_spritesEnd - _sprites - 1));
+
+				ImGui::SeparatorText("Sprites");
+				for (Sprite *s = _sprites; s < _spritesEnd; s++)
+				{
+					if (ImGui::CollapsingHeader(s->GetName().c_str()))
+						s->DebugUI();
+				}
+
+				ImGui::EndTabItem();
+			}
+
+			ImGui::EndTabBar();
 		}
-		else
-		{
-			if (ImGui::Button("Suspend"))
-				VMSuspend();
-		}
-
-		ImGui::SameLine();
-
-
-		if (ImGui::Button("Terminate"))
-			VMTerminate();
 	}
 	ImGui::End();
+
+	const ImVec2 padding(5, 5);
+	const ImU32 textColor = IM_COL32(255, 255, 255, 255);
+	const ImU32 hiddenColor = IM_COL32(128, 128, 128, 255);
+	const ImU32 backColor = IM_COL32(0, 0, 0, 128);
+
+	ImDrawList *drawList = ImGui::GetBackgroundDrawList();
+	for (Sprite *s = _sprites; s < _spritesEnd; s++)
+	{
+		int x, y;
+		_renderer->StageToScreen(s->GetX(), s->GetY(), &x, &y);
+
+		ImVec2 position(x, y);
+
+		const char *text = s->GetName().c_str();
+		ImVec2 textSize = ImGui::CalcTextSize(text);
+		
+		ImVec2 topLeft(position.x - padding.x, position.y - padding.y);
+		ImVec2 botRight(position.x + textSize.x + padding.x, position.y + textSize.y + padding.y);
+
+		drawList->AddRectFilled(topLeft, botRight, backColor);
+		drawList->AddText(position, s->IsShown() ? textColor : hiddenColor, s->GetName().c_str());
+	}
 
 	_renderer->EndRender();
 }
@@ -2511,12 +2790,14 @@ void VirtualMachine::Cleanup()
 {
 	for (auto &p : _variables)
 		ReleaseValue(p.second);
+	_variables.clear();
 
 	for (Script &script : _scripts)
 	{
 		ls_close(script.lock);
 		free(script.stack);
 	}
+	_scripts.clear();
 
 	DestroyGraphics();
 
@@ -2533,12 +2814,11 @@ void VirtualMachine::Scheduler()
 
 	ls_lock(_lock);
 
-	int64_t spriteCount = _sprites.size();
-	_renderer = new GLRenderer(spriteCount - 1); // exclude the stage
+	_renderer = new GLRenderer(_spritesEnd - _sprites - 1); // exclude the stage
 
 	// Initialize graphics resources
-	for (auto &p : _sprites)
-		p.second->InitGraphics(_loader, _renderer);
+	for (Sprite *s = _sprites; s < _spritesEnd; s++)
+		s->Load(_loader, _renderer);
 
 	SDL_Window *window = _renderer->GetWindow();
 	SDL_SetWindowTitle(window, "Scratch 3");
@@ -2567,10 +2847,8 @@ void VirtualMachine::Scheduler()
 			break;
 
 		// Nothing running and threads are waiting
-		if (!suspend && _activeScripts == 0 && _waitCount != 0)
-			break;
-
-		size_t activeScripts = -1;
+		//if (!suspend && _activeScripts == 0 && _waitCount != 0)
+		//	break;
 
 		ls_unlock(_lock);
 		if (!suspend)
@@ -2583,7 +2861,8 @@ void VirtualMachine::Scheduler()
 			{
 				_nextExecution = _time + kMinExecutionTime;
 
-				activeScripts = 0;
+				_activeScripts = 0;
+				_allocations = 0;
 				for (Script &script : _scripts)
 				{
 					ls_lock(script.lock);
@@ -2602,6 +2881,8 @@ void VirtualMachine::Scheduler()
 							// If true, awaken the script
 							if (Truth(script.sp[0]))
 								script.state = RUNNABLE;
+
+							Pop(); // pop the result
 						}
 						else if (script.sleepUntil <= _time)
 						{
@@ -2614,7 +2895,7 @@ void VirtualMachine::Scheduler()
 					if (script.state != RUNNABLE)
 					{
 						if (script.state == WAITING)
-							activeScripts++;
+							_activeScripts++;
 
 						_current = nullptr;
 						ls_unlock(script.lock);
@@ -2661,7 +2942,7 @@ void VirtualMachine::Scheduler()
 					// Execute the script
 					if (script.state == RUNNABLE)
 					{
-						activeScripts++;
+						_activeScripts++;
 
 						executor.script = &script;
 
@@ -2691,9 +2972,8 @@ void VirtualMachine::Scheduler()
 					ls_unlock(script.lock);
 				}
 
-				for (auto &p : _sprites)
+				for (Sprite *s = _sprites; s < _spritesEnd; s++)
 				{
-					Sprite *s = p.second;
 					GlideInfo &g = *s->GetGlide();
 
 					if (g.start < 0.0)
@@ -2712,15 +2992,14 @@ void VirtualMachine::Scheduler()
 						s->SetXY(g.x0 + (g.x1 - g.x0) * t, g.y0 + (g.y1 - g.y0) * t);
 					}
 				}
+
+				_executionTime = ls_time64() - _time;
 			}
 		}
 
 		Render();
 
 		ls_lock(_lock);
-
-		if (activeScripts != -1)
-			_activeScripts = activeScripts;
 	}
 
 	// Lock is held here
