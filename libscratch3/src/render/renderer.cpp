@@ -150,23 +150,23 @@ void GLRenderer::SetLayer(intptr_t sprite, int64_t layer)
     int64_t *start = _renderOrder + s->_layer;
     int64_t *target = _renderOrder + newLayer;
 
+    assert(target >= _renderOrder && target < _renderOrder + _spriteCount);
+
     // shift elements to make room for the sprite
     if (start < target)
     {
-        // shift elements down
-        for (int64_t *i = start; i < target; i++)
+        for (int64_t *it = start; it < target; it++)
         {
-            *i = *(i + 1);
-            _sprites[*i]._layer--;
+            _sprites[*it]._layer--;
+            *it = *(it + 1);
         }
     }
     else
     {
-        // shift elements up
-        for (int64_t *i = start; i > target; i--)
+        for (int64_t *it = start; it > target; it--)
         {
-            *i = *(i - 1);
-            _sprites[*i]._layer++;
+            _sprites[*it]._layer++;
+            *it = *(it - 1);
         }
     }
 
