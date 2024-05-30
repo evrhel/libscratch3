@@ -156,6 +156,14 @@ public:
 	//! clicked twice, they will restart.
 	void SendFlagClicked();
 
+	void Send(const std::string &message);
+
+	void SendAndWait(const std::string &message);
+
+	void SendKeyPressed(int scancode);
+
+	void SendSpriteClicked(Sprite *sprite);
+
 	//! \brief Sleep for a specified number of seconds
 	//! 
 	//! Causes the script to not be scheduled for execution for the
@@ -320,6 +328,10 @@ private:
 
 	std::vector<Script> _scripts; // All scripts
 
+	std::unordered_map<std::string, Script *> _listeners; // Message listeners
+	std::unordered_map<std::string, Script *> _keyListeners; // Key listeners
+	std::vector<Script *> _clickListeners; // Click listeners
+
 	Value _emptyString; // empty string
 	Value _trueString; // true string
 	Value _falseString; // false string
@@ -337,8 +349,10 @@ private:
 	//
 
 	Value _answer; // answer
-	bool _mouseDown; // mouse button state
+	bool _mouseDown, _lastDown; // mouse button state
 	int64_t _mouseX, _mouseY; // mouse position
+	int64_t _clickX, _clickY; // mouse click position
+	bool _clicked; // mouse clicked this frame
 	bool _keyStates[SDL_NUM_SCANCODES]; // key states
 	int _keysPressed; // number of keys pressed
 	double _loudness; // loudness
@@ -397,7 +411,10 @@ private:
 	void Cleanup();
 
 	//! \brief Handles script scheduling
-	void Scheduler();
+	void Sched();
+
+	//! \brief Main vm loop
+	void Main();
 
 	static int ThreadProc(void *data);
 };
