@@ -2,6 +2,10 @@
 
 #include <lysys/lysys.hpp>
 
+#include <imgui.h>
+#include <imgui_impl_sdl2.h>
+#include <imgui_impl_opengl3.h>
+
 #include "shader.hpp"
 
 static char *ReadFile(const char *path, size_t *size)
@@ -26,10 +30,10 @@ static char *ReadFile(const char *path, size_t *size)
 static SpriteShader *CreateSpriteShader()
 {
     size_t vertexLength;
-    char *vertexSource = ReadFile("shaders/sprite.vert", &vertexLength);
+    char *vertexSource = ReadFile("../../libscratch3/shaders/sprite.vert", &vertexLength);
 
     size_t fragmentLength;
-    char *fragmentSource = ReadFile("shaders/sprite.frag", &fragmentLength);
+    char *fragmentSource = ReadFile("../../libscratch3/shaders/sprite.frag", &fragmentLength);
 
     SpriteShader *ss = new SpriteShader();
     ss->Load(vertexSource, vertexLength, fragmentSource, fragmentLength);
@@ -38,32 +42,6 @@ static SpriteShader *CreateSpriteShader()
     delete[] vertexSource;
 
     return ss;
-}
-
-Vector3 RGBToHSV(const Vector3 &c)
-{
-    constexpr Vector4 K(0.0f, -1.0f / 3.0f, 2.0f / 3.0f, -1.0f);
-    constexpr float e = 1.0e-10f;
-
-    Vector4 p = c.g < c.b ? Vector4(c.b, c.g, K.w, K.z) : Vector4(c.g, c.b, K.x, K.y);
-    Vector4 q = c.r < p.x ? Vector4(p.x, p.y, p.w, c.r) : Vector4(c.r, p.y, p.z, p.x);
-
-    float d = q.x - min(q.w, q.y);
-    return Vector3(mutil::abs(q.z + (q.w - q.y) / (6.0f * d + e)), d / (q.x + e), q.x);
-}
-
-Vector3 HSVToRGB(const Vector3 &c)
-{
-    constexpr Vector4 K(1.0f, 2.0f / 3.0f, 1.0f / 3.0f, 3.0f);
-    
-    Vector3 p = abs(fract(Vector3(c.x) + Vector3(K)) * 6.0f - Vector3(K.w));
-    return c.z * lerp(Vector3(K.x), clamp(p - Vector3(K.x), 0.0f, 1.0f), c.y);
-}
-
-Vector3 ColorToRGB(int64_t c)
-{
-    constexpr float minBrightness = 0.11f / 2.0f;
-    constexpr float minSaturation = 0.09f;
 }
 
 void SpriteRenderInfo::Update(SpriteShader *ss)
@@ -83,6 +61,7 @@ void SpriteRenderInfo::Update(SpriteShader *ss)
 SpriteRenderInfo::SpriteRenderInfo() :
     _layer(-1)
 {
+    shouldRender = false;
     model = Matrix4();
     colorEffect = 0.0f;
     brightnessEffect = 0.0f;
@@ -96,6 +75,15 @@ SpriteRenderInfo::SpriteRenderInfo() :
 }
 
 SpriteRenderInfo::~SpriteRenderInfo() { }
+
+void GLRenderer::ScreenToStage(int x, int y, int64_t *xout, int64_t *yout) const
+{
+    int width, height;
+    SDL_GetWindowSize(_window, &width, &height);
+
+    *xout = (x - width / 2) * (_right - _left) / width;
+    *yout = (height / 2 - y) * (_top - _bottom) / height;
+}
 
 intptr_t GLRenderer::CreateSprite()
 {
@@ -117,7 +105,6 @@ intptr_t GLRenderer::CreateSprite()
 
             // should never happen
             abort();
-            return -1;
         }
     }
 
@@ -128,7 +115,7 @@ SpriteRenderInfo *GLRenderer::GetRenderInfo(intptr_t sprite)
 {
     if (sprite > _spriteCount)
         return nullptr;
-    return _sprites + sprite; // skip stage sprite
+    return _sprites + sprite;
 }
 
 void GLRenderer::SetLayer(intptr_t sprite, int64_t layer)
@@ -139,6 +126,8 @@ void GLRenderer::SetLayer(intptr_t sprite, int64_t layer)
     int64_t newLayer;
     if (layer < 0)
         newLayer = _spriteCount + layer + 1; // relative to back
+    else
+        newLayer = layer;
     
     if (newLayer < 1 || newLayer >= _spriteCount)
         return; // out of bounds
@@ -203,8 +192,12 @@ void GLRenderer::SetLogicalSize(int left, int right, int bottom, int top)
     _proj = mutil::ortho(left, right, bottom, top, -1.0f, 1.0f);
 }
 
-void GLRenderer::Render()
+void GLRenderer::BeginRender()
 {
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+
     int width, height;
     SDL_GL_GetDrawableSize(_window, &width, &height);
 
@@ -215,26 +208,48 @@ void GLRenderer::Render()
     glDisable(GL_STENCIL_TEST);
     glDepthMask(GL_FALSE);
 
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     glViewport(0, 0, width, height);
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+}
 
+void GLRenderer::Render()
+{
     _spriteShader->Use();
     _spriteShader->SetProj(_proj);
+
+    int spritesVisible = 0;
 
     // draw stage sperately, pen is on top of stage, but below sprites
     _sprites[0].Update(_spriteShader);
     DrawQuad();
+    spritesVisible++;
 
     // TODO: draw pen
 
     // draw sprites
     int64_t *end = _renderOrder + _spriteCount;
-    for (int64_t *it = _renderOrder + 1; _renderOrder < end; it++)
+    for (int64_t *it = _renderOrder + 1; it < end; it++)
     {
-        _sprites[*it].Update(_spriteShader);
-        DrawQuad();
-    }
+        SpriteRenderInfo &s = _sprites[*it];
+        if (s.shouldRender)
+        {
+            s.Update(_spriteShader);
+            DrawQuad();
+            spritesVisible++;
+        }
+    }    
+}
+
+void GLRenderer::EndRender()
+{
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    SDL_GL_SwapWindow(_window);
 }
 
 GLRenderer::GLRenderer(int64_t spriteCount) :
@@ -283,6 +298,12 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
         return;
     }
 
+    SDL_GL_SetSwapInterval(1);
+
+    ImGui::CreateContext();
+    ImGui_ImplSDL2_InitForOpenGL(_window, _context);
+    ImGui_ImplOpenGL3_Init("#version 330 core");
+
     memset(&_quad, 0, sizeof(_quad));
     CreateQuad();
 
@@ -327,6 +348,10 @@ void GLRenderer::Cleanup()
         SDL_DestroyWindow(_window), _window = nullptr;
         SDL_Quit();
     }
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
 }
 
 void GLRenderer::CreateQuad()

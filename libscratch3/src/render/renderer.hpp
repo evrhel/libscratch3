@@ -20,10 +20,6 @@ class GLRenderer;
 class SpriteRenderer;
 class SpriteShader;
 
-Vector3 RGBToHSV(const Vector3 &c);
-Vector3 HSVToRGB(const Vector3 &c);
-Vector3 ColorToRGB(int64_t c);
-
 class SpriteRenderInfo final
 {
 public:
@@ -33,6 +29,8 @@ public:
 
     SpriteRenderInfo();
     ~SpriteRenderInfo();
+
+    bool shouldRender;
 
     Matrix4 model;
     float colorEffect;
@@ -58,6 +56,13 @@ public:
     constexpr bool HasError() const { return _window == nullptr; }
    
     constexpr SpriteShader *GetSpriteShader() const { return _spriteShader; }
+
+    constexpr int GetLogicalLeft() const { return _left; }
+    constexpr int GetLogicalRight() const { return _right; }
+    constexpr int GetLogicalBottom() const { return _bottom; }
+    constexpr int GetLogicalTop() const { return _top; }
+
+    void ScreenToStage(int x, int y, int64_t *xout, int64_t *yout) const;
 
     //! \brief Create a new sprite
     //!
@@ -96,8 +101,12 @@ public:
     //! \param top The top side of the renderer
     void SetLogicalSize(int left, int right, int bottom, int top);
 
+    void BeginRender();
+
     //! \brief Render everything
     void Render();
+
+    void EndRender();
 
     //! \brief Create a new renderer
     //!
@@ -111,7 +120,7 @@ private:
 
     int _left, _right;
     int _bottom, _top;
-
+    
     Matrix4 _proj;
 
     struct

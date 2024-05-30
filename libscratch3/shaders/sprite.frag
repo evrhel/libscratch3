@@ -103,14 +103,14 @@ void main()
 {
     vec2 texCoord = TexCoords;
 
-    texCoord = mosaicEffect(texCoord);
-    texCoord = pixelateEffect(texCoord);
-    texCoord = whirlEffect(texCoord);
-    texCoord = fisheyeEffect(texCoord);
+   // texCoord = mosaicEffect(texCoord);
+    //texCoord = pixelateEffect(texCoord);
+    //texCoord = whirlEffect(texCoord);
+    //texCoord = fisheyeEffect(texCoord);
 
     vec4 color = texture(uTexture, texCoord);
 
-    const float epsilon = 0.0001;
+    /*const float epsilon = 0.0001;
 
     color.rgb = clamp(color.rgb / (color.a + epsilon), 0.0, 1.0);
 
@@ -119,7 +119,7 @@ void main()
 
     color.rgb *= color.a + epsilon;
 
-    color = ghostEffect(color);
+    color = ghostEffect(color);*/
 
     FragColor = color * uColor;
 }

@@ -35,7 +35,7 @@
 // Maximum nesting depth of scripts
 #define SCRIPT_DEPTH 32
 
-// Rate at which scripts are executed
+// Rate at which scripts are executed, 0 = unlimited
 #define FRAMERATE 60
 
 class Loader;
@@ -139,6 +139,10 @@ public:
 	//! 
 	//! \return 0 on success, -1 on failure, 1 on timeout.
 	int VMWait(unsigned long ms);
+
+	void VMSuspend();
+
+	void VMResume();
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -340,6 +344,9 @@ private:
 	// Threading
 	//
 
+	bool _suspend; // VM is suspended
+	double _suspendStart; // Time at which the VM was suspended
+
 	double _timerStart;	// Epoch for timer
 
 	bool _shouldStop; // User requested termination
@@ -351,6 +358,8 @@ private:
 
 	Script *_current; // Currently executing script
 	double _time; // VM time
+	double _lastTime; // Last time
+	double _nextExecution; // Next execution time
 
 	ls_handle _lock;
 	ls_handle _cond;

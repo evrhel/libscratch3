@@ -5,6 +5,8 @@
 #include <cinttypes>
 #include <algorithm>
 
+#include <imgui_impl_sdl2.h>
+
 #include "../resource.hpp"
 #include "../render/renderer.hpp"
 
@@ -84,13 +86,25 @@ public:
 	virtual void Visit(Touching *node)
 	{
 		// TODO: implement
-		vm->SetBool(vm->Push(), false);
+		node->e->Accept(this);
+		std::string name = vm->ToString(vm->StackAt(0));
+		vm->Pop();
+			
+		Sprite *sprite = vm->FindSprite(name);
+		if (!sprite)
+			vm->SetBool(vm->Push(), false);
+
+		vm->SetBool(vm->Push(), script->sprite->TouchingSprite(sprite));
 	}
 
 	virtual void Visit(TouchingColor *node)
 	{
 		// TODO: implement
-		vm->SetBool(vm->Push(), false);
+		node->e->Accept(this);
+		int64_t color = vm->ToInteger(vm->StackAt(0));
+		vm->Pop();
+
+		vm->SetBool(vm->Push(), script->sprite->TouchingColor(color));
 	}
 
 	virtual void Visit(ColorTouching *node)
@@ -1411,6 +1425,7 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 	_loader = loader;
 	
+	bool foundStage = false;
 	for (AutoRelease<SpriteDef> &def : defs)
 	{
 		auto it = _sprites.find(def->name);
@@ -1423,6 +1438,18 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 		Sprite *sprite = new Sprite(*def);
 		_sprites[sprite->GetName()] = sprite;
+
+		if (sprite->IsStage())
+		{
+			if (foundStage)
+			{
+				// multiple stages
+				Cleanup();
+				return -1;
+			}
+
+			foundStage = true;
+		}
 
 		if (def->variables)
 		{
@@ -1485,6 +1512,13 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 		}
 	}
 
+	if (!foundStage)
+	{
+		// no stage
+		Cleanup();
+		return -1;
+	}
+
 	_prog = Retain(prog);
 	_progName = name;
 	return 0;
@@ -1540,6 +1574,42 @@ int VirtualMachine::VMWait(unsigned long ms)
 	ls_unlock(_lock);
 
 	return rc;
+}
+
+void VirtualMachine::VMSuspend()
+{
+	ls_lock(_lock);
+
+	if (!_suspend)
+	{
+		_suspend = true;
+		_suspendStart = ls_time64();
+
+		SDL_SetWindowTitle(_renderer->GetWindow(), "Scratch 3 [Suspended]");
+	}
+
+	ls_unlock(_lock);
+}
+
+void VirtualMachine::VMResume()
+{
+	ls_lock(_lock);
+
+	if (_suspend)
+	{
+		_suspend = false;
+
+		double suspendTime = ls_time64() - _suspendStart;
+
+		// adjust timers to account for suspension
+		_time += suspendTime;
+		_timerStart += suspendTime;
+		_nextExecution += suspendTime;
+
+		SDL_SetWindowTitle(_renderer->GetWindow(), "Scratch 3");
+	}
+
+	ls_unlock(_lock);
 }
 
 void VirtualMachine::SendFlagClicked()
@@ -2260,7 +2330,10 @@ VirtualMachine::VirtualMachine()
 	_timer = 0.0;
 	_username = { 0 };
 
-	_timerStart = false;
+	_suspend = false;
+	_suspendStart = 0.0;
+
+	_timerStart = 0;
 
 	_shouldStop = false;
 	_waitCount = 0;
@@ -2271,6 +2344,8 @@ VirtualMachine::VirtualMachine()
 
 	_current = nullptr;
 	_time = 0.0;
+	_lastTime = 0.0;
+	_nextExecution = 0.0;
 
 	_lock = ls_lock_create();
 	_cond = ls_cond_create();
@@ -2313,6 +2388,10 @@ bool VirtualMachine::InitGraphics()
 
 void VirtualMachine::DestroyGraphics()
 {
+	for (auto &p : _sprites)
+		delete p.second;
+	_sprites.clear();
+
 	if (_renderer)
 		delete _renderer, _renderer = nullptr;
 }
@@ -2326,6 +2405,8 @@ void VirtualMachine::PollEvents()
 
 	while (SDL_PollEvent(&evt))
 	{
+		ImGui_ImplSDL2_ProcessEvent(&evt);
+
 		switch (evt.type)
 		{
 		case SDL_QUIT:
@@ -2340,8 +2421,7 @@ void VirtualMachine::PollEvents()
 				_mouseDown = false;
 			break;
 		case SDL_MOUSEMOTION:
-			_mouseX = evt.motion.x;
-			_mouseY = evt.motion.y;
+			_renderer->ScreenToStage(evt.motion.x, evt.motion.y, &_mouseX, &_mouseY);
 			break;
 		case SDL_KEYDOWN:
 			if (!_keyStates[evt.key.keysym.scancode])
@@ -2360,7 +2440,71 @@ void VirtualMachine::PollEvents()
 
 void VirtualMachine::Render()
 {
-	
+	_renderer->BeginRender();
+
+	int spritesVisible = 0;
+
+	for (auto &p : _sprites)
+	{
+		p.second->Update();
+		spritesVisible += p.second->IsShown();
+	}
+
+	_renderer->Render();
+
+	double dt = _time - _lastTime;
+	double fps = 1 / dt;
+
+	if (ImGui::Begin("Debug"))
+	{
+		SDL_Window *window = _renderer->GetWindow();
+		int width, height;
+		SDL_GL_GetDrawableSize(window, &width, &height);
+
+		int left = _renderer->GetLogicalLeft();
+		int right = _renderer->GetLogicalRight();
+		int top = _renderer->GetLogicalTop();
+		int bottom = _renderer->GetLogicalBottom();
+
+		ImGui::SeparatorText("Graphics");
+		ImGui::LabelText("Framerate", "%.2f (%d ms)", fps, (int)(dt * 1000));
+		ImGui::LabelText("Resolution", "%d x %d", width, height);
+		ImGui::LabelText("Viewport Size", "%d x %d", right - left, top - bottom);
+		ImGui::LabelText("Sprites visible", "%d/%d", spritesVisible, (int)_sprites.size());
+
+		ImGui::SeparatorText("I/O");
+		ImGui::LabelText("Mouse Down", "%s", _mouseDown ? "true" : "false");
+		ImGui::LabelText("Mouse", "%d, %d", (int)_mouseX, (int)_mouseY);
+		ImGui::LabelText("Keys Pressed", "%d", _keysPressed);
+		ImGui::LabelText("Timer", "%.2f", _timer);
+
+		ImGui::SeparatorText("Virtual Machine");
+		ImGui::LabelText("Program Name", "%s", _progName.c_str());
+		ImGui::LabelText("Active Scripts", "%d/%d", (int)_activeScripts, (int)_scripts.size());
+		ImGui::LabelText("Waiting Scripts", "%d", (int)_waitCount);
+		ImGui::LabelText("Execution Rate", "%d Hz", (int)FRAMERATE);
+		ImGui::LabelText("Variable Count", "%d", (int)_variables.size());
+
+		if (_suspend)
+		{
+			if (ImGui::Button("Resume"))
+				VMResume();
+		}
+		else
+		{
+			if (ImGui::Button("Suspend"))
+				VMSuspend();
+		}
+
+		ImGui::SameLine();
+
+
+		if (ImGui::Button("Terminate"))
+			VMTerminate();
+	}
+	ImGui::End();
+
+	_renderer->EndRender();
 }
 
 void VirtualMachine::Cleanup()
@@ -2374,33 +2518,39 @@ void VirtualMachine::Cleanup()
 		free(script.stack);
 	}
 
-	for (auto &p : _sprites)
-		delete p.second;
-	_sprites.clear();
+	DestroyGraphics();
 
 	_loader = nullptr;
 }
 
 void VirtualMachine::Scheduler()
 {
+	constexpr double kMinExecutionTime = 1.0 / FRAMERATE;
+
 	Executor executor;
-	double nextFrame; // time at which to render the next frame
 
 	executor.vm = this;
 
 	ls_lock(_lock);
 
 	int64_t spriteCount = _sprites.size();
-	_renderer = new GLRenderer(spriteCount);
+	_renderer = new GLRenderer(spriteCount - 1); // exclude the stage
 
 	// Initialize graphics resources
 	for (auto &p : _sprites)
 		p.second->InitGraphics(_loader, _renderer);
 
+	SDL_Window *window = _renderer->GetWindow();
+	SDL_SetWindowTitle(window, "Scratch 3");
+
+	_time = ls_time64();
+	_timerStart = _time;
+
 	_running = true;
 	ls_cond_signal(_cond);
 
-	nextFrame = ls_time64();
+	_nextExecution = _time;
+
 	for (;;)
 	{
 		if (_exception.u.exception != Exception_None)
@@ -2409,160 +2559,168 @@ void VirtualMachine::Scheduler()
 			break;
 		}
 
+		PollEvents();
+
+		bool suspend = _suspend;
+
 		if (_shouldStop)
 			break;
 
 		// Nothing running and threads are waiting
-		if (_activeScripts == 0 && _waitCount != 0)
+		if (!suspend && _activeScripts == 0 && _waitCount != 0)
 			break;
 
-		PollEvents();
+		size_t activeScripts = -1;
 
 		ls_unlock(_lock);
-
-		_time = ls_time64();
-		_timer = _time - _timerStart;
-
-		size_t activeScripts = 0;
-		for (Script &script : _scripts)
+		if (!suspend)
 		{
-			ls_lock(script.lock);
+			_lastTime = _time;
+			_time = ls_time64();
+			_timer = _time - _timerStart;
 
-			_current = &script;
-
-			// Handle waiting scripts
-			if (script.state == WAITING)
+			if (_time >= _nextExecution)
 			{
-				if (script.waitExpr)
+				_nextExecution = _time + kMinExecutionTime;
+
+				activeScripts = 0;
+				for (Script &script : _scripts)
 				{
-					// Execute the wait expression
-					executor.script = &script;
-					script.waitExpr->Accept(&executor);
+					ls_lock(script.lock);
 
-					// If true, awaken the script
-					if (Truth(script.sp[0]))
-						script.state = RUNNABLE;
-				}
-				else if (script.sleepUntil <= _time)
-				{
-					// Wake up the script
-					script.state = RUNNABLE;
-				}
-			}
+					_current = &script;
 
-			// Don't execute scripts that are not runnable
-			if (script.state != RUNNABLE)
-			{
-				if (script.state == WAITING)
-					activeScripts++;
-
-				_current = nullptr;
-				ls_unlock(script.lock);
-				continue;
-			}
-
-			// Pop frames until we find one that can execute
-			Frame *f = &script.frames[script.fp];
-			while (f->pc >= f->sl->sl.size())
-			{
-				// top of the stack, script is done
-				if (script.fp == 0)
-				{
-					script.state = TERMINATED;
-					break;
-				}
-
-				// this script should execute forever, so reset the program counter
-				if (f->flags & FRAME_EXEC_FOREVER)
-				{
-					f->pc = 0;
-					break;
-				}
-
-				// decrement the repeat count, if it's zero, pop the frame
-				f->count--;
-				if (f->count > 0)
-				{
-					f->pc = 0;
-					break;
-				}
-
-				bool again = (f->flags & FRAME_EXEC_AGAIN) != 0;
-
-				// Pop the frame
-				script.fp--;
-				f = &script.frames[script.fp];
-
-				// Counteracts the increment from the last iteration
-				if (again)
-					f->pc--;
-			}
-
-			// Execute the script
-			if (script.state == RUNNABLE)
-			{
-				activeScripts++;
-
-				executor.script = &script;
-
-				if (f->pc < f->sl->sl.size())
-				{
-					// Run the statement
-					Statement *stmt = *f->sl->sl[f->pc];
-					stmt->Accept(&executor);
-
-					// Exception handling
-					if (_exception.u.exception == Exception_None)
+					// Handle waiting scripts
+					if (script.state == WAITING)
 					{
-						if (script.sp != script.stack + STACK_SIZE)
-							Raise(VMError); // stack should be empty
-						else if (script.fp >= SCRIPT_DEPTH)
-							Raise(VMError); // invalid frame pointer
+						if (script.waitExpr)
+						{
+							// Execute the wait expression
+							executor.script = &script;
+							script.waitExpr->Accept(&executor);
+
+							// If true, awaken the script
+							if (Truth(script.sp[0]))
+								script.state = RUNNABLE;
+						}
+						else if (script.sleepUntil <= _time)
+						{
+							// Wake up the script
+							script.state = RUNNABLE;
+						}
 					}
 
-					f->pc++;
+					// Don't execute scripts that are not runnable
+					if (script.state != RUNNABLE)
+					{
+						if (script.state == WAITING)
+							activeScripts++;
+
+						_current = nullptr;
+						ls_unlock(script.lock);
+						continue;
+					}
+
+					// Pop frames until we find one that can execute
+					Frame *f = &script.frames[script.fp];
+					while (f->pc >= f->sl->sl.size())
+					{
+						// top of the stack, script is done
+						if (script.fp == 0)
+						{
+							script.state = TERMINATED;
+							break;
+						}
+
+						// this script should execute forever, so reset the program counter
+						if (f->flags & FRAME_EXEC_FOREVER)
+						{
+							f->pc = 0;
+							break;
+						}
+
+						// decrement the repeat count, if it's zero, pop the frame
+						f->count--;
+						if (f->count > 0)
+						{
+							f->pc = 0;
+							break;
+						}
+
+						bool again = (f->flags & FRAME_EXEC_AGAIN) != 0;
+
+						// Pop the frame
+						script.fp--;
+						f = &script.frames[script.fp];
+
+						// Counteracts the increment from the last iteration
+						if (again)
+							f->pc--;
+					}
+
+					// Execute the script
+					if (script.state == RUNNABLE)
+					{
+						activeScripts++;
+
+						executor.script = &script;
+
+						if (f->pc < f->sl->sl.size())
+						{
+							// Run the statement
+							Statement *stmt = *f->sl->sl[f->pc];
+							stmt->Accept(&executor);
+
+							// Exception handling
+							if (_exception.u.exception == Exception_None)
+							{
+								if (script.sp != script.stack + STACK_SIZE)
+									Raise(VMError); // stack should be empty
+								else if (script.fp >= SCRIPT_DEPTH)
+									Raise(VMError); // invalid frame pointer
+							}
+
+							f->pc++;
+						}
+						else
+							Raise(VMError);
+					}
+
+					_current = nullptr;
+
+					ls_unlock(script.lock);
 				}
-				else
-					Raise(VMError);
-			}
 
-			_current = nullptr;
+				for (auto &p : _sprites)
+				{
+					Sprite *s = p.second;
+					GlideInfo &g = *s->GetGlide();
 
-			ls_unlock(script.lock);
-		}
+					if (g.start < 0.0)
+						continue; // not gliding
 
-		for (auto &p : _sprites)
-		{
-			Sprite *s = p.second;
-			GlideInfo &g = *s->GetGlide();
-
-			if (g.start < 0.0)
-				continue; // not gliding
-
-			double t = (_time - g.start) / (g.end - g.start);
-			if (t >= 1.0)
-			{
-				// done gliding
-				s->SetXY(g.x1, g.y1);
-				g.start = -1.0;
-			}
-			else
-			{
-				// linear interpolation
-				s->SetXY(g.x0 + (g.x1 - g.x0) * t, g.y0 + (g.y1 - g.y0) * t);
+					double t = (_time - g.start) / (g.end - g.start);
+					if (t >= 1.0)
+					{
+						// done gliding
+						s->SetXY(g.x1, g.y1);
+						g.start = -1.0;
+					}
+					else
+					{
+						// linear interpolation
+						s->SetXY(g.x0 + (g.x1 - g.x0) * t, g.y0 + (g.y1 - g.y0) * t);
+					}
+				}
 			}
 		}
 
-		if (_renderer)
-			Render();
-
-		// Wait for the next frame
-		ls_sleep((unsigned long)(1000.0 / FRAMERATE));
-
+		Render();
 
 		ls_lock(_lock);
 
-		_activeScripts = activeScripts;
+		if (activeScripts != -1)
+			_activeScripts = activeScripts;
 	}
 
 	// Lock is held here

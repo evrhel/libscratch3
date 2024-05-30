@@ -61,7 +61,7 @@ void Costume::Load(Loader *loader, CostumeDef *def)
 		_texWidth = width;
 		_texHeight = height;
 
-		_logicalSize = IntVector2(_texWidth / def->bitmapResolution);
+		_logicalSize = IntVector2(_texWidth, _texHeight) / def->bitmapResolution;
 	}
 	else if (def->dataFormat == "svg")
 	{
@@ -124,7 +124,8 @@ static constexpr uint32_t RoundUp2(uint32_t x)
 }
 Costume::Costume() :
 	_texture(0),
-	_texWidth(0), _texHeight(0)
+	_texWidth(0), _texHeight(0),
+	_mask(nullptr)
 {
 	_handle = nullptr;
 	_svgWidth = _svgHeight = 0;

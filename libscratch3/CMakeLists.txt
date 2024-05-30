@@ -10,6 +10,8 @@ find_package(imgui CONFIG REQUIRED)
 pkg_check_modules(cairo REQUIRED IMPORTED_TARGET cairo)
 pkg_check_modules(LIBRSVG librsvg-2.0 IMPORTED_TARGET REQUIRED)
 
+set(GLAD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/glad)
+
 set(src "src")
 
 set(SOURCES
@@ -25,7 +27,8 @@ set(SOURCES
 	${src}/vm/vm.cpp
 	${src}/ref.cpp
 	${src}/core.cpp
-	${src}/resource.cpp)
+	${src}/resource.cpp
+	${GLAD_DIR}/src/glad.c)
 
 add_library(libscratch3 SHARED ${SOURCES})
 
@@ -33,7 +36,8 @@ target_include_directories(libscratch3 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/includ
 target_include_directories(libscratch3 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../rapidjson/include)
 
 target_include_directories(libscratch3 PRIVATE ${src})
-
+target_include_directories(libscratch3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixUtil/MatrixUtil/include)
+target_include_directories(libscratch3 PRIVATE ${GLAD_DIR}/include)
 target_include_directories(libscratch3 PRIVATE ${Stb_INCLUDE_DIR})
 
 target_link_libraries(libscratch3 PRIVATE liblysys)
