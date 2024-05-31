@@ -5,6 +5,8 @@
 
 #include <lysys/lysys.hpp>
 
+#define INITIAL_CAPACITY 8
+
 enum ValueType
 {
 	ValueType_None = 0,
@@ -18,6 +20,7 @@ enum ValueType
 	/* Reference types */
 
 	ValueType_String,
+	ValueType_List,
 
 	/* Other types */
 
@@ -44,6 +47,7 @@ struct Value
 
 		Reference *ref;
 		String *string;
+		List *list;
 
 		const char *basic_string; // weak reference
 		const std::string *const_string; // weak reference
@@ -61,6 +65,14 @@ struct String
 	Reference ref;
 	int64_t len;
 	char str[1];
+};
+
+struct List
+{
+	Reference ref;
+	int64_t len;
+	int64_t capacity;
+	Value *values;
 };
 
 bool StringEquals(const char *lstr, const char *rstr);
@@ -81,6 +93,16 @@ Value &SetParsedString(Value &lhs, const std::string &rhs);
 Value &SetParsedBasicString(Value &lhs, const char *rhs);
 Value &SetParsedConstString(Value &lhs, const std::string *rhs);
 Value &SetEmpty(Value &lhs);
+
+Value &ListGet(Value &lhs, const Value &list, int64_t index);
+void ListSet(Value &list, int64_t index, const Value &v);
+int64_t ListIndexOf(const Value &list, const Value &v);
+int64_t ListGetLength(const Value &list);
+bool ListContainsValue(const Value &list, const Value &v);
+void ListAppend(const Value &list, const Value &v);
+void ListDelete(const Value &list, int64_t index);
+void ListClear(const Value &list);
+void ListInsert(const Value &list, int64_t index, const Value &v);
 
 void CvtString(Value &v);
 int64_t ValueLength(const Value &v);
@@ -105,6 +127,8 @@ const char *ToString(const Value &v, int64_t *len = nullptr);
 const char *GetRawString(const Value &v, int64_t *len = nullptr);
 
 Value &AllocString(Value &v, int64_t len);
+
+Value &AllocList(Value &v);
 
 //! \brief Initialize a value
 //! 

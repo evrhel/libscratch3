@@ -308,6 +308,119 @@ Value &SetEmpty(Value &lhs)
 	return lhs;
 }
 
+Value &ListGet(Value &lhs, const Value &list, int64_t index)
+{
+	if (index < 1 || list.type != ValueType_List)
+		return SetEmpty(lhs);
+
+	List *l = list.u.list;
+	if (index > l->len)
+		return SetEmpty(lhs);
+
+	return Assign(lhs, l->values[index - 1]);
+}
+
+void ListSet(Value &list, int64_t index, const Value &v)
+{
+	if (index < 1 || list.type != ValueType_List)
+		return;
+
+	List *l = list.u.list;
+	if (index > l->len)
+		return;
+
+	Assign(l->values[index - 1], v);
+}
+
+int64_t ListIndexOf(const Value &list, const Value &v)
+{
+	if (list.type != ValueType_List)
+		return 0;
+
+	List *l = list.u.list;
+	for (int64_t i = 0; i < l->len; i++)
+	{
+		if (Equals(l->values[i], v))
+			return i + 1;
+	}
+
+	return 0;
+}
+
+int64_t ListGetLength(const Value &list)
+{
+	if (list.type != ValueType_List)
+		return 0;
+	return list.u.list->len;
+}
+
+bool ListContainsValue(const Value &list, const Value &v)
+{
+	return ListIndexOf(list, v) != 0;
+}
+
+void ListAppend(const Value &list, const Value &v)
+{
+	if (list.type != ValueType_List)
+		return;
+
+	List *l = list.u.list;
+
+	int64_t newLen = l->len + 1;
+	if (l->capacity < newLen)
+	{
+		int64_t newCapacity = l->capacity * 2;
+		if (newCapacity < newLen)
+			newCapacity = newLen;
+
+		Value *newValues = (Value *)realloc(l->values, newCapacity * sizeof(Value));
+		if (!newValues)
+			return;
+
+		l->values = newValues;
+		l->capacity = newCapacity;
+	}
+
+	InitializeValue(l->values[l->len]); // uninitialized data
+	Assign(l->values[l->len], v);
+	l->len = newLen;
+}
+
+void ListDelete(const Value &list, int64_t index)
+{
+	if (index < 1 || list.type != ValueType_List)
+		return;
+
+	List *l = list.u.list;
+	if (index > l->len)
+		return;
+
+	int64_t i = index - 1;
+
+	ReleaseValue(l->values[i]);
+
+	for (; i < l->len; i++)
+		l->values[i] = l->values[i + 1]; // direct assignment, no need to retain/release
+
+	l->len--;
+	InitializeValue(l->values[l->len]); // clear the last value
+}
+
+void ListClear(const Value &list)
+{
+	if (list.type != ValueType_List)
+		return;
+
+	List *l = list.u.list;
+	for (int64_t i = 0; i < l->len; i++)
+		ReleaseValue(l->values[i]);
+}
+
+void ListInsert(const Value &list, int64_t index, const Value &v)
+{
+	// TODO: implement
+}
+
 void CvtString(Value &v)
 {
 	char buf[64];
@@ -595,11 +708,38 @@ Value &AllocString(Value &v, int64_t len)
 	return v;
 }
 
+Value &AllocList(Value &v)
+{
+	ReleaseValue(v);
+
+	v.type = ValueType_List;
+	v.u.list = (List *)malloc(sizeof(List));
+	if (!v.u.list)
+	{
+		v.type = ValueType_None;
+		return v;
+	}
+
+	List *list = v.u.list;
+
+	list->len = 0;
+	list->capacity = INITIAL_CAPACITY;
+	list->values = (Value *)calloc(INITIAL_CAPACITY, sizeof(Value));
+	if (!list->values)
+	{
+		free(list);
+		v.type = ValueType_None;
+		return v;
+	}
+
+	return v;
+}
+
 Value &RetainValue(Value &v)
 {
-	if (v.type == ValueType_String)
+	if (v.type == ValueType_String || v.type == ValueType_List)
 	{
-		assert(v.u.string->ref.count > 0);
+		assert(v.u.ref->count > 0);
 		v.u.ref->count++;
 	}
 
@@ -608,22 +748,33 @@ Value &RetainValue(Value &v)
 
 void ReleaseValue(Value &v)
 {
-	if (v.type == ValueType_String)
+	if (v.type == ValueType_String || v.type == ValueType_List)
 	{
-		assert(v.u.string->ref.count > 0);
+		assert(v.u.ref->count > 0);
 
 		if (--v.u.ref->count == 0)
 			FreeValue(v);
 	}
+
+	v.type = ValueType_None;
+	v.u.ref = nullptr;
 }
 
 void FreeValue(Value &v)
 {
 	if (v.type == ValueType_String)
 	{
-		assert(v.u.string->ref.count == 0);
+		assert(v.u.ref->count == 0);
 		free(v.u.string);
 		v.u.ref = nullptr;
 		v.type = ValueType_None;
+	}
+	else if (v.type == ValueType_List)
+	{
+		assert(v.u.ref->count == 0);
+
+		for (int64_t i = 0; i < v.u.list->len; i++)
+			ReleaseValue(v.u.list->values[i]);
+		free(v.u.list);
 	}
 }
