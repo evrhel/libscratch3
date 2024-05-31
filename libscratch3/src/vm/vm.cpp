@@ -12,16 +12,11 @@
 
 #include "sprite.hpp"
 
+#define TRUE_STRING "true"
+#define FALSE_STRING "false"
+
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
-
-static const char True[4] = {
-	't', 'r', 'u', 'e'
-};
-
-static const char False[5] = {
-	'f', 'a', 'l', 's', 'e'
-};
 
 static const char *States[] = {
 	"EMBRYO",
@@ -58,6 +53,40 @@ static const char *ExceptionString(ExceptionType type)
 	case VMError:
 		return "VM error";
 	}
+}
+
+static bool StringEquals(const char *lstr, const char *rstr)
+{
+	if (lstr == rstr)
+		return true;
+
+	const char *lstart = lstr;
+	while (isspace(*lstart))
+		lstart++;
+
+	const char *rend = lstart;
+	while (!isspace(*rend))
+		rend++;
+
+	const char *rstart = rstr;
+	while (isspace(*rstart))
+		rstart++;
+
+	const char *lend = rend;
+	while (!isspace(*lend))
+		lend++;
+
+	if (rend - lstart != lend - rstart)
+		return false;
+
+	size_t len = rend - lstart;
+	for (size_t i = 0; i < len; i++)
+	{
+		if (tolower(lstart[i]) != tolower(rstart[i]))
+			return false;
+	}
+
+	return true;
 }
 
 class Executor : public Visitor
@@ -103,7 +132,7 @@ public:
 			break;
 		case PropGetType_Name:
 			// TODO: implement
-			vm->SetString(val, "costume1"); // always costume1
+			vm->SetBasicString(val, "costume1"); // always costume1
 			break;
 		}
 	}
@@ -189,16 +218,7 @@ public:
 	{
 		node->e->Accept(this);
 
-		Value &key = vm->StackAt(0);
-		if (key.type != ValueType_String)
-		{
-			vm->Pop();
-			vm->SetBool(vm->Push(), false);
-			return;
-		}
-
-		std::string s(key.u.string->str, key.u.string->len);
-
+		std::string s = vm->ToString(vm->StackAt(0));
 		vm->Pop();
 
 		// convert to lowercase
@@ -287,7 +307,7 @@ public:
 			vm->SetInteger(vm->Push(), 1);
 			break;
 		case PropertyTarget_BackdropName:
-			vm->SetString(vm->Push(), "backdrop1");
+			vm->SetBasicString(vm->Push(), "backdrop1");
 			break;
 		case PropertyTarget_XPosition:
 			vm->SetReal(vm->Push(), s->GetX());
@@ -302,7 +322,7 @@ public:
 			vm->SetInteger(vm->Push(), s->GetCostume());
 			break;
 		case PropertyTarget_CostumeName:
-			vm->SetString(vm->Push(), s->GetCostumeName());
+			vm->SetConstString(vm->Push(), &s->GetCostumeName());
 			break;
 		case PropertyTarget_Size:
 			vm->SetReal(vm->Push(), s->GetSize());
@@ -619,12 +639,8 @@ public:
 	virtual void Visit(StringLength *node)
 	{
 		node->e->Accept(this);
-
-		Value &v = vm->StackAt(0);
-		if (v.type == ValueType_String)
-			vm->SetInteger(v, v.u.string->len);
-		else
-			vm->SetInteger(v, 0);
+		std::string s = vm->ToString(vm->StackAt(0));
+		vm->SetInteger(vm->StackAt(0), s.size());
 	}
 
 	virtual void Visit(StringContains *node)
@@ -1054,6 +1070,8 @@ public:
 			script->sprite->SetCostume(static_cast<int64_t>(costume.u.real));
 			break;
 		case ValueType_String:
+		case ValueType_BasicString:
+		case ValueType_ConstString:
 			script->sprite->SetCostume(vm->ToString(costume));
 			break;
 		default:
@@ -1423,72 +1441,72 @@ public:
 
 	virtual void Visit(GotoReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(GlideReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(PointTowardsReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(CostumeReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(BackdropReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(SoundReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(BroadcastReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(CloneReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(TouchingReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(DistanceReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(KeyReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(PropertyOfReporter *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(ArgReporterStringNumber *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(ArgReporterBoolean *node)
 	{
-		vm->SetString(vm->Push(), node->value);
+		vm->SetConstString(vm->Push(), &node->value);
 	}
 
 	VirtualMachine *vm = nullptr;
@@ -1879,24 +1897,19 @@ void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 
 bool VirtualMachine::Truth(const Value &val)
 {
-	if (val.type == ValueType_Bool)
-		return val.u.boolean;
-
-	if (val.type == ValueType_String)
+	switch (val.type)
 	{
-		if (val.u.string->len != 4)
-			return false;
-
-		for (size_t i = 0; i < 4; i++)
-		{
-			if (tolower(val.u.string->str[i]) != True[i])
-				return false;
-		}
-
-		return true;
+	default:
+		return false;
+	case ValueType_Bool:
+		return val.u.boolean;
+	case ValueType_String:
+		return StringEquals(val.u.string->str, TRUE_STRING);
+	case ValueType_BasicString:
+		return StringEquals(val.u.basic_string, TRUE_STRING);
+	case ValueType_ConstString:
+		return StringEquals(val.u.const_string->c_str(), TRUE_STRING);
 	}
-
-	return false;
 }
 
 bool VirtualMachine::Equals(const Value &lhs, const Value &rhs)
@@ -1920,44 +1933,30 @@ bool VirtualMachine::Equals(const Value &lhs, const Value &rhs)
 		if (rhs.type == ValueType_Bool)
 			return lhs.u.boolean == rhs.u.boolean;
 		return false;
-	case ValueType_String: {
-		// String comparisions are case-insensitive and ignore
-		// leading and trailing whitespace
-
-		String *lstr = lhs.u.string;
-		String *rstr = rhs.u.string;
-
-		if (lstr == rstr)
-			return true;
-
-		char *lstart = lstr->str;
-		while (isspace(*lstart))
-			lstart++;
-
-		char *rend = lstart;
-		while (!isspace(*rend))
-			rend++;
-
-		char *rstart = rstr->str;
-		while (isspace(*rstart))
-			rstart++;
-
-		char *lend = rend;
-		while (!isspace(*lend))
-			lend++;
-
-		if (rend - lstart != lend - rstart)
-			return false;
-
-		size_t len = rend - lstart;
-		for (size_t i = 0; i < len; i++)
-		{
-			if (tolower(lstart[i]) != tolower(rstart[i]))
-				return false;
-		}
-
-		return true;
-	}
+	case ValueType_String:
+		if (rhs.type == ValueType_String)
+			return StringEquals(lhs.u.string->str, rhs.u.string->str);
+		else if (rhs.type == ValueType_BasicString)
+			return StringEquals(lhs.u.string->str, rhs.u.basic_string);
+		else if (rhs.type == ValueType_ConstString)
+			return StringEquals(lhs.u.string->str, rhs.u.const_string->c_str());
+		return false;
+	case ValueType_BasicString:
+		if (rhs.type == ValueType_String)
+			return StringEquals(lhs.u.basic_string, rhs.u.string->str);
+		else if (rhs.type == ValueType_BasicString)
+			return StringEquals(lhs.u.basic_string, rhs.u.basic_string);
+		else if (rhs.type == ValueType_ConstString)
+			return StringEquals(lhs.u.basic_string, rhs.u.const_string->c_str());
+		return false;
+	case ValueType_ConstString:
+		if (rhs.type == ValueType_String)
+			return StringEquals(lhs.u.const_string->c_str(), rhs.u.string->str);
+		else if (rhs.type == ValueType_BasicString)
+			return StringEquals(lhs.u.const_string->c_str(), rhs.u.basic_string);
+		else if (rhs.type == ValueType_ConstString)
+			return StringEquals(lhs.u.const_string->c_str(), rhs.u.const_string->c_str());
+		return false;
 	default:
 		return false;
 	}
@@ -2005,7 +2004,7 @@ Value &VirtualMachine::SetString(Value &lhs, const std::string &rhs)
 	ReleaseValue(lhs);
 
 	if (rhs.size() == 0)
-		return Assign(lhs, _emptyString);
+		return SetEmpty(lhs);
 
 	AllocString(lhs, rhs.size());
 	if (lhs.type != ValueType_String)
@@ -2013,6 +2012,22 @@ Value &VirtualMachine::SetString(Value &lhs, const std::string &rhs)
 
 	memcpy(lhs.u.string->str, rhs.data(), rhs.size());
 
+	return lhs;
+}
+
+Value &VirtualMachine::SetBasicString(Value &lhs, const char *rhs)
+{
+	ReleaseValue(lhs);
+	lhs.type = ValueType_BasicString;
+	lhs.u.basic_string = rhs;
+	return lhs;
+}
+
+Value &VirtualMachine::SetConstString(Value &lhs, const std::string *rhs)
+{
+	ReleaseValue(lhs);
+	lhs.type = ValueType_ConstString;
+	lhs.u.const_string = rhs;
 	return lhs;
 }
 
@@ -2035,7 +2050,7 @@ Value &VirtualMachine::SetParsedString(Value &lhs, const std::string &rhs)
 		{
 			size_t i;
 			for (i = 0; i < 4; i++)
-				if (tolower(str[i]) != True[i])
+				if (tolower(str[i]) != TRUE_STRING[i])
 					break;
 
 			if (i == 4)
@@ -2046,7 +2061,7 @@ Value &VirtualMachine::SetParsedString(Value &lhs, const std::string &rhs)
 		{
 			size_t i;
 			for (i = 0; i < 5; i++)
-				if (tolower(str[i]) != False[i])
+				if (tolower(str[i]) != FALSE_STRING[i])
 					break;
 
 			if (i == 5)
@@ -2057,10 +2072,11 @@ Value &VirtualMachine::SetParsedString(Value &lhs, const std::string &rhs)
 	return SetString(lhs, rhs);
 }
 
-
 Value &VirtualMachine::SetEmpty(Value &lhs)
 {
-	return Assign(lhs, _emptyString);
+	ReleaseValue(lhs);
+	lhs.type = ValueType_None;
+	return lhs;
 }
 
 std::string VirtualMachine::ToString(const Value &val)
@@ -2078,9 +2094,13 @@ std::string VirtualMachine::ToString(const Value &val)
 		return std::string(buf, cch);
 	}
 	case ValueType_Bool:
-		return val.u.boolean ? std::string(True, 4) : std::string(False, 5);
+		return val.u.boolean ? std::string(TRUE_STRING, 4) : std::string(FALSE_STRING, 5);
 	case ValueType_String:
 		return std::string(val.u.string->str, val.u.string->len);
+	case ValueType_BasicString:
+		return val.u.basic_string;
+	case ValueType_ConstString:
+		return *val.u.const_string;
 	}
 }
 
@@ -2117,7 +2137,7 @@ void VirtualMachine::CvtString(Value &v)
 		break;
 	}
 	case ValueType_Bool:
-		Assign(v, v.u.boolean ? _trueString : _falseString);
+		SetBasicString(v, v.u.boolean ? TRUE_STRING : FALSE_STRING);
 		break;
 	}
 }
@@ -2312,28 +2332,11 @@ VirtualMachine::VirtualMachine()
 	_allocations = 0;
 
 	_thread = nullptr;
-
-	_emptyString = {};
-	AllocString(_emptyString, 0);
-
-	_trueString = {};
-	AllocString(_trueString, sizeof(True));
-	if (_trueString.type == ValueType_String)
-		memcpy(_trueString.u.string->str, True, sizeof(True));
-
-	_falseString = {};
-	AllocString(_falseString, sizeof(False));
-	if (_falseString.type == ValueType_String)
-		memcpy(_falseString.u.string->str, False, sizeof(False));
 }
 
 VirtualMachine::~VirtualMachine()
 {
 	Cleanup();
-
-	ReleaseValue(_falseString);
-	ReleaseValue(_trueString);
-	ReleaseValue(_emptyString);
 
 	ReleaseValue(_username);
 	ReleaseValue(_answer);
@@ -2589,6 +2592,12 @@ void VirtualMachine::Render()
 						break;
 					case ValueType_String:
 						ImGui::LabelText(name, "\"%s\"", v.u.string->str);
+						break;
+					case ValueType_BasicString:
+						ImGui::LabelText(name, "\"%s\"", v.u.basic_string);
+						break;
+					case ValueType_ConstString:
+						ImGui::LabelText(name, "\"%s\"", v.u.const_string->c_str());
 						break;
 					}
 				}

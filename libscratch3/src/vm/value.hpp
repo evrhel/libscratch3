@@ -14,7 +14,12 @@ enum ValueType
 
 	/* Reference types */
 
-	ValueType_String
+	ValueType_String,
+
+	/* Other types */
+
+	ValueType_BasicString,
+	ValueType_ConstString
 };
 
 struct Reference;
@@ -34,6 +39,9 @@ struct Value
 
 		Reference *ref;
 		String *string;
+
+		const char *basic_string; // weak reference
+		const std::string *const_string; // weak reference
 	} u;
 };
 

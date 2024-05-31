@@ -242,6 +242,8 @@ public:
 	Value &SetReal(Value &lhs, double rhs);
 	Value &SetBool(Value &lhs, bool rhs);
 	Value &SetString(Value &lhs, const std::string &rhs);
+	Value &SetBasicString(Value &lhs, const char *rhs);
+	Value &SetConstString(Value &lhs, const std::string *rhs);
 	Value &SetParsedString(Value &lhs, const std::string &rhs);
 	Value &SetEmpty(Value &lhs);
 
@@ -331,10 +333,6 @@ private:
 	std::unordered_map<std::string, Script *> _listeners; // Message listeners
 	std::unordered_map<std::string, Script *> _keyListeners; // Key listeners
 	std::vector<Script *> _clickListeners; // Click listeners
-
-	Value _emptyString; // empty string
-	Value _trueString; // true string
-	Value _falseString; // false string
 	
 	//
 	/////////////////////////////////////////////////////////////////
