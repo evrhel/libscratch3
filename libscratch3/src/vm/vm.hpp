@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <string>
 #include <csetjmp>
+#include <unordered_set>
+#include <queue>
 
 #include <lysys/lysys.hpp>
 
@@ -88,6 +90,7 @@ struct Script
 	double sleepUntil; // Time to wake up
 	Expression *waitExpr; // Expression to wait for
 	bool waitInput; // Wait for input
+	bool askInput; // Ask for input
 
 	Value *stack; // Bottom of the stack
 	Value *sp; // Stack pointer (grows upwards)
@@ -165,8 +168,6 @@ public:
 
 	void SendKeyPressed(int scancode);
 
-	void SendSpriteClicked(Sprite *sprite);
-
 	//! \brief Sleep for a specified number of seconds
 	//! 
 	//! Causes the script to not be scheduled for execution for the
@@ -187,7 +188,9 @@ public:
 	//! 
 	//! The script will not be scheduled for execution until the
 	//! user has provided input.
-	void AskAndWait();
+	//! 
+	//! \param question Question to ask the user
+	void AskAndWait(const std::string &question);
 
 	//! \brief Terminate the current script
 	void Terminate();
@@ -336,6 +339,14 @@ private:
 	std::unordered_map<std::string, Script *> _keyListeners; // Key listeners
 	std::vector<Script *> _clickListeners; // Click listeners
 	
+	bool _flagClicked; // Flag clicked event
+	std::unordered_set<std::string> _toSend; // Messages to send
+
+	std::queue<std::pair<Script *, std::string>> _askQueue; // Scripts waiting for input
+	Script *_asker; // Current input requester
+	std::string _question; // Current question
+	char _inputBuf[512]; // Input buffer
+
 	//
 	/////////////////////////////////////////////////////////////////
 	// Graphics
@@ -423,6 +434,8 @@ private:
 	void ResetScript(Script &script);
 
 	void StartScript(Script &script);
+
+	void DispatchEvents();
 	 
 	//! \brief Handles script scheduling
 	void Scheduler();

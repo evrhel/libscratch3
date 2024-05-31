@@ -780,8 +780,7 @@ public:
 
 	virtual void Visit(BroadcastExpr *node)
 	{
-		// TODO: implement
-		vm->Push(); // None
+		vm->SetConstString(vm->Push(), &node->name);
 	}
 
 	virtual void Visit(ListExpr *node)
@@ -1106,7 +1105,29 @@ public:
 	{
 		node->e->Accept(this);
 
-		// TODO: implement
+		Sprite *stage = vm->FindSprite("Stage");
+		if (!stage)
+			vm->Raise(VariableNotFound, "Stage");
+
+		Value &v = vm->StackAt(0);
+		switch (v.type)
+		{
+		default:
+			break;
+		case ValueType_Integer:
+		case ValueType_Real:
+			stage->SetCostume(vm->ToInteger(v));
+			break;
+		case ValueType_Bool:
+		case ValueType_String:
+		case ValueType_BasicString:
+		case ValueType_ConstString: {
+			int64_t len;
+			const char *name = vm->ToString(v, &len);
+			stage->SetCostume(std::string(name, len));
+			break;
+		}
+		}
 
 		vm->Pop();
 	}
@@ -1302,7 +1323,18 @@ public:
 	virtual void Visit(OnGreaterThan *node) {}
 	virtual void Visit(OnEvent *node) {}
 
-	virtual void Visit(Broadcast *node) {}
+	virtual void Visit(Broadcast *node)
+	{
+		node->e->Accept(this);
+
+		int64_t len;
+		const char *message = vm->ToString(vm->StackAt(0), &len);
+
+		vm->Pop();
+
+		vm->Send(std::string(message, len));
+	}
+
 	virtual void Visit(BroadcastAndWait *node) {}
 
 	virtual void Visit(WaitSecs *node)
@@ -1401,7 +1433,12 @@ public:
 
 	virtual void Visit(AskAndWait *node)
 	{
-		vm->AskAndWait();
+		node->e->Accept(this);
+
+		int64_t len;
+		const char *question = vm->ToString(vm->StackAt(0), &len);
+		vm->AskAndWait(std::string(question, len));
+		vm->Pop();
 	}
 
 	virtual void Visit(SetDragMode *node)
@@ -1588,7 +1625,9 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 		for (AutoRelease<VariableDef> &vdef : def->variables->variables)
 		{
-			auto it = _variables.find(vdef->name);
+			std::string name = def->isStage ? vdef->name : def->name + "::" + vdef->name;
+
+			auto it = _variables.find(name);
 			if (it != _variables.end())
 			{
 				// duplicate variable name
@@ -1596,7 +1635,7 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 				return -1;
 			}
 
-			Value &v = _variables[vdef->name] = { 0 };
+			Value &v = _variables[name] = { 0 };
 			SetParsedString(v, vdef->value->value);
 		}
 
@@ -1707,18 +1746,14 @@ void VirtualMachine::VMResume()
 
 void VirtualMachine::SendFlagClicked()
 {
-	for (Script &script : _scripts)
-	{
-		AutoRelease<Statement> &s = script.entry->sl[0];
-		OnFlagClicked *fc = s->As<OnFlagClicked>();
-		if (fc)
-			StartScript(script);
-	}
+	printf("Flag clicked\n");
+	_flagClicked = true;
 }
 
 void VirtualMachine::Send(const std::string &message)
 {
-
+	printf("Send: %s\n", message.c_str());
+	_toSend.insert(message);
 }
 
 void VirtualMachine::SendAndWait(const std::string &message)
@@ -1729,22 +1764,6 @@ void VirtualMachine::SendAndWait(const std::string &message)
 void VirtualMachine::SendKeyPressed(int scancode)
 {
 
-}
-
-void VirtualMachine::SendSpriteClicked(Sprite *sprite)
-{
-	printf("Clicked %s\n", sprite->GetName().c_str());
-
-	for (Script &script : _scripts)
-	{
-		if (script.sprite != sprite)
-			continue;
-
-		AutoRelease<Statement> &s = script.entry->sl[0];
-		OnSpriteClicked *fc = s->As<OnSpriteClicked>();
-		if (fc)
-			StartScript(script);
-	}
 }
 
 void VirtualMachine::Sleep(double seconds)
@@ -1767,12 +1786,15 @@ void VirtualMachine::WaitUntil(Expression *expr)
 	Sched();
 }
 
-void VirtualMachine::AskAndWait()
+void VirtualMachine::AskAndWait(const std::string &question)
 {
 	if (_current == nullptr)
 		Panic();
 
-	// TODO: implement
+	_current->askInput = true;
+	_current->state = WAITING;
+	_askQueue.push(std::make_pair(_current, question));
+	Sched();
 }
 
 void VirtualMachine::Terminate()
@@ -1827,6 +1849,8 @@ void LS_NORETURN VirtualMachine::Raise(ExceptionType type, const char *message)
 {
 	if (_current == nullptr)
 		Panic(); // thrown outside of a script
+
+	printf("<EXCEPTION> %s: %s\n", ExceptionString(type), message);
 
 	_exceptionType = type;
 	_exceptionMessage = message;
@@ -1991,9 +2015,6 @@ Value &VirtualMachine::Assign(Value &lhs, const Value &rhs)
 	if (&lhs == &rhs)
 		return lhs;
 
-	if (lhs.u.ref == rhs.u.ref)
-		return RetainValue(lhs);
-
 	ReleaseValue(lhs);
 	return RetainValue(lhs = rhs);
 }
@@ -2025,8 +2046,6 @@ Value &VirtualMachine::SetBool(Value &lhs, bool rhs)
 
 Value &VirtualMachine::SetString(Value &lhs, const std::string &rhs)
 {
-	ReleaseValue(lhs);
-
 	if (rhs.size() == 0)
 		return SetEmpty(lhs);
 
@@ -2264,8 +2283,14 @@ void VirtualMachine::FreeValue(Value &val)
 Value &VirtualMachine::FindVariable(const std::string &id)
 {
 	auto it = _variables.find(id);
+	if (it != _variables.end())
+		return it->second;
+
+	std::string name = _current->sprite->GetName() + "::" + id;
+	it = _variables.find(name);
 	if (it == _variables.end())
 		Raise(VariableNotFound);
+
 	return it->second;
 }
 
@@ -2322,6 +2347,11 @@ VirtualMachine::VirtualMachine()
 
 	_sprites = nullptr;
 	_spritesEnd = nullptr;
+
+	_flagClicked = false;
+
+	_asker = nullptr;
+	memset(_inputBuf, 0, sizeof(_inputBuf));
 
 	_renderer = nullptr;
 
@@ -2733,6 +2763,35 @@ void VirtualMachine::Render()
 	}
 	ImGui::End();
 
+	int width, height;
+	SDL_GL_GetDrawableSize(_renderer->GetWindow(), &width, &height);
+
+	if (_asker)
+	{
+		float padding = ImGui::GetStyle().WindowPadding.x;
+
+		ImGui::SetNextWindowPos(ImVec2(width / 2, height - padding), ImGuiCond_Always, ImVec2(0.5, 1.0));
+		ImGui::SetNextWindowSize(ImVec2(width - 2 * padding, 0), ImGuiCond_Always);
+
+		if (ImGui::Begin("Input", nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav))
+		{
+			ImGui::Text("%s is asking: %s", _asker->sprite->GetName().c_str(), _question.c_str());
+
+			ImGui::PushItemWidth(ImGui::GetWindowWidth() - 2 * padding);
+			if (ImGui::InputText("##input", _inputBuf, sizeof(_inputBuf), ImGuiInputTextFlags_EnterReturnsTrue))
+			{
+				SetString(_answer, _inputBuf);
+				_asker->askInput = false;
+				_asker->state = RUNNABLE;
+				_asker = nullptr;
+				memset(_inputBuf, 0, sizeof(_inputBuf));
+			}
+			ImGui::PopItemWidth();
+		}
+
+		ImGui::End();
+	}
+
 	const ImVec2 padding(5, 5);
 	const ImU32 textColor = IM_COL32(255, 255, 255, 255);
 	const ImU32 hiddenColor = IM_COL32(128, 128, 128, 255);
@@ -2767,6 +2826,13 @@ void VirtualMachine::Cleanup()
 		ls_wait(_thread);
 		ls_close(_thread), _thread = nullptr;
 	}
+
+	_flagClicked = false;
+	_toSend.clear();
+	_askQueue = std::queue<std::pair<Script *, std::string>>();
+	_asker = nullptr;
+	_question.clear();
+	memset(_inputBuf, 0, sizeof(_inputBuf));
 
 	_listeners.clear();
 	_keyListeners.clear();
@@ -2873,7 +2939,7 @@ static int ScriptMain(void *up)
 			vm.Sched();
 		}
 		else
-			vm.Raise(VMError);
+			vm.Raise(VMError, "Invalid program counter");
 	}
 
 	return 0;
@@ -2921,6 +2987,82 @@ void VirtualMachine::StartScript(Script &script)
 	script.state = RUNNABLE;
 }
 
+void VirtualMachine::DispatchEvents()
+{
+	// Flag clicked
+	if (_flagClicked)
+	{
+		for (Script &script : _scripts)
+		{
+			AutoRelease<Statement> &s = script.entry->sl[0];
+			OnFlagClicked *fc = s->As<OnFlagClicked>();
+			if (fc)
+				StartScript(script);
+		}
+
+		_flagClicked = false;
+	}
+
+	// Broadcasts
+	if (_toSend.size() != 0)
+	{
+		for (const std::string &message : _toSend)
+		{
+			for (Script &script : _scripts)
+			{
+				AutoRelease<Statement> &s = script.entry->sl[0];
+				OnEvent *oe = s->As<OnEvent>();
+				if (oe)
+				{
+					bool eq = oe->message == message;
+					if (eq)
+						StartScript(script);
+				}
+			}
+		}
+
+		_toSend.clear();
+	}
+
+	// Sprite clicked
+	if (_clicked)
+	{
+		Vector2 point(_clickX, _clickY);
+		for (const int64_t *id = _renderer->RenderOrderEnd() - 1; id >= _renderer->RenderOrderBegin(); id--)
+		{
+			Sprite *sprite = reinterpret_cast<Sprite *>(_renderer->GetRenderInfo(*id)->userData);
+			if (sprite->TouchingPoint(point))
+			{
+				// sprite was clicked
+				printf("Clicked %s\n", sprite->GetName().c_str());
+
+				for (Script &script : _scripts)
+				{
+					if (script.sprite != sprite)
+						continue;
+
+					AutoRelease<Statement> &s = script.entry->sl[0];
+					OnSpriteClicked *sc = s->As<OnSpriteClicked>();
+					if (sc)
+						StartScript(script);
+				}
+
+				break;
+			}
+		}
+	}
+
+	// Ask input
+	if (_askQueue.size() != 0 && _asker == nullptr)
+	{
+		std::pair<Script *, std::string> &top = _askQueue.front();
+		_asker = top.first;
+		_question = top.second;
+		memset(_inputBuf, 0, sizeof(_inputBuf));
+		_askQueue.pop();
+	}
+}
+
 void VirtualMachine::Scheduler()
 {
 	int activeScripts = 0, waitingScripts = 0;
@@ -2934,7 +3076,7 @@ void VirtualMachine::Scheduler()
 
 		if (script.state == WAITING)
 		{
-			if (script.sleepUntil <= _time)
+			if (!script.waitExpr && !script.waitInput && !script.askInput && script.sleepUntil <= _time)
 			{
 				// wake up
 				script.state = RUNNABLE;
@@ -3018,7 +3160,12 @@ void VirtualMachine::Main()
 	SDL_Window *window = _renderer->GetWindow();
 	SDL_SetWindowTitle(window, "Scratch 3");
 
-	_epoch = ls_time64();
+	_flagClicked = false;
+	_toSend.clear();
+	_askQueue = std::queue<std::pair<Script *, std::string>>();
+	_asker = nullptr;
+	_question.clear();
+	memset(_inputBuf, 0, sizeof(_inputBuf));
 
 	_time = 0.0;
 	_timerStart = 0.0;
@@ -3027,7 +3174,9 @@ void VirtualMachine::Main()
 	_timeScale = 1.0;
 
 	_running = true;
-		
+
+	_epoch = ls_time64();
+	
 	SendFlagClicked();
 
 	double lastTime = _time;
@@ -3045,20 +3194,7 @@ void VirtualMachine::Main()
 		if (_shouldStop)
 			break;
 
-		if (_clicked)
-		{
-			Vector2 point(_clickX, _clickY);
-			for (const int64_t *id = _renderer->RenderOrderEnd() - 1; id >= _renderer->RenderOrderBegin(); id--)
-			{
-				Sprite *sprite = reinterpret_cast<Sprite *>(_renderer->GetRenderInfo(*id)->userData);
-				if (sprite->TouchingPoint(point))
-				{
-					// sprite was clicked
-					SendSpriteClicked(sprite);
-					break;
-				}
-			}
-		}
+		DispatchEvents();
 
 		if (!_suspend && _exceptionType == Exception_None)
 		{
