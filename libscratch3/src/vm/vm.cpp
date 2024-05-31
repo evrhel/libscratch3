@@ -824,7 +824,7 @@ public:
 	virtual void Visit(MoveSteps *node)
 	{
 		node->e->Accept(this);
-		double steps = vm->ToReal(vm->StackAt(0));
+		double steps = vm->ToReal(vm->StackAt(0)) * vm->GetTimeScale();
 		vm->Pop();
 
 		Sprite *s = script->sprite;
@@ -1372,13 +1372,13 @@ public:
 			vm->Raise(InvalidArgument);
 			break;
 		case StopMode_All:
-			vm->VMTerminate();
+			vm->Raise(NotImplemented);
 			break;
 		case StopMode_ThisScript:
 			vm->Terminate();
 			break;
 		case StopMode_OtherScriptsInSprite:
-			// TODO: implement
+			vm->Raise(NotImplemented);
 			break;
 		}
 	}
@@ -1699,9 +1699,7 @@ void VirtualMachine::VMResume()
 		double suspendTime = ls_time64() - _suspendStart;
 
 		// adjust timers to account for suspension
-		_time += suspendTime;
-		_timerStart += suspendTime;
-		_nextExecution += suspendTime;
+		_epoch += suspendTime;
 
 		SDL_SetWindowTitle(_renderer->GetWindow(), "Scratch 3");
 	}
@@ -2359,10 +2357,12 @@ VirtualMachine::VirtualMachine()
 	memset(_panicJmp, 0, sizeof(_panicJmp));
 
 	_current = nullptr;
+	_epoch = 0;
 	_time = 0;
-	_lastTime = 0;
-	_nextExecution = 0;
-	_executionTime = 0;
+	_deltaFrameTime = 0;
+
+	_interpreterTime = 0;
+	_deltaExecution = 0;
 
 	_allocations = 0;
 
@@ -2461,8 +2461,7 @@ void VirtualMachine::Render()
 
 	_renderer->Render();
 
-	double dt = _time - _lastTime;
-	double fps = 1 / dt;
+	double fps = 1 / _deltaFrameTime;
 
 	if (ImGui::Begin("Debug"))
 	{
@@ -2525,7 +2524,7 @@ void VirtualMachine::Render()
 				int bottom = _renderer->GetLogicalBottom();
 
 				ImGui::SeparatorText("Performance");
-				ImGui::LabelText("Framerate", "%.2f (%d ms)", fps, (int)(dt * 1000));
+				ImGui::LabelText("Framerate", "%.2f (%.0f ms)", fps, _deltaFrameTime * 1000);
 				ImGui::LabelText("Resolution", "%dx%d", width, height);
 				ImGui::LabelText("Viewport Size", "%dx%d", right - left, top - bottom);
 				ImGui::LabelText("Visible Objects", "%d/%d", spritesVisible, (int)(_spritesEnd - _sprites));
@@ -2590,20 +2589,18 @@ void VirtualMachine::Render()
 			{
 				ImGui::SeparatorText("Information");
 				ImGui::LabelText("Program Name", "%s", _progName.c_str());
+				ImGui::LabelText("Clock Speed", "%u Hz", (unsigned)CLOCK_SPEED);
 
 				ImGui::SeparatorText("Performance");
-
-				if (FRAMERATE == 0)
-					ImGui::LabelText("Clock Speed", "(unlimited)");
-				else
-					ImGui::LabelText("Clock Speed", "%u Hz", (unsigned)FRAMERATE);
-
-				ImGui::LabelText("Interpreter Time", "%.2f ms", (_executionTime * 1000));
-				ImGui::LabelText("Utilization", "%.2f%%", _executionTime * FRAMERATE * 100.0);
+				ImGui::LabelText("Interpreter Time", "%.2f ms", (_interpreterTime * 1000));
+				ImGui::LabelText("Delta Execution", "%.2f ms", (_deltaExecution * 1000));
+				ImGui::LabelText("Time Scale", "%.2f", _timeScale);
+				ImGui::LabelText("Utilization", "%.2f%%", _interpreterTime * CLOCK_SPEED * 100.0);
 				ImGui::LabelText("Allocations", "%d", _allocations);
 
 				ImGui::SeparatorText("Scheduler");
 				ImGui::LabelText("Suspended", "%s", _suspend ? "true" : "false");
+				ImGui::LabelText("Time", "%.2f", _time);
 				ImGui::LabelText("Script Count", "%d", (int)_scripts.size());
 				ImGui::LabelText("Running", "%d", _activeScripts);
 				ImGui::LabelText("Waiting", "%d", _waitingScripts);
@@ -2967,8 +2964,8 @@ void VirtualMachine::Scheduler()
 
 void VirtualMachine::Main()
 {
-#if FRAMERATE != 0
-	constexpr double kMinExecutionTime = 1.0 / FRAMERATE;
+#if CLOCK_SPEED != 0
+	constexpr double kMinExecutionTime = 1.0 / CLOCK_SPEED;
 #else
 	constexpr double kMinExecutionTime = 0.0;
 #endif
@@ -3006,19 +3003,27 @@ void VirtualMachine::Main()
 	SDL_Window *window = _renderer->GetWindow();
 	SDL_SetWindowTitle(window, "Scratch 3");
 
-	_time = ls_time64();
-	_timerStart = _time;
+	_epoch = ls_time64();
+
+	_time = 0.0;
+	_timerStart = 0.0;
+	_deltaFrameTime = 0.0;
+	_deltaExecution = 0.0;
+	_timeScale = 1.0;
 
 	_running = true;
-
-	_nextExecution = _time;
-	
+		
 	SendFlagClicked();
+
+	double lastTime = _time;
+	double lastExecution = _time;
+	double nextExecution = _time;
 
 	for (;;)
 	{
-		_lastTime = _time;
-		_time = ls_time64();
+		lastTime = _time;
+		_time = ls_time64() - _epoch;
+		_deltaFrameTime = _time - lastTime;
 
 		PollEvents();
 
@@ -3028,15 +3033,18 @@ void VirtualMachine::Main()
 		if (!_suspend && _exceptionType == Exception_None)
 		{
 			_timer = _time - _timerStart;
-
-			if (_time >= _nextExecution)
+			if (_time >= nextExecution)
 			{
 				double start = ls_time64();
 
-				_nextExecution = _time + kMinExecutionTime;
+				_deltaExecution = _time - lastExecution;
+				lastExecution = _time;
+				nextExecution = _time + kMinExecutionTime;
+
 				Scheduler();
 
-				_executionTime = ls_time64() - start;
+				_interpreterTime = ls_time64() - start;
+				_timeScale = CLOCK_SPEED * _deltaExecution; // update after to prevent 0 on first frame
 			}
 		}
 

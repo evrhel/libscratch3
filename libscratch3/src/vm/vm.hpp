@@ -36,8 +36,8 @@
 // Maximum nesting depth of scripts
 #define SCRIPT_DEPTH 32
 
-// Rate at which scripts are executed, 0 = unlimited
-#define FRAMERATE 30
+// Rate at which scripts are executed
+#define CLOCK_SPEED 30
 
 class Loader;
 class VirtualMachine;
@@ -314,6 +314,8 @@ public:
 
 	constexpr Loader *GetLoader() const { return _loader; }
 
+	constexpr double GetTimeScale() const { return _timeScale; }
+
 	VirtualMachine();
 	~VirtualMachine();
 private:
@@ -382,10 +384,14 @@ private:
 	jmp_buf _panicJmp; // Panic jump buffer
 
 	Script *_current; // Currently executing script
-	double _time; // VM time
-	double _lastTime; // Last time
-	double _nextExecution; // Next execution time
-	double _executionTime; // Execution time
+	double _epoch; // VM start time
+	double _time; // Current time
+	double _deltaFrameTime; // Delta time
+
+	double _interpreterTime; // Time taken to run the interpreter once
+	double _deltaExecution; // Time since last scheduled execution
+
+	double _timeScale; // Time scale
 
 	int _allocations; // Number of allocations in a frame
 
