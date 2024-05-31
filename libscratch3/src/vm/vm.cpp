@@ -11,20 +11,11 @@
 #include "../render/renderer.hpp"
 
 #include "sprite.hpp"
-
-#define TRUE_STRING "true"
-#define FALSE_STRING "false"
+#include "io.hpp"
+#include "debug.hpp"
 
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
-
-static const char *States[] = {
-	"EMBRYO",
-	"RUNNABLE",
-	"WAITING",
-	"SUSPENDED",
-	"TERMINATED"
-};
 
 static const char *ExceptionString(ExceptionType type)
 {
@@ -55,51 +46,6 @@ static const char *ExceptionString(ExceptionType type)
 	}
 }
 
-static bool StringEquals(const char *lstr, const char *rstr)
-{
-	if (lstr == rstr)
-		return true;
-
-	const char *lstart = lstr;
-	while (isspace(*lstart))
-		lstart++;
-
-	const char *rend = lstart;
-	while (!isspace(*rend))
-		rend++;
-
-	const char *rstart = rstr;
-	while (isspace(*rstart))
-		rstart++;
-
-	const char *lend = rend;
-	while (!isspace(*lend))
-		lend++;
-
-	if (rend - lstart != lend - rstart)
-		return false;
-
-	size_t len = rend - lstart;
-	for (size_t i = 0; i < len; i++)
-	{
-		if (tolower(lstart[i]) != tolower(rstart[i]))
-			return false;
-	}
-
-	return true;
-}
-
-static constexpr uint32_t HashString(const char *s)
-{
-	uint32_t hash = 1315423911;
-	while (*s)
-		hash ^= ((hash << 5) + *s++ + (hash >> 2));
-	return hash;
-}
-
-static constexpr uint32_t kTrueHash = HashString(TRUE_STRING);
-static constexpr uint32_t kFalseHash = HashString(FALSE_STRING);
-
 class Executor : public Visitor
 {
 public:
@@ -111,22 +57,22 @@ public:
 
 	virtual void Visit(Constexpr *node)
 	{
-		vm->SetParsedString(vm->Push(), node->value);
+		SetParsedString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(XPos *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->GetX());
+		SetReal(vm->Push(), script->sprite->GetX());
 	}
 
 	virtual void Visit(YPos *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->GetY());
+		SetReal(vm->Push(), script->sprite->GetY());
 	}
 
 	virtual void Visit(Direction *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->GetDirection());
+		SetReal(vm->Push(), script->sprite->GetDirection());
 	}
 
 	virtual void Visit(CurrentCostume *node)
@@ -139,11 +85,11 @@ public:
 			vm->Raise(InvalidArgument);
 			break;
 		case PropGetType_Number:
-			vm->SetInteger(val, script->sprite->GetCostume());
+			SetInteger(val, script->sprite->GetCostume());
 			break;
 		case PropGetType_Name:
 			// TODO: implement
-			vm->SetBasicString(val, "costume1"); // always costume1
+			SetBasicString(val, "costume1"); // always costume1
 			break;
 		}
 	}
@@ -152,83 +98,86 @@ public:
 
 	virtual void Visit(Size *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->GetSize());
+		SetReal(vm->Push(), script->sprite->GetSize());
 	}
 
 	virtual void Visit(Volume *node)
 	{
-		vm->SetReal(vm->Push(), script->sprite->GetVolume());
+		SetReal(vm->Push(), script->sprite->GetVolume());
 	}
 
 	virtual void Visit(Touching *node)
 	{
 		// TODO: implement
 		node->e->Accept(this);
-		const char *name = vm->ToString(vm->StackAt(0));
+		int64_t len;
+		const char *name = ToString(vm->StackAt(0), &len);
 		vm->Pop();
 
 		if (!strcmp(name, "_mouse_"))
 		{
-			vm->SetBool(vm->Push(), script->sprite->TouchingPoint(Vector2(vm->GetMouseX(), vm->GetMouseY())));
+			auto &io = vm->GetIO();
+			SetBool(vm->Push(), script->sprite->TouchingPoint(Vector2(io.GetMouseX(), io.GetMouseY())));
 			return;
 		}
 			
-		Sprite *sprite = vm->FindSprite(name);
+		Sprite *sprite = vm->FindSprite(std::string(name, len));
 		if (!sprite)
 		{
-			vm->SetBool(vm->Push(), false);
+			SetBool(vm->Push(), false);
 			return;
 		}
 
-		vm->SetBool(vm->Push(), script->sprite->TouchingSprite(sprite));
+		SetBool(vm->Push(), script->sprite->TouchingSprite(sprite));
 	}
 
 	virtual void Visit(TouchingColor *node)
 	{
 		// TODO: implement
 		node->e->Accept(this);
-		int64_t color = vm->ToInteger(vm->StackAt(0));
+		int64_t color = ToInteger(vm->StackAt(0));
 		vm->Pop();
 
-		vm->SetBool(vm->Push(), script->sprite->TouchingColor(color));
+		SetBool(vm->Push(), script->sprite->TouchingColor(color));
 	}
 
 	virtual void Visit(ColorTouching *node)
 	{
 		// TODO: implement
-		vm->SetBool(vm->Push(), false);
+		SetBool(vm->Push(), false);
 	}
 
 	virtual void Visit(DistanceTo *node)
 	{
-		int64_t len;
 		node->e->Accept(this);
-		const char *name = vm->ToString(vm->StackAt(0), &len);
+		int64_t len;
+		const char *name = ToString(vm->StackAt(0), &len);
 		vm->Pop();
 
 		Sprite *s = vm->FindSprite(std::string(name, len));
 		if (!s)
 		{
-			vm->SetReal(vm->Push(), -1.0);
+			SetReal(vm->Push(), -1.0);
 			return;
 		}
 
 		double dx = s->GetX() - script->sprite->GetX();
 		double dy = s->GetY() - script->sprite->GetY();
 
-		vm->SetReal(vm->Push(), sqrt(dx * dx + dy * dy));
+		SetReal(vm->Push(), sqrt(dx * dx + dy * dy));
 	}
 
 	virtual void Visit(Answer *node)
 	{
-		vm->Assign(vm->Push(), vm->GetAnswer());
+		auto &io = vm->GetIO();
+		Assign(vm->Push(), io.GetAnswer());
 	}
 
 	virtual void Visit(KeyPressed *node)
 	{
-		int64_t len;
 		node->e->Accept(this);
-		const char *key = vm->ToString(vm->StackAt(0), &len);
+		int64_t len;
+		const char *key = ToString(vm->StackAt(0), &len);
 		vm->Pop();
 
 		// convert to lowercase
@@ -246,7 +195,7 @@ public:
 				scancode = SDL_SCANCODE_0 + (c - '0');
 			else
 			{
-				vm->SetBool(vm->Push(), false);
+				SetBool(vm->Push(), false);
 				return;
 			}
 		}
@@ -264,43 +213,43 @@ public:
 			scancode = -1;
 		else
 		{
-			vm->SetBool(vm->Push(), false);
+			SetBool(vm->Push(), false);
 			return;
 		}
 
-		vm->SetBool(vm->Push(), vm->GetKey(scancode));
+		SetBool(vm->Push(), vm->GetIO().GetKey(scancode));
 	}
 
 	virtual void Visit(MouseDown *node)
 	{
-		vm->SetBool(vm->Push(), vm->GetMouseDown());
+		SetBool(vm->Push(), vm->GetIO().IsMouseDown());
 	}
 
 	virtual void Visit(MouseX *node)
 	{
-		vm->SetInteger(vm->Push(), vm->GetMouseX());
+		SetInteger(vm->Push(), vm->GetIO().GetMouseX());
 	}
 
 	virtual void Visit(MouseY *node)
 	{
-		vm->SetInteger(vm->Push(), vm->GetMouseY());
+		SetInteger(vm->Push(), vm->GetIO().GetMouseY());
 	}
 
 	virtual void Visit(Loudness *node)
 	{
-		vm->SetReal(vm->Push(), vm->GetLoudness());
+		SetReal(vm->Push(), vm->GetIO().GetLoudness());
 	}
 
 	virtual void Visit(TimerValue *node)
 	{
-		vm->SetReal(vm->Push(), vm->GetTimer());
+		SetReal(vm->Push(), vm->GetIO().GetTimer());
 	}
 
 	virtual void Visit(PropertyOf *node)
 	{
-		int64_t len;
 		node->e->Accept(this);
-		const char *name = vm->ToString(vm->StackAt(0), &len);
+		int64_t len;
+		const char *name = ToString(vm->StackAt(0), &len);
 		vm->Pop();
 
 		Sprite *s = vm->FindSprite(std::string(name, len));
@@ -316,31 +265,31 @@ public:
 			vm->Push();
 			break;
 		case PropertyTarget_BackdropNumber:
-			vm->SetInteger(vm->Push(), 1);
+			SetInteger(vm->Push(), 1);
 			break;
 		case PropertyTarget_BackdropName:
-			vm->SetBasicString(vm->Push(), "backdrop1");
+			SetBasicString(vm->Push(), "backdrop1");
 			break;
 		case PropertyTarget_XPosition:
-			vm->SetReal(vm->Push(), s->GetX());
+			SetReal(vm->Push(), s->GetX());
 			break;
 		case PropertyTarget_YPosition:
-			vm->SetReal(vm->Push(), s->GetY());
+			SetReal(vm->Push(), s->GetY());
 			break;
 		case PropertyTarget_Direction:
-			vm->SetReal(vm->Push(), s->GetDirection());
+			SetReal(vm->Push(), s->GetDirection());
 			break;
 		case PropertyTarget_CostumeNumber:
-			vm->SetInteger(vm->Push(), s->GetCostume());
+			SetInteger(vm->Push(), s->GetCostume());
 			break;
 		case PropertyTarget_CostumeName:
-			vm->SetConstString(vm->Push(), &s->GetCostumeName());
+			SetConstString(vm->Push(), &s->GetCostumeName());
 			break;
 		case PropertyTarget_Size:
-			vm->SetReal(vm->Push(), s->GetSize());
+			SetReal(vm->Push(), s->GetSize());
 			break;
 		case PropertyTarget_Volume:
-			vm->SetReal(vm->Push(), s->GetVolume());
+			SetReal(vm->Push(), s->GetVolume());
 			break;
 		case PropertyTarget_Variable:
 			vm->Push();
@@ -361,26 +310,26 @@ public:
 			vm->Raise(InvalidArgument);
 			break;
 		case DateFormat_Year:
-			vm->SetInteger(val, ts.year);
+			SetInteger(val, ts.year);
 			break;
 		case DateFormat_Month:
-			vm->SetInteger(val, ts.month);
+			SetInteger(val, ts.month);
 			break;
 		case DateFormat_Date:
-			vm->SetInteger(val, ts.day);
+			SetInteger(val, ts.day);
 			break;
 		case DateFormat_DayOfWeek:
 			// TODO: implement
-			vm->SetInteger(val, 4); // always Thursday
+			SetInteger(val, 0);
 			break;
 		case DateFormat_Hour:
-			vm->SetInteger(val, ts.hour);
+			SetInteger(val, ts.hour);
 			break;
 		case DateFormat_Minute:
-			vm->SetInteger(val, ts.minute);
+			SetInteger(val, ts.minute);
 			break;
 		case DateFormat_Second:
-			vm->SetInteger(val, ts.second);
+			SetInteger(val, ts.second);
 			break;
 		}
 	}
@@ -388,13 +337,13 @@ public:
 	virtual void Visit(DaysSince2000 *node)
 	{
 		// TODO: implement
-		vm->SetReal(vm->Push(), 0.0);
+		SetReal(vm->Push(), 0.0);
 	}
 
 	virtual void Visit(Username *node)
 	{
 		// TODO: implement
-		vm->Push(); // None
+		Assign(vm->Push(), vm->GetIO().GetUsername());
 	}
 
 	virtual void Visit(Add *node)
@@ -405,12 +354,12 @@ public:
 		Value &lhs = vm->StackAt(1);
 		Value &rhs = vm->StackAt(0);
 
-		double r = vm->ToReal(lhs) + vm->ToReal(rhs);
+		double r = ToReal(lhs) + ToReal(rhs);
 
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetReal(vm->Push(), r);
+		SetReal(vm->Push(), r);
 	}
 
 	virtual void Visit(Sub *node)
@@ -421,12 +370,12 @@ public:
 		Value &lhs = vm->StackAt(1);
 		Value &rhs = vm->StackAt(0);
 
-		double r = vm->ToReal(lhs) - vm->ToReal(rhs);
+		double r = ToReal(lhs) - ToReal(rhs);
 
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetReal(vm->Push(), r);
+		SetReal(vm->Push(), r);
 	}
 
 	virtual void Visit(Mul *node)
@@ -437,12 +386,12 @@ public:
 		Value &lhs = vm->StackAt(1);
 		Value &rhs = vm->StackAt(0);
 
-		double r = vm->ToReal(lhs) * vm->ToReal(rhs);
+		double r = ToReal(lhs) * ToReal(rhs);
 
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetReal(vm->Push(), r);
+		SetReal(vm->Push(), r);
 	}
 
 	virtual void Visit(Div *node)
@@ -453,12 +402,12 @@ public:
 		Value &lhs = vm->StackAt(1);
 		Value &rhs = vm->StackAt(0);
 
-		double r = vm->ToReal(lhs) / vm->ToReal(rhs);
+		double r = ToReal(lhs) / ToReal(rhs);
 
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetReal(vm->Push(), r);
+		SetReal(vm->Push(), r);
 	}
 
 	virtual void Visit(Random *node)
@@ -471,8 +420,8 @@ public:
 
 		if (from.type == ValueType_Real || to.type == ValueType_Real)
 		{
-			double f = vm->ToReal(from);
-			double t = vm->ToReal(to);
+			double f = ToReal(from);
+			double t = ToReal(to);
 
 			if (t < f) // swap
 			{
@@ -486,12 +435,12 @@ public:
 
 			double r = f + (ls_rand_double() * (t - f));
 
-			vm->SetReal(vm->Push(), r);
+			SetReal(vm->Push(), r);
 		}
 		else
 		{
-			int64_t f = vm->ToInteger(from);
-			int64_t t = vm->ToInteger(to);
+			int64_t f = ToInteger(from);
+			int64_t t = ToInteger(to);
 
 			if (t < f) // swap
 			{
@@ -505,7 +454,7 @@ public:
 
 			int64_t r = f + (ls_rand_uint64() % (t - f + 1));
 
-			vm->SetInteger(vm->Push(), r);
+			SetInteger(vm->Push(), r);
 		}
 	}
 
@@ -514,13 +463,13 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 
-		double lhs = vm->ToReal(vm->StackAt(1));
-		double rhs = vm->ToReal(vm->StackAt(0));
+		double lhs = ToReal(vm->StackAt(1));
+		double rhs = ToReal(vm->StackAt(0));
 
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetBool(vm->Push(), lhs > rhs);
+		SetBool(vm->Push(), lhs > rhs);
 	}
 
 	virtual void Visit(Less *node)
@@ -528,13 +477,13 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 
-		double lhs = vm->ToReal(vm->StackAt(1));
-		double rhs = vm->ToReal(vm->StackAt(0));
+		double lhs = ToReal(vm->StackAt(1));
+		double rhs = ToReal(vm->StackAt(0));
 
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetBool(vm->Push(), lhs < rhs);
+		SetBool(vm->Push(), lhs < rhs);
 	}
 
 	virtual void Visit(Equal *node)
@@ -542,12 +491,12 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 	
-		bool equal = vm->Equals(vm->StackAt(1), vm->StackAt(0));
+		bool equal = Equals(vm->StackAt(1), vm->StackAt(0));
 
 		vm->Pop();
 		vm->Pop();
 		
-		vm->SetBool(vm->Push(), equal);
+		SetBool(vm->Push(), equal);
 	}
 
 	virtual void Visit(LogicalAnd *node)
@@ -555,13 +504,13 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 
-		bool lhs = vm->Truth(vm->StackAt(1));
-		bool rhs = vm->Truth(vm->StackAt(0));
+		bool lhs = Truth(vm->StackAt(1));
+		bool rhs = Truth(vm->StackAt(0));
 
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetBool(vm->Push(), lhs && rhs);
+		SetBool(vm->Push(), lhs && rhs);
 	}
 
 	virtual void Visit(LogicalOr *node)
@@ -569,24 +518,24 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 
-		bool lhs = vm->Truth(vm->StackAt(1));
-		bool rhs = vm->Truth(vm->StackAt(0));
+		bool lhs = Truth(vm->StackAt(1));
+		bool rhs = Truth(vm->StackAt(0));
 
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetBool(vm->Push(), lhs || rhs);
+		SetBool(vm->Push(), lhs || rhs);
 	}
 
 	virtual void Visit(LogicalNot *node)
 	{
 		node->e->Accept(this);
 
-		bool truth = vm->Truth(vm->StackAt(0));
+		bool truth = Truth(vm->StackAt(0));
 
 		vm->Pop();
 
-		vm->SetBool(vm->Push(), !truth);
+		SetBool(vm->Push(), !truth);
 	}
 
 	virtual void Visit(Concat *node)
@@ -597,19 +546,9 @@ public:
 		Value &lhs = vm->StackAt(1);
 		Value &rhs = vm->StackAt(0);
 
-		vm->CvtString(lhs);
-		vm->CvtString(rhs);
+		ConcatValue(lhs, rhs);
 
-		Value &v = vm->Push();
-		vm->AllocString(v, lhs.u.string->len + rhs.u.string->len);
-
-		memcpy(v.u.string->str, lhs.u.string->str, lhs.u.string->len);
-		memcpy(v.u.string->str + lhs.u.string->len, rhs.u.string->str, rhs.u.string->len);
-
-		vm->Assign(lhs, v);
-
-		vm->Pop();
-		vm->Pop();
+		vm->Pop(); // rhs
 	}
 
 	virtual void Visit(CharAt *node)
@@ -617,43 +556,23 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 
-		Value &v1 = vm->StackAt(1);
-		Value &v2 =	vm->StackAt(0);
+		Value &string = vm->StackAt(1);
+		Value &index = vm->StackAt(0);
 
-		vm->CvtString(v2);
-
-		int64_t index = 0;
-		switch (v1.type)
-		{
-		default:
-			break;
-		case ValueType_Integer: {
-			index = v1.u.integer;
-			break;
-		}
-		case ValueType_Real: {
-			index = static_cast<int64_t>(v1.u.real);
-			break;
-		}
-		}
-
-		if (index < 1 || index > v2.u.string->len)
-			vm->SetEmpty(v1);
-		else
-		{
-			vm->AllocString(v1, 1);
-			v1.u.string->str[0] = v2.u.string->str[index - 1];
-		}
+		char c = ValueCharAt(string, ToInteger(index));
 
 		vm->Pop();
+		vm->Pop();
+
+		SetChar(vm->Push(), c);
 	}
 
 	virtual void Visit(StringLength *node)
 	{
-		int64_t len;
 		node->e->Accept(this);
-		vm->ToString(vm->StackAt(0), &len);
-		vm->SetInteger(vm->StackAt(0), len);
+		int64_t len = ValueLength(vm->StackAt(0));
+		vm->Pop();
+		SetInteger(vm->Push(), len);
 	}
 
 	virtual void Visit(StringContains *node)
@@ -664,58 +583,40 @@ public:
 		Value &v1 = vm->StackAt(1);
 		Value &v2 = vm->StackAt(0);
 
-		vm->CvtString(v1);
-		vm->CvtString(v2);
-				
-		// find v2 in v1, case-insensitive
-		bool found = false;
-		for (int64_t i = 0; i < v1.u.string->len; i++)
-		{
-			if (tolower(v1.u.string->str[i]) == tolower(v2.u.string->str[0]))
-			{
-				found = true;
-				for (int64_t j = 1; j < v2.u.string->len; j++)
-				{
-					if (tolower(v1.u.string->str[i + j]) != tolower(v2.u.string->str[j]))
-					{
-						found = false;
-						break;
-					}
-				}
+		bool found = ValueContains(v1, v2);
 
-				if (found)
-					break;
-			}
-		}
-
-		vm->SetBool(v1, found);
 		vm->Pop();
+		vm->Pop();
+
+		SetBool(vm->Push(), found);
 	}
 
 	virtual void Visit(Mod *node)
 {
 		node->e1->Accept(this);
 		node->e2->Accept(this);
-		double lhs = vm->ToReal(vm->StackAt(1));
-		double rhs = vm->ToReal(vm->StackAt(0));
+
+		double lhs = ToReal(vm->StackAt(1));
+		double rhs = ToReal(vm->StackAt(0));
+
 		vm->Pop();
 		vm->Pop();
 
-		vm->SetReal(vm->Push(), fmod(lhs, rhs));
+		SetReal(vm->Push(), fmod(lhs, rhs));
 	}
 
 	virtual void Visit(Round *node)
 	{
 		node->e->Accept(this);
-		double val = vm->ToReal(vm->StackAt(0));
+		double val = ToReal(vm->StackAt(0));
 		vm->Pop();
-		vm->SetInteger(vm->Push(), static_cast<int64_t>(round(val)));
+		SetInteger(vm->Push(), static_cast<int64_t>(round(val)));
 	}
 
 	virtual void Visit(MathFunc *node)
 	{
 		node->e->Accept(this);
-		double val = vm->ToReal(vm->StackAt(0));
+		double val = ToReal(vm->StackAt(0));
 		vm->Pop();
 
 		double r;
@@ -768,19 +669,18 @@ public:
 			break;
 		}
 
-		vm->SetReal(vm->Push(), r);
+		SetReal(vm->Push(), r);
 	}
 
 	virtual void Visit(VariableExpr *node)
 	{
 		// TODO: replace with id
-		Value &var = vm->FindVariable(node->name);
-		vm->Assign(vm->Push(), var);
+		Assign(vm->Push(), vm->FindVariable(node->name));
 	}
 
 	virtual void Visit(BroadcastExpr *node)
 	{
-		vm->SetConstString(vm->Push(), &node->name);
+		SetConstString(vm->Push(), &node->name);
 	}
 
 	virtual void Visit(ListExpr *node)
@@ -798,19 +698,19 @@ public:
 	virtual void Visit(IndexOf *node)
 	{
 		// TODO: implement
-		vm->SetInteger(vm->Push(), 0);
+		SetInteger(vm->Push(), 0);
 	}
 
 	virtual void Visit(ListLength *node)
 	{
 		// TODO: implement
-		vm->SetInteger(vm->Push(), 0);
+		SetInteger(vm->Push(), 0);
 	}
 
 	virtual void Visit(ListContains *node)
 	{
 		// TODO: implement
-		vm->SetBool(vm->Push(), false);
+		SetBool(vm->Push(), false);
 	}
 
 	//
@@ -823,7 +723,7 @@ public:
 	virtual void Visit(MoveSteps *node)
 	{
 		node->e->Accept(this);
-		double steps = vm->ToReal(vm->StackAt(0)) * vm->GetTimeScale();
+		double steps = ToReal(vm->StackAt(0));
 		vm->Pop();
 
 		Sprite *s = script->sprite;
@@ -839,7 +739,7 @@ public:
 	{
 		node->e->Accept(this);
 		Sprite *s = script->sprite;
-		s->SetDirection(s->GetDirection() + vm->ToReal(vm->StackAt(0)));
+		s->SetDirection(s->GetDirection() + ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -847,7 +747,7 @@ public:
 	{
 		node->e->Accept(this);
 		Sprite *s = script->sprite;
-		s->SetDirection(s->GetDirection() - vm->ToReal(vm->StackAt(0)));
+		s->SetDirection(s->GetDirection() - ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -861,7 +761,7 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 		Sprite *s = script->sprite;
-		s->SetXY(vm->ToReal(vm->StackAt(1)), vm->ToReal(vm->StackAt(0)));
+		s->SetXY(ToReal(vm->StackAt(1)), ToReal(vm->StackAt(0)));
 		vm->Pop();
 		vm->Pop();
 	}
@@ -872,8 +772,8 @@ public:
 		node->e2->Accept(this); // destination
 
 		int64_t len;
-		double secs = vm->ToReal(vm->StackAt(1));
-		const char *dest = vm->ToString(vm->StackAt(0), &len);
+		double secs = ToReal(vm->StackAt(1));
+		const char *dest = ToString(vm->StackAt(0), &len);
 
 		double x = 0, y = 0;
 
@@ -884,8 +784,8 @@ public:
 		}
 		else if (!strcmp(dest, "mouse-pointer"))
 		{
-			x = vm->GetMouseX();
-			y = vm->GetMouseY();
+			x = vm->GetIO().GetMouseX();
+			y = vm->GetIO().GetMouseY();
 		}
 		else
 		{
@@ -909,9 +809,9 @@ public:
 		node->e2->Accept(this); // x
 		node->e3->Accept(this); // y
 
-		double secs = vm->ToReal(vm->StackAt(2));
-		double x = vm->ToReal(vm->StackAt(1));
-		double y = vm->ToReal(vm->StackAt(0));
+		double secs = ToReal(vm->StackAt(2));
+		double x = ToReal(vm->StackAt(1));
+		double y = ToReal(vm->StackAt(0));
 
 		vm->Glide(script->sprite, x, y, secs);
 
@@ -923,7 +823,7 @@ public:
 	virtual void Visit(PointDir *node)
 	{
 		node->e->Accept(this);
-		script->sprite->SetDirection(vm->ToReal(vm->StackAt(0)));
+		script->sprite->SetDirection(ToReal(vm->StackAt(0)));
 		vm->Pop();
 	
 	}
@@ -937,14 +837,14 @@ public:
 	{
 		node->e->Accept(this);
 		Sprite *s = script->sprite;
-		s->SetX(s->GetX() + vm->ToReal(vm->StackAt(0)));
+		s->SetX(s->GetX() + ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(SetX *node)
 	{
 		node->e->Accept(this);
-		script->sprite->SetX(vm->ToReal(vm->StackAt(0)));
+		script->sprite->SetX(ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -952,14 +852,14 @@ public:
 	{
 		node->e->Accept(this);
 		Sprite *s = script->sprite;
-		s->SetY(s->GetY() + vm->ToReal(vm->StackAt(0)));
+		s->SetY(s->GetY() + ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(SetY *node)
 	{
 		node->e->Accept(this);
-		script->sprite->SetY(vm->ToReal(vm->StackAt(0)));
+		script->sprite->SetY(ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -982,8 +882,8 @@ public:
 		Value &duration = vm->StackAt(0);
 
 		int64_t len;
-		const char *mstr = vm->ToString(message, &len);
-		double secs = vm->ToReal(duration);
+		const char *mstr = ToString(message, &len);
+		double secs = ToReal(duration);
 
 		vm->Pop();
 		vm->Pop();
@@ -1007,7 +907,7 @@ public:
 		Value &message = vm->StackAt(0);
 
 		int64_t len;
-		const char *mstr = vm->ToString(message, &len);
+		const char *mstr = ToString(message, &len);
 
 		vm->Pop();
 
@@ -1030,8 +930,8 @@ public:
 		Value &duration = vm->StackAt(0);
 
 		int64_t len;
-		const char *mstr = vm->ToString(message, &len);
-		double secs = vm->ToReal(duration);
+		const char *mstr = ToString(message, &len);
+		double secs = ToReal(duration);
 
 		vm->Pop();
 		vm->Pop();
@@ -1055,7 +955,7 @@ public:
 		Value &message = vm->StackAt(0);
 
 		int64_t len;
-		const char *mstr = vm->ToString(message, &len);
+		const char *mstr = ToString(message, &len);
 
 		vm->Pop();
 
@@ -1086,7 +986,7 @@ public:
 		case ValueType_String:
 		case ValueType_BasicString:
 		case ValueType_ConstString:
-			script->sprite->SetCostume(vm->ToString(costume));
+			script->sprite->SetCostume(ToString(costume));
 			break;
 		default:
 			break; // do nothing
@@ -1116,14 +1016,14 @@ public:
 			break;
 		case ValueType_Integer:
 		case ValueType_Real:
-			stage->SetCostume(vm->ToInteger(v));
+			stage->SetCostume(ToInteger(v));
 			break;
 		case ValueType_Bool:
 		case ValueType_String:
 		case ValueType_BasicString:
 		case ValueType_ConstString: {
 			int64_t len;
-			const char *name = vm->ToString(v, &len);
+			const char *name = ToString(v, &len);
 			stage->SetCostume(std::string(name, len));
 			break;
 		}
@@ -1150,21 +1050,21 @@ public:
 	{
 		node->e->Accept(this);
 		Sprite *s = script->sprite;
-		s->SetSize(s->GetSize() + vm->ToReal(vm->StackAt(0)));
+		s->SetSize(s->GetSize() + ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(SetSize *node)
 	{
 		node->e->Accept(this);
-		script->sprite->SetSize(vm->ToReal(vm->StackAt(0)));
+		script->sprite->SetSize(ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(ChangeGraphicEffect *node)
 	{
 		node->e->Accept(this);
-		double val = vm->ToReal(vm->StackAt(0));
+		double val = ToReal(vm->StackAt(0));
 		vm->Pop();
 
 		Sprite *s = script->sprite;
@@ -1200,7 +1100,7 @@ public:
 	virtual void Visit(SetGraphicEffect *node)
 	{
 		node->e->Accept(this);
-		double val = vm->ToReal(vm->StackAt(0));
+		double val = ToReal(vm->StackAt(0));
 		vm->Pop();
 
 		Sprite *s = script->sprite;
@@ -1274,7 +1174,7 @@ public:
 	virtual void Visit(MoveLayer *node)
 	{
 		node->e->Accept(this);
-		int64_t amount = vm->ToInteger(vm->StackAt(0));
+		int64_t amount = ToInteger(vm->StackAt(0));
 		vm->Pop();
 
 		switch (node->direction)
@@ -1303,14 +1203,14 @@ public:
 	{
 		node->e->Accept(this);
 		Sprite *s = script->sprite;
-		s->SetVolume(s->GetVolume() + vm->ToReal(vm->StackAt(0)));
+		s->SetVolume(s->GetVolume() + ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(SetVolume *node)
 	{
 		node->e->Accept(this);
-		script->sprite->SetVolume(vm->ToReal(vm->StackAt(0)));
+		script->sprite->SetVolume(ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
@@ -1328,7 +1228,7 @@ public:
 		node->e->Accept(this);
 
 		int64_t len;
-		const char *message = vm->ToString(vm->StackAt(0), &len);
+		const char *message = ToString(vm->StackAt(0), &len);
 
 		vm->Pop();
 
@@ -1340,14 +1240,14 @@ public:
 	virtual void Visit(WaitSecs *node)
 	{
 		node->e->Accept(this);
-		vm->Sleep(vm->ToReal(vm->StackAt(0)));
+		vm->Sleep(ToReal(vm->StackAt(0)));
 		vm->Pop();
 	}
 
 	virtual void Visit(Repeat *node)
 	{
 		node->e->Accept(this);
-		int64_t count = vm->ToInteger(vm->StackAt(0));
+		int64_t count = ToInteger(vm->StackAt(0));
 		vm->Pop();
 		vm->PushFrame(*node->sl, count, 0);
 	}
@@ -1360,7 +1260,7 @@ public:
 	virtual void Visit(If *node)
 	{
 		node->e->Accept(this);
-		bool truth = vm->Truth(vm->StackAt(0));
+		bool truth = Truth(vm->StackAt(0));
 		vm->Pop();
 
 		if (truth)
@@ -1370,7 +1270,7 @@ public:
 	virtual void Visit(IfElse *node)
 	{
 		node->e->Accept(this);
-		bool truth = vm->Truth(vm->StackAt(0));
+		bool truth = Truth(vm->StackAt(0));
 		vm->Pop();
 
 		if (truth)
@@ -1389,7 +1289,7 @@ public:
 	{
 		node->e->Accept(this);
 
-		bool truth = vm->Truth(vm->StackAt(0));
+		bool truth = Truth(vm->StackAt(0));
 		vm->Pop();
 
 		if (!truth)
@@ -1436,7 +1336,7 @@ public:
 		node->e->Accept(this);
 
 		int64_t len;
-		const char *question = vm->ToString(vm->StackAt(0), &len);
+		const char *question = ToString(vm->StackAt(0), &len);
 		vm->AskAndWait(std::string(question, len));
 		vm->Pop();
 	}
@@ -1456,7 +1356,7 @@ public:
 		// TODO: replace with id
 		Value &var = vm->FindVariable(node->name);
 		node->e->Accept(this);
-		vm->Assign(var, vm->StackAt(0));
+		Assign(var, vm->StackAt(0));
 		vm->Pop();
 	}
 
@@ -1465,10 +1365,10 @@ public:
 		// TODO: replace with id
 		Value &var = vm->FindVariable(node->name);
 		node->e->Accept(this);
-		double lhs = vm->ToReal(var);
-		double rhs = vm->ToReal(vm->StackAt(0));
+		double lhs = ToReal(var);
+		double rhs = ToReal(vm->StackAt(0));
 		vm->Pop();
-		vm->SetReal(var, lhs + rhs);
+		SetReal(var, lhs + rhs);
 	}
 
 	virtual void Visit(ShowVariable *node) {}
@@ -1493,72 +1393,72 @@ public:
 
 	virtual void Visit(GotoReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(GlideReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(PointTowardsReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(CostumeReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(BackdropReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(SoundReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(BroadcastReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(CloneReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(TouchingReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(DistanceReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(KeyReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(PropertyOfReporter *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(ArgReporterStringNumber *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	virtual void Visit(ArgReporterBoolean *node)
 	{
-		vm->SetConstString(vm->Push(), &node->value);
+		SetConstString(vm->Push(), &node->value);
 	}
 
 	VirtualMachine *vm = nullptr;
@@ -1677,16 +1577,6 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 		return -1;
 	}
 
-	size_t len;
-	len = ls_username(nullptr, 0);
-	if (len != -1)
-	{
-		ReleaseValue(_username);
-		AllocString(_username, len);
-		ls_username(_username.u.string->str, len);
-		_username.hash = HashString(_username.u.string->str);
-	}
-
 	_prog = Retain(prog);
 	_progName = name;
 	return 0;
@@ -1725,7 +1615,7 @@ void VirtualMachine::VMSuspend()
 		_suspend = true;
 		_suspendStart = ls_time64();
 
-		SDL_SetWindowTitle(_renderer->GetWindow(), "Scratch 3 [Suspended]");
+		SDL_SetWindowTitle(_render->GetWindow(), "Scratch 3 [Suspended]");
 	}
 }
 
@@ -1740,7 +1630,7 @@ void VirtualMachine::VMResume()
 		// adjust timers to account for suspension
 		_epoch += suspendTime;
 
-		SDL_SetWindowTitle(_renderer->GetWindow(), "Scratch 3");
+		SDL_SetWindowTitle(_render->GetWindow(), "Scratch 3");
 	}
 }
 
@@ -1811,7 +1701,7 @@ static void DumpScript(Script *script)
 	printf("Script %p\n", script);
 
 	if (script->state >= EMBRYO && script->state <= TERMINATED)
-		printf("    state = %s\n", States[script->state]);
+		printf("    state = %s\n", GetStateName(script->state));
 	else
 		printf("    state = Unknown\n");
 
@@ -1887,7 +1777,7 @@ static void PopUnsafe(VirtualMachine *vm, Script *script)
 {
 	if (script->sp >= script->stack + STACK_SIZE)
 		abort();
-	vm->ReleaseValue(*script->sp);
+	ReleaseValue(*script->sp);
 	memset(script->sp, 0xab, sizeof(Value));
 	script->sp++;
 }
@@ -1932,352 +1822,6 @@ void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 	f.pc = 0;
 	f.count = count;
 	f.flags = flags;
-}
-
-bool VirtualMachine::Truth(const Value &val)
-{
-	switch (val.type)
-	{
-	default:
-		return false;
-	case ValueType_Bool:
-		return val.u.boolean;
-	case ValueType_String:
-		return StringEquals(val.u.string->str, TRUE_STRING);
-	case ValueType_BasicString:
-		return StringEquals(val.u.basic_string, TRUE_STRING);
-	case ValueType_ConstString:
-		return StringEquals(val.u.const_string->c_str(), TRUE_STRING);
-	}
-}
-
-bool VirtualMachine::Equals(const Value &lhs, const Value &rhs)
-{
-	switch (lhs.type)
-	{
-	case ValueType_Integer: {
-		if (rhs.type == ValueType_Integer)
-			return lhs.u.integer == rhs.u.integer;
-		if (rhs.type == ValueType_Real)
-			return lhs.u.integer == rhs.u.real;
-		return false;
-	}
-	case ValueType_Real:
-		if (rhs.type == ValueType_Real)
-			return lhs.u.real == rhs.u.real;
-		if (rhs.type == ValueType_Integer)
-			return lhs.u.real == rhs.u.integer;
-		return false;
-	case ValueType_Bool:
-		if (rhs.type == ValueType_Bool)
-			return lhs.u.boolean == rhs.u.boolean;
-		return false;
-	case ValueType_String:
-		if (lhs.hash != rhs.hash)
-			return false;
-
-		if (rhs.type == ValueType_String)
-			return StringEquals(lhs.u.string->str, rhs.u.string->str);
-		else if (rhs.type == ValueType_BasicString)
-			return StringEquals(lhs.u.string->str, rhs.u.basic_string);
-		else if (rhs.type == ValueType_ConstString)
-			return StringEquals(lhs.u.string->str, rhs.u.const_string->c_str());
-		return false;
-	case ValueType_BasicString:
-		if (lhs.hash != rhs.hash)
-			return false;
-
-		if (rhs.type == ValueType_String)
-			return StringEquals(lhs.u.basic_string, rhs.u.string->str);
-		else if (rhs.type == ValueType_BasicString)
-			return StringEquals(lhs.u.basic_string, rhs.u.basic_string);
-		else if (rhs.type == ValueType_ConstString)
-			return StringEquals(lhs.u.basic_string, rhs.u.const_string->c_str());
-		return false;
-	case ValueType_ConstString:
-		if (lhs.hash != rhs.hash)
-			return false;
-
-		if (rhs.type == ValueType_String)
-			return StringEquals(lhs.u.const_string->c_str(), rhs.u.string->str);
-		else if (rhs.type == ValueType_BasicString)
-			return StringEquals(lhs.u.const_string->c_str(), rhs.u.basic_string);
-		else if (rhs.type == ValueType_ConstString)
-			return StringEquals(lhs.u.const_string->c_str(), rhs.u.const_string->c_str());
-		return false;
-	default:
-		return false;
-	}
-}
-
-Value &VirtualMachine::Assign(Value &lhs, const Value &rhs)
-{
-	if (&lhs == &rhs)
-		return lhs;
-
-	ReleaseValue(lhs);
-	return RetainValue(lhs = rhs);
-}
-
-
-Value &VirtualMachine::SetInteger(Value &lhs, int64_t val)
-{
-	ReleaseValue(lhs);
-	lhs.type = ValueType_Integer;
-	lhs.u.integer = val;
-	return lhs;
-}
-
-Value &VirtualMachine::SetReal(Value &lhs, double rhs)
-{
-	ReleaseValue(lhs);
-	lhs.type = ValueType_Real;
-	lhs.u.real = rhs;
-	return lhs;
-}
-
-Value &VirtualMachine::SetBool(Value &lhs, bool rhs)
-{
-	ReleaseValue(lhs);
-	lhs.type = ValueType_Bool;
-	lhs.u.boolean = rhs;
-	return lhs;
-}
-
-Value &VirtualMachine::SetString(Value &lhs, const std::string &rhs)
-{
-	if (rhs.size() == 0)
-		return SetEmpty(lhs);
-
-	AllocString(lhs, rhs.size());
-	if (lhs.type != ValueType_String)
-		return lhs;
-
-	memcpy(lhs.u.string->str, rhs.data(), rhs.size());
-	lhs.hash = HashString(lhs.u.string->str);
-	return lhs;
-}
-
-Value &VirtualMachine::SetBasicString(Value &lhs, const char *rhs)
-{
-	ReleaseValue(lhs);
-	lhs.type = ValueType_BasicString;
-	lhs.u.basic_string = rhs;
-	lhs.hash = HashString(lhs.u.basic_string);
-	return lhs;
-}
-
-Value &VirtualMachine::SetConstString(Value &lhs, const std::string *rhs)
-{
-	ReleaseValue(lhs);
-	lhs.type = ValueType_ConstString;
-	lhs.u.const_string = rhs;
-	lhs.hash = HashString(lhs.u.const_string->c_str());
-	return lhs;
-}
-
-Value &VirtualMachine::SetParsedString(Value &lhs, const std::string &rhs)
-{
-	std::string str = trim(rhs);
-	if (str.size() != 0)
-	{
-		char *end;
-
-		int64_t integer = strtoll(str.c_str(), &end, 10);
-		if (*end == 0)
-			return SetInteger(lhs, integer);
-
-		double real = strtod(str.c_str(), &end);
-		if (*end == 0)
-			return SetReal(lhs, real);
-
-		if (str.size() == 4)
-		{
-			size_t i;
-			for (i = 0; i < 4; i++)
-				if (tolower(str[i]) != TRUE_STRING[i])
-					break;
-
-			if (i == 4)
-				return SetBool(lhs, true);
-		}
-
-		if (str.size() == 5)
-		{
-			size_t i;
-			for (i = 0; i < 5; i++)
-				if (tolower(str[i]) != FALSE_STRING[i])
-					break;
-
-			if (i == 5)
-				return SetBool(lhs, false);
-		}
-	}
-
-	return SetString(lhs, rhs);
-}
-
-Value &VirtualMachine::SetEmpty(Value &lhs)
-{
-	ReleaseValue(lhs);
-	lhs.type = ValueType_None;
-	return lhs;
-}
-
-const char *VirtualMachine::ToString(const Value &val, int64_t *len)
-{
-	static LS_THREADLOCAL char buf[64];
-	int cch;
-
-	switch (val.type)
-	{
-	default:
-	case ValueType_None:
-		if (len) *len = 0;
-		return "";
-	case ValueType_Integer:
-		cch = snprintf(buf, sizeof(buf), "%" PRId64, val.u.integer);
-		if (len) *len = cch;
-		return buf;
-	case ValueType_Real:
-		cch = snprintf(buf, sizeof(buf), "%.8g", val.u.real);
-		if (len) *len = cch;
-		return buf;
-	case ValueType_Bool:
-		return val.u.boolean ? TRUE_STRING : FALSE_STRING;
-	case ValueType_String:
-		if (len) *len = val.u.string->len;
-		return val.u.string->str;
-	case ValueType_BasicString:
-		if (len) *len = strlen(val.u.basic_string);
-		return val.u.basic_string;
-	case ValueType_ConstString:
-		if (len) *len = val.u.const_string->size();
-		return val.u.const_string->c_str();
-	}
-}
-
-void VirtualMachine::CvtString(Value &v)
-{
-	switch (v.type)
-	{
-	default:
-	case ValueType_String:
-		break;
-	case ValueType_Integer: {
-		int cch;
-		cch = snprintf(nullptr, 0, "%" PRId64, v.u.integer);
-		if (cch < 0)
-			Raise(OutOfMemory);
-
-		AllocString(v, cch);
-		if (v.type != ValueType_String)
-			break; // exception
-
-		snprintf(v.u.string->str, cch + 1, "%" PRId64, v.u.integer);
-
-		break;
-	}
-	case ValueType_Real: {
-		int cch;
-		cch = snprintf(nullptr, 0, "%.8g", v.u.real);
-		if (cch < 0)
-			Raise(OutOfMemory);
-
-		AllocString(v, cch);
-		snprintf(v.u.string->str, cch + 1, "%.8g", v.u.real);
-
-		break;
-	}
-	case ValueType_Bool:
-		SetBasicString(v, v.u.boolean ? TRUE_STRING : FALSE_STRING);
-		break;
-	}
-}
-
-int64_t VirtualMachine::ToInteger(const Value &val)
-{
-	switch (val.type)
-	{
-	default:
-	case ValueType_None:
-	case ValueType_Bool:
-	case ValueType_String:
-		return 0;
-	case ValueType_Real:
-		return static_cast<int64_t>(round(val.u.real));
-	case ValueType_Integer:
-		return val.u.integer;
-	}
-}
-
-double VirtualMachine::ToReal(const Value &val)
-{
-	switch (val.type)
-	{
-	default:
-	case ValueType_None:
-	case ValueType_Bool:
-	case ValueType_String:
-		return 0.0;
-	case ValueType_Real:
-		return val.u.real;
-	case ValueType_Integer:
-		return static_cast<double>(val.u.integer);
-	}
-}
-
-Value &VirtualMachine::AllocString(Value &v, size_t len)
-{
-	ReleaseValue(v);
-
-	_allocations++;
-
-	v.type = ValueType_String;
-	v.u.string = (String *)calloc(1, offsetof(String, str) + len + 1);
-	if (!v.u.string)
-		Raise(OutOfMemory);
-
-	v.u.string->len = len;
-	v.u.ref->count = 1;
-
-	return v;
-}
-
-Value &VirtualMachine::RetainValue(Value &val)
-{
-	if (val.type == ValueType_String)
-	{
-		assert(val.u.string->ref.count > 0);
-		val.u.ref->count++;
-	}
-	return val;
-}
-
-void VirtualMachine::ReleaseValue(Value &val)
-{
-	if (val.type == ValueType_String)
-	{
-		assert(val.u.string->ref.count > 0);
-
-		if (--val.u.ref->count == 0)
-			FreeValue(val);
-	}
-}
-
-void VirtualMachine::FreeValue(Value &val)
-{
-	if (val.type == ValueType_String)
-	{
-		assert(val.u.string->ref.count == 0);
-		
-		// printf("Free: `%s`\n", val.u.string->str);
-				
-		free(val.u.string);
-
-		// for safety
-		val.u.ref = nullptr;
-	}
 }
 
 Value &VirtualMachine::FindVariable(const std::string &id)
@@ -2340,7 +1884,39 @@ void VirtualMachine::Sched()
 	ls_fiber_sched();
 }
 
-VirtualMachine::VirtualMachine()
+void VirtualMachine::OnClick(int64_t x, int64_t y)
+{
+	Vector2 point(x, y);
+	for (const int64_t *id = _render->RenderOrderEnd() - 1; id >= _render->RenderOrderBegin(); id--)
+	{
+		Sprite *sprite = reinterpret_cast<Sprite *>(_render->GetRenderInfo(*id)->userData);
+		if (sprite->TouchingPoint(point))
+		{
+			// sprite was clicked
+			printf("Clicked %s\n", sprite->GetName().c_str());
+
+			for (Script &script : _scripts)
+			{
+				if (script.sprite != sprite)
+					continue;
+
+				AutoRelease<Statement> &s = script.entry->sl[0];
+				OnSpriteClicked *sc = s->As<OnSpriteClicked>();
+				if (sc)
+					_clickQueue.push(&script);
+			}
+
+			break;
+		}
+	}
+}
+
+void VirtualMachine::OnKeyDown(int scancode)
+{
+}
+
+VirtualMachine::VirtualMachine() :
+	_io(this), _debug(this)
 {
 	_prog = nullptr;
 	_loader = nullptr;
@@ -2353,21 +1929,7 @@ VirtualMachine::VirtualMachine()
 	_asker = nullptr;
 	memset(_inputBuf, 0, sizeof(_inputBuf));
 
-	_renderer = nullptr;
-
-	_answer = { 0 };
-	_mouseDown = false;
-	_lastDown = false;
-	_mouseX = 0;
-	_mouseY = 0;
-	_clickX = 0;
-	_clickY = 0;
-	_clicked = false;
-	memset(_keyStates, 0, sizeof(_keyStates));
-	_keysPressed = 0;
-	_loudness = 0.0;
-	_timer = 0.0;
-	_username = { 0 };
+	_render = nullptr;
 
 	_suspend = false;
 	_suspendStart = 0.0;
@@ -2390,12 +1952,9 @@ VirtualMachine::VirtualMachine()
 	_current = nullptr;
 	_epoch = 0;
 	_time = 0;
-	_deltaFrameTime = 0;
 
 	_interpreterTime = 0;
 	_deltaExecution = 0;
-
-	_allocations = 0;
 
 	_thread = nullptr;
 }
@@ -2403,394 +1962,18 @@ VirtualMachine::VirtualMachine()
 VirtualMachine::~VirtualMachine()
 {
 	Cleanup();
-
-	ReleaseValue(_username);
-	ReleaseValue(_answer);
-
-	Release(_prog);
-}
-
-void VirtualMachine::DestroyGraphics()
-{
-	if (_sprites)
-	{
-		delete[] _sprites, _sprites = nullptr;
-		_spritesEnd = nullptr;
-	}
-
-	if (_renderer)
-		delete _renderer, _renderer = nullptr;
-}
-
-void VirtualMachine::PollEvents()
-{
-	if (!_renderer)
-		return;
-
-	SDL_Event evt;
-
-	_lastDown = _mouseDown;
-
-	while (SDL_PollEvent(&evt))
-	{
-		ImGui_ImplSDL2_ProcessEvent(&evt);
-
-		switch (evt.type)
-		{
-		case SDL_QUIT:
-			VMTerminate();
-			break;
-		case SDL_MOUSEBUTTONDOWN:
-			if (evt.button.button == SDL_BUTTON_LEFT)
-			{
-				_mouseDown = true;
-				_renderer->ScreenToStage(evt.button.x, evt.button.y, &_clickX, &_clickY);
-			}
-			break;
-		case SDL_MOUSEBUTTONUP:
-			if (evt.button.button == SDL_BUTTON_LEFT)
-			{
-				_mouseDown = false;
-				_clickX = _clickY = 0;
-			}
-			break;
-		case SDL_MOUSEMOTION:
-			_renderer->ScreenToStage(evt.motion.x, evt.motion.y, &_mouseX, &_mouseY);
-			break;
-		case SDL_KEYDOWN:
-			if (!_keyStates[evt.key.keysym.scancode])
-				_keysPressed++;
-
-			_keyStates[evt.key.keysym.scancode] = true;
-			break;
-		case SDL_KEYUP:
-			if (_keyStates[evt.key.keysym.scancode])
-				_keysPressed--;
-			_keyStates[evt.key.keysym.scancode] = false;
-			break;
-		case SDL_WINDOWEVENT:
-			if (evt.window.event == SDL_WINDOWEVENT_RESIZED)
-				_renderer->Resize();
-		}
-	}
-
-	// clicks occur on the transition from up to down
-	_clicked = _mouseDown && !_lastDown;
 }
 
 void VirtualMachine::Render()
 {
-	_renderer->BeginRender();
-
-	int spritesVisible = 0;
+	_render->BeginRender();
 
 	for (Sprite *s = _sprites; s < _spritesEnd; s++)
-	{
 		s->Update();
-		spritesVisible += s->IsShown();
-	}
 
-	_renderer->Render();
+	_render->Render();
 
-	double fps = 1 / _deltaFrameTime;
-
-	if (ImGui::Begin("Debug"))
-	{
-		if (ImGui::BeginTabBar("DebugTabs"))
-		{
-			SDL_Window *window = _renderer->GetWindow();
-			int width, height;
-			SDL_GL_GetDrawableSize(window, &width, &height);
-
-			if (ImGui::BeginTabItem("System"))
-			{
-				struct ls_meminfo mi;
-				struct ls_cpuinfo ci;
-
-				ls_get_meminfo(&mi);
-				ls_get_cpuinfo(&ci);
-
-				const char *archString;
-				switch (ci.arch)
-				{
-				default:
-					archString = "unknown";
-					break;
-				case LS_ARCH_AMD64:
-					archString = "x86_64";
-					break;
-				case LS_ARCH_ARM:
-					archString = "arm";
-					break;
-				case LS_ARCH_ARM64:
-					archString = "arm64";
-					break;
-				case LS_ARCH_X86:
-					archString = "x86";
-					break;
-				case LS_ARCH_IA64:
-					archString = "ia64";
-					break;
-				}
-
-				ImGui::SeparatorText("Host");
-				ImGui::LabelText("Name", LS_OS);
-				ImGui::LabelText("Architecture", archString);
-				ImGui::LabelText("Processor Count", "%d", ci.num_cores);
-				ImGui::LabelText("Total Physical", "%llu MiB", mi.total / 1024 / 1024);
-
-				ImGui::SeparatorText("Target");
-				ImGui::LabelText("Compiler", LS_COMPILER);
-				ImGui::LabelText("Target Architecture", LS_ARCH);
-				ImGui::LabelText("Build Date", __TIMESTAMP__);
-
-				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("Graphics"))
-			{
-				int left = _renderer->GetLogicalLeft();
-				int right = _renderer->GetLogicalRight();
-				int top = _renderer->GetLogicalTop();
-				int bottom = _renderer->GetLogicalBottom();
-
-				ImGui::SeparatorText("Performance");
-				ImGui::LabelText("Framerate", "%.2f (%.0f ms)", fps, _deltaFrameTime * 1000);
-				ImGui::LabelText("Resolution", "%dx%d", width, height);
-				ImGui::LabelText("Viewport Size", "%dx%d", right - left, top - bottom);
-				ImGui::LabelText("Visible Objects", "%d/%d", spritesVisible, (int)(_spritesEnd - _sprites));
-
-				ImGui::SeparatorText("Device");
-				ImGui::LabelText("OpenGL", "%s", glGetString(GL_VERSION));
-				ImGui::LabelText("OpenGL Vendor", "%s", glGetString(GL_VENDOR));
-				ImGui::LabelText("OpenGL Renderer", "%s", glGetString(GL_RENDERER));
-				ImGui::LabelText("OpenGL Shading Language", "%s", glGetString(GL_SHADING_LANGUAGE_VERSION));
-				ImGui::LabelText("Window Driver", "%s", SDL_GetVideoDriver(0));
-
-				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("I/O"))
-			{
-				ImGui::SeparatorText("Mouse");
-				ImGui::LabelText("Mouse Down", "%s", _mouseDown ? "true" : "false");
-				ImGui::LabelText("Mouse", "%d, %d", (int)_mouseX, (int)_mouseY);
-				ImGui::LabelText("Click", "%d, %d", (int)_clickX, (int)_clickY);
-
-				ImGui::SeparatorText("Keyboard");
-				ImGui::LabelText("Keys Pressed", "%d", _keysPressed);
-
-				std::string keys;
-				for (int i = 0; i < SDL_NUM_SCANCODES; i++)
-				{
-					if (_keyStates[i])
-					{
-						if (keys.size() > 0)
-							keys += ", ";
-						keys += SDL_GetScancodeName((SDL_Scancode)i);
-					}
-				}
-				ImGui::LabelText("Keys", "%s", keys.c_str());
-
-				struct ls_timespec ts;
-				ls_get_time(&ts);
-
-				ImGui::SeparatorText("Timers");
-				ImGui::LabelText("Timer", "%.2f", _timer);
-				ImGui::LabelText("Year", "%d", ts.year);
-				ImGui::LabelText("Month", "%d", ts.month);
-				ImGui::LabelText("Date", "%d", ts.day);
-				ImGui::LabelText("Day of Week", "%d", 4); // TODO: implement
-				ImGui::LabelText("Hour", "%d", ts.hour);
-				ImGui::LabelText("Minute", "%d", ts.minute);
-				ImGui::LabelText("Second", "%d", ts.second);
-				ImGui::LabelText("Days Since 2000", "%d", 0); // TODO: implement
-
-				ImGui::SeparatorText("Sound");
-				ImGui::LabelText("Loudness", "%.2f", _loudness);
-
-				ImGui::SeparatorText("Other");
-				ImGui::LabelText("Username", "%s", ToString(_username));
-				ImGui::LabelText("Answer", "%s", ToString(_answer));
-
-				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("Virtual Machine"))
-			{
-				ImGui::SeparatorText("Information");
-				ImGui::LabelText("Program Name", "%s", _progName.c_str());
-				ImGui::LabelText("Clock Speed", "%u Hz", (unsigned)CLOCK_SPEED);
-
-				ImGui::SeparatorText("Performance");
-				ImGui::LabelText("Interpreter Time", "%.2f ms", (_interpreterTime * 1000));
-				ImGui::LabelText("Delta Execution", "%.2f ms", (_deltaExecution * 1000));
-				ImGui::LabelText("Time Scale", "%.2f", _timeScale);
-				ImGui::LabelText("Utilization", "%.2f%%", _interpreterTime * CLOCK_SPEED * 100.0);
-				ImGui::LabelText("Allocations", "%d", _allocations);
-
-				ImGui::SeparatorText("Scheduler");
-				ImGui::LabelText("Suspended", "%s", _suspend ? "true" : "false");
-				ImGui::LabelText("Time", "%.2f", _time);
-				ImGui::LabelText("Script Count", "%d", (int)_scripts.size());
-				ImGui::LabelText("Running", "%d", _activeScripts);
-				ImGui::LabelText("Waiting", "%d", _waitingScripts);
-
-				ImGui::SeparatorText("Globals");
-				for (auto &p : _variables)
-				{
-					Value &v = p.second;
-					const char *name = p.first.c_str();
-
-					switch (v.type)
-					{
-					default:
-						ImGui::LabelText(name, "<unknown>");
-						break;
-					case ValueType_None:
-						ImGui::LabelText(name, "None");
-						break;
-					case ValueType_Integer:
-						ImGui::LabelText(name, "%llu", v.u.integer);
-						break;
-					case ValueType_Real:
-						ImGui::LabelText(name, "%g", v.u.real);
-						break;
-					case ValueType_Bool:
-						ImGui::LabelText(name, "%s", v.u.boolean ? "true" : "false");
-						break;
-					case ValueType_String:
-						ImGui::LabelText(name, "\"%s\"", v.u.string->str);
-						break;
-					case ValueType_BasicString:
-						ImGui::LabelText(name, "\"%s\"", v.u.basic_string);
-						break;
-					case ValueType_ConstString:
-						ImGui::LabelText(name, "\"%s\"", v.u.const_string->c_str());
-						break;
-					}
-				}
-
-				ImGui::SeparatorText("Control");
-
-				if (ImGui::Button("Send Flag Clicked"))
-					SendFlagClicked();
-
-				if (_suspend)
-				{
-					if (ImGui::Button("Resume"))
-						VMResume();
-				}
-				else
-				{
-					if (ImGui::Button("Suspend"))
-						VMSuspend();
-				}
-
-				if (ImGui::Button("Terminate"))
-					VMTerminate();
-
-				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("Sprites"))
-			{
-				ImGui::SeparatorText("Information");
-				ImGui::LabelText("Sprite Count", "%d", (int)(_spritesEnd - _sprites - 1));
-
-				ImGui::SeparatorText("Sprites");
-				for (Sprite *s = _sprites; s < _spritesEnd; s++)
-				{
-					if (ImGui::CollapsingHeader(s->GetName().c_str()))
-						s->DebugUI();
-				}
-
-				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("Scripts"))
-			{
-				static bool onlyRunning = true;
-				ImGui::Checkbox("Only Running", &onlyRunning);
-
-				for (Script &script : _scripts)
-				{
-					bool running = script.state == RUNNABLE || script.state == WAITING;
-					if (onlyRunning && !running)
-						continue;
-
-					char name[128];
-					snprintf(name, sizeof(name), "%p (%s)", &script, script.sprite->GetName().c_str());
-
-					if (ImGui::CollapsingHeader(name))
-					{
-						ImGui::LabelText("State", States[script.state]);
-						ImGui::LabelText("Sprite", "%s", script.sprite->GetName().c_str());
-						ImGui::LabelText("Root", "%s", script.entry->sl[0]->ToString().c_str());
-						ImGui::LabelText("Wakeup", "%.2f", script.sleepUntil);
-
-						if (script.waitExpr)
-							ImGui::LabelText("Wait", "%s", script.waitExpr->ToString().c_str());
-						else
-							ImGui::LabelText("Wait", "(none)");
-
-						ImGui::LabelText("Wait Input", script.waitInput ? "true" : "false");
-
-						ImGui::LabelText("Frame", "%d", (int)script.fp);
-
-						for (uintptr_t fp = 0; fp <= script.fp; fp++)
-						{
-							Frame &f = script.frames[fp];
-							if (!f.sl)
-								continue;
-
-							if (f.pc == 0)
-								ImGui::Text("[%d] (start)", (int)fp);
-							else
-							{
-								Statement *stmt = *f.sl->sl[f.pc-1];
-								ImGui::Text("[%d] %s", (int)fp, stmt->ToString().c_str());
-							}
-						}
-					}
-				}
-
-				ImGui::EndTabItem();
-			}
-
-			ImGui::EndTabBar();
-		}
-	}
-	ImGui::End();
-
-	int width, height;
-	SDL_GL_GetDrawableSize(_renderer->GetWindow(), &width, &height);
-
-	if (_asker)
-	{
-		float padding = ImGui::GetStyle().WindowPadding.x;
-
-		ImGui::SetNextWindowPos(ImVec2(width / 2, height - padding), ImGuiCond_Always, ImVec2(0.5, 1.0));
-		ImGui::SetNextWindowSize(ImVec2(width - 2 * padding, 0), ImGuiCond_Always);
-
-		if (ImGui::Begin("Input", nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav))
-		{
-			ImGui::Text("%s is asking: %s", _asker->sprite->GetName().c_str(), _question.c_str());
-
-			ImGui::PushItemWidth(ImGui::GetWindowWidth() - 2 * padding);
-			if (ImGui::InputText("##input", _inputBuf, sizeof(_inputBuf), ImGuiInputTextFlags_EnterReturnsTrue))
-			{
-				SetString(_answer, _inputBuf);
-				_asker->askInput = false;
-				_asker->state = RUNNABLE;
-				_asker = nullptr;
-				memset(_inputBuf, 0, sizeof(_inputBuf));
-			}
-			ImGui::PopItemWidth();
-		}
-
-		ImGui::End();
-	}
+	_io.RenderIO();
 
 	const ImVec2 padding(5, 5);
 	const ImU32 textColor = IM_COL32(255, 255, 255, 255);
@@ -2801,7 +1984,7 @@ void VirtualMachine::Render()
 	for (Sprite *s = _sprites; s < _spritesEnd; s++)
 	{
 		int x, y;
-		_renderer->StageToScreen(s->GetX(), s->GetY(), &x, &y);
+		_render->StageToScreen(s->GetX(), s->GetY(), &x, &y);
 
 		ImVec2 position(x, y);
 
@@ -2815,7 +1998,7 @@ void VirtualMachine::Render()
 		drawList->AddText(position, s->IsShown() ? textColor : hiddenColor, s->GetName().c_str());
 	}
 
-	_renderer->EndRender();
+	_render->EndRender();
 }
 
 void VirtualMachine::Cleanup()
@@ -2849,9 +2032,14 @@ void VirtualMachine::Cleanup()
 	}
 	_scripts.clear();
 
-	DestroyGraphics();
+	_io.Release();
+
+	if (_render)
+		delete _render, _render = nullptr;
 
 	_loader = nullptr;
+
+	Release(_prog), _prog = nullptr;
 }
 
 static int ScriptMain(void *up)
@@ -2869,7 +2057,7 @@ static int ScriptMain(void *up)
 		if (script.waitExpr)
 		{
 			script.waitExpr->Accept(&executor);
-			bool truth = vm.Truth(vm.StackAt(0));
+			bool truth = Truth(vm.StackAt(0));
 			vm.Pop();
 
 			if (!truth)
@@ -2951,7 +2139,10 @@ void VirtualMachine::ShutdownThread()
 	_waitingScripts = 0;
 	_running = false;
 
-	DestroyGraphics(); // clean up graphics resources
+	_io.Release();
+
+	if (_render)
+		delete _render, _render = nullptr;
 
 	// clean up fibers
 	for (Script &s : _scripts)
@@ -3025,31 +2216,11 @@ void VirtualMachine::DispatchEvents()
 	}
 
 	// Sprite clicked
-	if (_clicked)
+	while (!_clickQueue.empty())
 	{
-		Vector2 point(_clickX, _clickY);
-		for (const int64_t *id = _renderer->RenderOrderEnd() - 1; id >= _renderer->RenderOrderBegin(); id--)
-		{
-			Sprite *sprite = reinterpret_cast<Sprite *>(_renderer->GetRenderInfo(*id)->userData);
-			if (sprite->TouchingPoint(point))
-			{
-				// sprite was clicked
-				printf("Clicked %s\n", sprite->GetName().c_str());
-
-				for (Script &script : _scripts)
-				{
-					if (script.sprite != sprite)
-						continue;
-
-					AutoRelease<Statement> &s = script.entry->sl[0];
-					OnSpriteClicked *sc = s->As<OnSpriteClicked>();
-					if (sc)
-						StartScript(script);
-				}
-
-				break;
-			}
-		}
+		Script *s = _clickQueue.front();
+		StartScript(*s);
+		_clickQueue.pop();
 	}
 
 	// Ask input
@@ -3104,7 +2275,7 @@ void VirtualMachine::Scheduler()
 			printf("Exception information:\n");
 			DumpScript(_current);
 
-			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", _exceptionMessage, _renderer->GetWindow());
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", _exceptionMessage, _render->GetWindow());
 			
 			_activeScripts = 0;
 			_waitingScripts = 0;
@@ -3149,15 +2320,15 @@ void VirtualMachine::Main()
 			Panic("Failed to create fiber");
 	}
 
-	_renderer = new GLRenderer(_spritesEnd - _sprites - 1); // exclude the stage
-	if (_renderer->HasError())
+	_render = new GLRenderer(_spritesEnd - _sprites - 1); // exclude the stage
+	if (_render->HasError())
 		Panic("Failed to initialize graphics");
 
 	// Initialize graphics resources
 	for (Sprite *s = _sprites; s < _spritesEnd; s++)
-		s->Load(_loader, _renderer);
+		s->Load(_loader, _render);
 
-	SDL_Window *window = _renderer->GetWindow();
+	SDL_Window *window = _render->GetWindow();
 	SDL_SetWindowTitle(window, "Scratch 3");
 
 	_flagClicked = false;
@@ -3169,9 +2340,7 @@ void VirtualMachine::Main()
 
 	_time = 0.0;
 	_timerStart = 0.0;
-	_deltaFrameTime = 0.0;
 	_deltaExecution = 0.0;
-	_timeScale = 1.0;
 
 	_running = true;
 
@@ -3187,9 +2356,8 @@ void VirtualMachine::Main()
 	{
 		lastTime = _time;
 		_time = ls_time64() - _epoch;
-		_deltaFrameTime = _time - lastTime;
 
-		PollEvents();
+		_io.PollEvents();
 
 		if (_shouldStop)
 			break;
@@ -3198,7 +2366,6 @@ void VirtualMachine::Main()
 
 		if (!_suspend && _exceptionType == Exception_None)
 		{
-			_timer = _time - _timerStart;
 			if (_time >= nextExecution)
 			{
 				double start = ls_time64();
@@ -3210,13 +2377,10 @@ void VirtualMachine::Main()
 				Scheduler();
 
 				_interpreterTime = ls_time64() - start;
-				_timeScale = CLOCK_SPEED * _deltaExecution; // update after to prevent 0 on first frame
 			}
 		}
 
 		Render();
-
-		_allocations = 0;
 	}
 
 	ShutdownThread();

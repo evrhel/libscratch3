@@ -119,6 +119,12 @@ public:
     constexpr const int64_t *RenderOrderBegin() const { return _renderOrder; }
     constexpr const int64_t *RenderOrderEnd() const { return _renderOrder + _spriteCount; }
 
+    constexpr int GetFrame() const { return _frame; }
+    constexpr double GetTime() const { return _time; }
+    constexpr double GetDeltaTime() const { return _deltaTime; }
+    constexpr double GetFramerate() const { return _fps; }
+    constexpr int GetObjectsDrawn() const { return _objectsDrawn; }
+
     //! \brief Create a new renderer
     //!
     //! \param spriteCount The maximum number of sprites to render,
@@ -135,6 +141,14 @@ private:
     double _scale;
     
     Matrix4 _proj;
+
+    int _frame;
+    double _startTime;
+    double _lastTime;
+    double _time;
+    double _deltaTime;
+    double _fps;
+    int _objectsDrawn;
 
     struct
     {

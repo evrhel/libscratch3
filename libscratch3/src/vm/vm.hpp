@@ -14,29 +14,11 @@
 #include <cairo/cairo.h>
 #include <SDL.h>
 
-#include "value.hpp"
+#include "memory.hpp"
 #include "costume.hpp"
-
-// Script has been created but not yet started
-#define EMBRYO 0
-
-// Script can be scheduled to run
-#define RUNNABLE 1
-
-// Script is waiting for a condition to be met
-#define WAITING 2
-
-// Script is suspended
-#define SUSPENDED 3
-
-// Script has terminated
-#define TERMINATED 4
-
-// Stack size for each script
-#define STACK_SIZE 512
-
-// Maximum nesting depth of scripts
-#define SCRIPT_DEPTH 32
+#include "script.hpp"
+#include "io.hpp"
+#include "debug.hpp"
 
 // Rate at which scripts are executed
 #define CLOCK_SPEED 30
@@ -61,44 +43,6 @@ enum ExceptionType
 	NotImplemented,
 
 	VMError // Internal error
-};
-
-// Execute the invoking statement again
-#define FRAME_EXEC_AGAIN 0x1
-
-// Execute the frame forever
-#define FRAME_EXEC_FOREVER 0x2
-
-// Execution frame
-struct Frame
-{
-	StatementList *sl; // Statement list to execute
-	uintptr_t pc; // Program counter (index into statement list)
-	int64_t count; // Number of times to repeat this frame
-	uint32_t flags; // Execution flags
-};
-
-// Script context
-struct Script
-{
-	int state; // Script state
-	Sprite *sprite; // Sprite that owns the script
-	StatementList *entry; // Root statement list
-	
-	ls_handle fiber; // Fiber for the script
-
-	double sleepUntil; // Time to wake up
-	Expression *waitExpr; // Expression to wait for
-	bool waitInput; // Wait for input
-	bool askInput; // Ask for input
-
-	Value *stack; // Bottom of the stack
-	Value *sp; // Stack pointer (grows upwards)
-
-	Frame frames[SCRIPT_DEPTH]; // Execution frames
-	uintptr_t fp; // Frame pointer (grows downwards)
-
-	VirtualMachine *vm; // VM that owns the script
 };
 
 class VirtualMachine final
@@ -238,71 +182,12 @@ public:
 	// Internals
 	//
 
-	bool Truth(const Value &val);
-	bool Equals(const Value &lhs, const Value &rhs);
-	Value &Assign(Value &lhs, const Value &rhs);
-	Value &SetInteger(Value &lhs, int64_t rhs);
-	Value &SetReal(Value &lhs, double rhs);
-	Value &SetBool(Value &lhs, bool rhs);
-	Value &SetString(Value &lhs, const std::string &rhs);
-	Value &SetBasicString(Value &lhs, const char *rhs);
-	Value &SetConstString(Value &lhs, const std::string *rhs);
-	Value &SetParsedString(Value &lhs, const std::string &rhs);
-	Value &SetEmpty(Value &lhs);
-
-	//! \brief Convert a value to a string
-	//! 
-	//! Will replace the value with a string representation. If the
-	//! operation fails, the value will remain unchanged.
-	//! 
-	//! \param v Value to convert
-	void CvtString(Value &v);
-
-	int64_t ToInteger(const Value &val);
-	double ToReal(const Value &val);
-	const char *ToString(const Value &val, int64_t *len = nullptr);
-
-	//! \brief Allocate a string
-	//! 
-	//! Allocates a string of the specified length. The string's
-	//! reference count is set to 1. Its bytes are zeroed. The
-	//! input value's reference count is decremented. If the
-	//! operation failed, the contents of the input value are
-	//! undefined.
-	//! 
-	//! \param v Value in which to store the string
-	//! \param len Length of the string to allocate, not including
-	//! the null terminator
-	//! 
-	//! \return v, or _exception if the operation failed
-	Value &AllocString(Value &v, size_t len);
-
-	Value &RetainValue(Value &val);
-	void ReleaseValue(Value &val);
-	void FreeValue(Value &val);
+	constexpr Program *GetProgram() const { return _prog; }
+	constexpr const std::string &GetProgramName() const { return _progName; }
 
 	Value &FindVariable(const std::string &id);
 
 	constexpr double GetTime() const { return _time; }
-
-	constexpr const Value &GetAnswer() const { return _answer; }
-	constexpr bool GetMouseDown() const { return _mouseDown; }
-	constexpr int64_t GetMouseX() const { return _mouseX; }
-	constexpr int64_t GetMouseY() const { return _mouseY; }
-	constexpr double GetLoudness() const { return _loudness; }
-	constexpr double GetTimer() const { return _timer; }
-	constexpr const Value &GetUsername() const { return _username; }
-	
-	bool GetKey(int scancode) const
-	{
-		if (!_renderer)
-			return false;
-		if (scancode == -1)
-			return _keysPressed > 0;
-		if (scancode < 0 || scancode >= SDL_NUM_SCANCODES)
-			return false;
-		return _keyStates[scancode];
-	}
 
 	Sprite *FindSprite(const std::string &name);
 
@@ -316,10 +201,21 @@ public:
 	void Sched();
 
 	constexpr Loader *GetLoader() const { return _loader; }
+	constexpr GLRenderer *GetRenderer() const { return _render; }
+	constexpr IOHandler &GetIO() const { return _io; }
+	constexpr Debugger &GetDebugger() const { return _debug; }
 
-	constexpr double GetTimeScale() const { return _timeScale; }
+	constexpr bool IsSuspended() const { return _suspend; }
+
+	void OnClick(int64_t x, int64_t y);
+	void OnKeyDown(int scancode);
+
+	VirtualMachine &operator=(const VirtualMachine &) = delete;
+	VirtualMachine &operator=(VirtualMachine &&) = delete;
 
 	VirtualMachine();
+	VirtualMachine(const VirtualMachine &) = delete;
+	VirtualMachine(VirtualMachine &&) = delete;
 	~VirtualMachine();
 private:
 	Program *_prog; // Program to run
@@ -341,6 +237,7 @@ private:
 	
 	bool _flagClicked; // Flag clicked event
 	std::unordered_set<std::string> _toSend; // Messages to send
+	std::queue<Script *> _clickQueue; // Scripts to send the click event
 
 	std::queue<std::pair<Script *, std::string>> _askQueue; // Scripts waiting for input
 	Script *_asker; // Current input requester
@@ -352,23 +249,21 @@ private:
 	// Graphics
 	//
 
-	GLRenderer *_renderer; // Renderer
+	GLRenderer *_render; // Renderer
 
 	//
 	/////////////////////////////////////////////////////////////////
 	// I/O
 	//
 
-	Value _answer; // answer
-	bool _mouseDown, _lastDown; // mouse button state
-	int64_t _mouseX, _mouseY; // mouse position
-	int64_t _clickX, _clickY; // mouse click position
-	bool _clicked; // mouse clicked this frame
-	bool _keyStates[SDL_NUM_SCANCODES]; // key states
-	int _keysPressed; // number of keys pressed
-	double _loudness; // loudness
-	double _timer; // timer value
-	Value _username; // username
+	mutable IOHandler _io; // I/O handler
+
+	//
+	/////////////////////////////////////////////////////////////////
+	// Debugging
+	//
+
+	mutable Debugger _debug; // Debugger
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -397,14 +292,9 @@ private:
 	Script *_current; // Currently executing script
 	double _epoch; // VM start time
 	double _time; // Current time
-	double _deltaFrameTime; // Delta time
 
 	double _interpreterTime; // Time taken to run the interpreter once
 	double _deltaExecution; // Time since last scheduled execution
-
-	double _timeScale; // Time scale
-
-	int _allocations; // Number of allocations in a frame
 
 	ls_handle _thread; // VM thread
 
@@ -412,10 +302,6 @@ private:
 	/////////////////////////////////////////////////////////////////
 	// Graphics Internals
 	//
-
-	void DestroyGraphics();
-
-	void PollEvents();
 
 	void Render();
 
@@ -444,4 +330,6 @@ private:
 	void Main();
 
 	static int ThreadProc(void *data);
+
+	friend class Debugger;
 };

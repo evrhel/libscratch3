@@ -210,6 +210,11 @@ void GLRenderer::SetLogicalSize(int left, int right, int bottom, int top)
 
 void GLRenderer::BeginRender()
 {
+    _lastTime = _time;
+    _time = ls_time64() - _startTime;
+    _deltaTime = _time - _lastTime;
+    _fps = 1.0 / _deltaTime;
+
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
@@ -240,6 +245,7 @@ void GLRenderer::Render()
     // draw stage sperately, pen is on top of stage, but below sprites
     _sprites[0].Prepare(_spriteShader);
     DrawQuad();
+    _objectsDrawn = 1;
 
     // TODO: draw pen
 
@@ -252,6 +258,7 @@ void GLRenderer::Render()
         {
             s.Prepare(_spriteShader);
             DrawQuad();
+            _objectsDrawn++;
         }
     }
 }
@@ -279,7 +286,11 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
     _context(nullptr),
     _left(0), _right(0),
     _bottom(0), _top(0),
-    _scale(0.0),
+    _frame(0),
+    _startTime(0),
+    _lastTime(0), _time(0),
+    _deltaTime(0), _fps(-1),
+    _scale(0),
     _spriteShader(nullptr),
     _sprites(nullptr), _spriteCount(0)
 {
@@ -347,6 +358,8 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
     SetLogicalSize(-VIEWPORT_WIDTH / 2, VIEWPORT_WIDTH / 2,
         -VIEWPORT_HEIGHT / 2, VIEWPORT_HEIGHT / 2);
     Resize();
+
+    _startTime = ls_time64();
 }
 
 GLRenderer::~GLRenderer()
@@ -376,6 +389,13 @@ void GLRenderer::Cleanup()
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
+
+    _frame = 0;
+    _startTime = 0;
+    _lastTime = 0;
+    _time = 0;
+    _deltaTime = 0;
+    _fps = -1;
 }
 
 void GLRenderer::CreateQuad()

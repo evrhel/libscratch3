@@ -23,6 +23,10 @@ set(SOURCES
 	${src}/render/stb.cpp
 	${src}/semantics/syminfo.cpp
 	${src}/vm/costume.cpp
+	${src}/vm/debug.cpp
+	${src}/vm/io.cpp
+	${src}/vm/memory.cpp
+	${src}/vm/script.cpp
 	${src}/vm/sprite.cpp
 	${src}/vm/vm.cpp
 	${src}/ref.cpp
