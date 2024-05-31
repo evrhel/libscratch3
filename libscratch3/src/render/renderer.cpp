@@ -72,6 +72,7 @@ SpriteRenderInfo::SpriteRenderInfo() :
     ghostEffect = 0.0f;
     texture = 0;
     color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+    userData = nullptr;
 }
 
 SpriteRenderInfo::~SpriteRenderInfo() { }

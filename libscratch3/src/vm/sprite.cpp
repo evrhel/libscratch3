@@ -233,6 +233,9 @@ void Sprite::Load(Loader *loader, GLRenderer *renderer)
             _costumes[i++].Load(loader, *cd);
     }
 
+    SpriteRenderInfo *ri = renderer->GetRenderInfo(_drawable);
+    ri->userData = this;
+
     // initial update
     Update();
 }

@@ -1712,17 +1712,7 @@ void VirtualMachine::SendFlagClicked()
 		AutoRelease<Statement> &s = script.entry->sl[0];
 		OnFlagClicked *fc = s->As<OnFlagClicked>();
 		if (fc)
-		{
-			script.state = RUNNABLE;
-			script.sleepUntil = 0.0;
-			script.waitExpr = nullptr;
-
-			script.frames[0].sl = script.entry;
-			script.frames[0].pc = 1;
-			script.frames[0].count = 0;
-			script.frames[0].flags = 0;
-			script.fp = 0;
-		}
+			StartScript(script);
 	}
 }
 
@@ -1743,7 +1733,18 @@ void VirtualMachine::SendKeyPressed(int scancode)
 
 void VirtualMachine::SendSpriteClicked(Sprite *sprite)
 {
+	printf("Clicked %s\n", sprite->GetName().c_str());
 
+	for (Script &script : _scripts)
+	{
+		if (script.sprite != sprite)
+			continue;
+
+		AutoRelease<Statement> &s = script.entry->sl[0];
+		OnSpriteClicked *fc = s->As<OnSpriteClicked>();
+		if (fc)
+			StartScript(script);
+	}
 }
 
 void VirtualMachine::Sleep(double seconds)
@@ -2892,6 +2893,34 @@ void VirtualMachine::ShutdownThread()
 	ls_convert_to_thread();
 }
 
+void VirtualMachine::ResetScript(Script &script)
+{
+	script.sleepUntil = 0.0;
+	script.waitExpr = nullptr;
+	script.waitInput = false;
+
+	// clean up the stack
+	while (script.sp < script.stack + STACK_SIZE)
+		PopUnsafe(this, &script);
+
+	memset(script.frames, 0, sizeof(script.frames));
+
+	// reset the frame pointer to the entry point
+	script.frames[0].sl = script.entry;
+	script.frames[0].pc = 1;
+	script.frames[0].count = 0;
+	script.frames[0].flags = 0;
+	script.fp = 0;
+
+	script.state = EMBRYO;
+}
+
+void VirtualMachine::StartScript(Script &script)
+{
+	ResetScript(script);
+	script.state = RUNNABLE;
+}
+
 void VirtualMachine::Scheduler()
 {
 	int activeScripts = 0, waitingScripts = 0;
@@ -2941,21 +2970,7 @@ void VirtualMachine::Scheduler()
 		}
 
 		if (script.state == TERMINATED)
-		{
-			// script was just terminated
-			script.sleepUntil = 0.0;
-			script.waitExpr = nullptr;
-			script.waitInput = false;
-
-			// clean up the stack
-			while (script.sp < script.stack + STACK_SIZE)
-				PopUnsafe(this, &script);
-
-			memset(script.frames, 0, sizeof(script.frames));
-			script.fp = 0;
-
-			script.state = EMBRYO;
-		}
+			ResetScript(script);
 	}
 
 	_activeScripts = activeScripts;
@@ -3029,6 +3044,21 @@ void VirtualMachine::Main()
 
 		if (_shouldStop)
 			break;
+
+		if (_clicked)
+		{
+			Vector2 point(_clickX, _clickY);
+			for (const int64_t *id = _renderer->RenderOrderEnd() - 1; id >= _renderer->RenderOrderBegin(); id--)
+			{
+				Sprite *sprite = reinterpret_cast<Sprite *>(_renderer->GetRenderInfo(*id)->userData);
+				if (sprite->TouchingPoint(point))
+				{
+					// sprite was clicked
+					SendSpriteClicked(sprite);
+					break;
+				}
+			}
+		}
 
 		if (!_suspend && _exceptionType == Exception_None)
 		{

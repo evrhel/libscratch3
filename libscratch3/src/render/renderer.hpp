@@ -42,6 +42,8 @@ public:
     float ghostEffect;
     GLuint texture;
     Vector4 color;
+
+    void *userData;
 private:
     int64_t _layer;
 
@@ -113,6 +115,9 @@ public:
     void EndRender();
 
     void Resize();
+
+    constexpr const int64_t *RenderOrderBegin() const { return _renderOrder; }
+    constexpr const int64_t *RenderOrderEnd() const { return _renderOrder + _spriteCount; }
 
     //! \brief Create a new renderer
     //!

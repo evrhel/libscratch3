@@ -419,6 +419,10 @@ private:
 	void Cleanup();
 
 	void ShutdownThread();
+
+	void ResetScript(Script &script);
+
+	void StartScript(Script &script);
 	 
 	//! \brief Handles script scheduling
 	void Scheduler();
