@@ -257,7 +257,7 @@ public:
 
 	int64_t ToInteger(const Value &val);
 	double ToReal(const Value &val);
-	std::string ToString(const Value &val);
+	const char *ToString(const Value &val, int64_t *len = nullptr);
 
 	//! \brief Allocate a string
 	//! 

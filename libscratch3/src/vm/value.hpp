@@ -29,7 +29,9 @@ struct List;
 struct Value
 {
 	uint16_t type;
-	uint8_t __padding[6];
+	uint8_t __padding[2];
+
+	uint32_t hash;
 
 	union
 	{

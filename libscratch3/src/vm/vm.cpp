@@ -89,6 +89,17 @@ static bool StringEquals(const char *lstr, const char *rstr)
 	return true;
 }
 
+static constexpr uint32_t HashString(const char *s)
+{
+	uint32_t hash = 1315423911;
+	while (*s)
+		hash ^= ((hash << 5) + *s++ + (hash >> 2));
+	return hash;
+}
+
+static constexpr uint32_t kTrueHash = HashString(TRUE_STRING);
+static constexpr uint32_t kFalseHash = HashString(FALSE_STRING);
+
 class Executor : public Visitor
 {
 public:
@@ -153,10 +164,10 @@ public:
 	{
 		// TODO: implement
 		node->e->Accept(this);
-		std::string name = vm->ToString(vm->StackAt(0));
+		const char *name = vm->ToString(vm->StackAt(0));
 		vm->Pop();
 
-		if (name == "_mouse_")
+		if (!strcmp(name, "_mouse_"))
 		{
 			vm->SetBool(vm->Push(), script->sprite->TouchingPoint(Vector2(vm->GetMouseX(), vm->GetMouseY())));
 			return;
@@ -190,13 +201,12 @@ public:
 
 	virtual void Visit(DistanceTo *node)
 	{
+		int64_t len;
 		node->e->Accept(this);
-
-		std::string name = vm->ToString(vm->StackAt(0));
-
+		const char *name = vm->ToString(vm->StackAt(0), &len);
 		vm->Pop();
 
-		Sprite *s = vm->FindSprite(name);
+		Sprite *s = vm->FindSprite(std::string(name, len));
 		if (!s)
 		{
 			vm->SetReal(vm->Push(), -1.0);
@@ -216,12 +226,13 @@ public:
 
 	virtual void Visit(KeyPressed *node)
 	{
+		int64_t len;
 		node->e->Accept(this);
-
-		std::string s = vm->ToString(vm->StackAt(0));
+		const char *key = vm->ToString(vm->StackAt(0), &len);
 		vm->Pop();
 
 		// convert to lowercase
+		std::string s(key, len);
 		std::transform(s.begin(), s.end(), s.begin(), ::tolower);
 
 		// convert to scancode
@@ -287,11 +298,12 @@ public:
 
 	virtual void Visit(PropertyOf *node)
 	{
+		int64_t len;
 		node->e->Accept(this);
-		std::string name = vm->ToString(vm->StackAt(0));
+		const char *name = vm->ToString(vm->StackAt(0), &len);
 		vm->Pop();
 
-		Sprite *s = vm->FindSprite(name);
+		Sprite *s = vm->FindSprite(std::string(name, len));
 		if (!s)
 		{
 			vm->Push();
@@ -638,9 +650,10 @@ public:
 
 	virtual void Visit(StringLength *node)
 	{
+		int64_t len;
 		node->e->Accept(this);
-		std::string s = vm->ToString(vm->StackAt(0));
-		vm->SetInteger(vm->StackAt(0), s.size());
+		vm->ToString(vm->StackAt(0), &len);
+		vm->SetInteger(vm->StackAt(0), len);
 	}
 
 	virtual void Visit(StringContains *node)
@@ -859,25 +872,25 @@ public:
 		node->e1->Accept(this); // seconds
 		node->e2->Accept(this); // destination
 
+		int64_t len;
 		double secs = vm->ToReal(vm->StackAt(1));
-		std::string dest = vm->ToString(vm->StackAt(0));
+		const char *dest = vm->ToString(vm->StackAt(0), &len);
 
 		double x = 0, y = 0;
 
-		std::transform(dest.begin(), dest.end(), dest.begin(), ::tolower);
-		if (dest == "random position")
+		if (!strcmp(dest, "random position"))
 		{
 			x = ls_rand_int(-240, 240);
 			y = ls_rand_int(-180, 180);
 		}
-		else if (dest == "mouse-pointer")
+		else if (!strcmp(dest, "mouse-pointer"))
 		{
 			x = vm->GetMouseX();
 			y = vm->GetMouseY();
 		}
 		else
 		{
-			Sprite *s = vm->FindSprite(dest);
+			Sprite *s = vm->FindSprite(std::string(dest, len));
 			if (s != nullptr)
 			{
 				x = s->GetX();
@@ -969,7 +982,8 @@ public:
 		Value &message = vm->StackAt(1);
 		Value &duration = vm->StackAt(0);
 
-		std::string mstr = vm->ToString(message);
+		int64_t len;
+		const char *mstr = vm->ToString(message, &len);
 		double secs = vm->ToReal(duration);
 
 		vm->Pop();
@@ -977,11 +991,10 @@ public:
 
 		printf("%s saying \"%s\" for %g secs\n",
 			script->sprite->GetName().c_str(),
-			mstr.c_str(),
-			secs);
+			mstr, secs);
 
-		if (mstr.size())
-			script->sprite->SetMessage(mstr, MESSAGE_STATE_SAY);
+		if (len)
+			script->sprite->SetMessage(std::string(mstr, len), MESSAGE_STATE_SAY);
 		else
 			script->sprite->ClearMessage();
 
@@ -994,16 +1007,17 @@ public:
 
 		Value &message = vm->StackAt(0);
 
-		std::string mstr = vm->ToString(message);
+		int64_t len;
+		const char *mstr = vm->ToString(message, &len);
 
 		vm->Pop();
 
 		printf("%s saying \"%s\"\n",
 			script->sprite->GetName().c_str(),
-			mstr.c_str());
+			mstr);
 
-		if (mstr.size())
-			script->sprite->SetMessage(mstr, MESSAGE_STATE_SAY);
+		if (len)
+			script->sprite->SetMessage(std::string(mstr, len), MESSAGE_STATE_SAY);
 		else
 			script->sprite->ClearMessage();
 	}
@@ -1016,7 +1030,8 @@ public:
 		Value &message = vm->StackAt(1);
 		Value &duration = vm->StackAt(0);
 
-		std::string mstr = vm->ToString(message);
+		int64_t len;
+		const char *mstr = vm->ToString(message, &len);
 		double secs = vm->ToReal(duration);
 
 		vm->Pop();
@@ -1024,10 +1039,9 @@ public:
 
 		printf("%s thinking \"%s\" for %g secs\n",
 			script->sprite->GetName().c_str(),
-			mstr.c_str(),
-			secs);
+			mstr, secs);
 
-		if (mstr.size())
+		if (len)
 			script->sprite->SetMessage(mstr, MESSAGE_STATE_THINK);
 		else
 			script->sprite->ClearMessage();
@@ -1041,15 +1055,16 @@ public:
 
 		Value &message = vm->StackAt(0);
 
-		std::string mstr = vm->ToString(message);
+		int64_t len;
+		const char *mstr = vm->ToString(message, &len);
 
 		vm->Pop();
 
 		printf("%s thinking \"%s\"\n",
 			script->sprite->GetName().c_str(),
-			mstr.c_str());
+			mstr);
 
-		if (mstr.size())
+		if (len)
 			script->sprite->SetMessage(mstr, MESSAGE_STATE_THINK);
 		else
 			script->sprite->ClearMessage();
@@ -1630,6 +1645,7 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 		ReleaseValue(_username);
 		AllocString(_username, len);
 		ls_username(_username.u.string->str, len);
+		_username.hash = HashString(_username.u.string->str);
 	}
 
 	_prog = Retain(prog);
@@ -1934,6 +1950,9 @@ bool VirtualMachine::Equals(const Value &lhs, const Value &rhs)
 			return lhs.u.boolean == rhs.u.boolean;
 		return false;
 	case ValueType_String:
+		if (lhs.hash != rhs.hash)
+			return false;
+
 		if (rhs.type == ValueType_String)
 			return StringEquals(lhs.u.string->str, rhs.u.string->str);
 		else if (rhs.type == ValueType_BasicString)
@@ -1942,6 +1961,9 @@ bool VirtualMachine::Equals(const Value &lhs, const Value &rhs)
 			return StringEquals(lhs.u.string->str, rhs.u.const_string->c_str());
 		return false;
 	case ValueType_BasicString:
+		if (lhs.hash != rhs.hash)
+			return false;
+
 		if (rhs.type == ValueType_String)
 			return StringEquals(lhs.u.basic_string, rhs.u.string->str);
 		else if (rhs.type == ValueType_BasicString)
@@ -1950,6 +1972,9 @@ bool VirtualMachine::Equals(const Value &lhs, const Value &rhs)
 			return StringEquals(lhs.u.basic_string, rhs.u.const_string->c_str());
 		return false;
 	case ValueType_ConstString:
+		if (lhs.hash != rhs.hash)
+			return false;
+
 		if (rhs.type == ValueType_String)
 			return StringEquals(lhs.u.const_string->c_str(), rhs.u.string->str);
 		else if (rhs.type == ValueType_BasicString)
@@ -2011,7 +2036,7 @@ Value &VirtualMachine::SetString(Value &lhs, const std::string &rhs)
 		return lhs;
 
 	memcpy(lhs.u.string->str, rhs.data(), rhs.size());
-
+	lhs.hash = HashString(lhs.u.string->str);
 	return lhs;
 }
 
@@ -2020,6 +2045,7 @@ Value &VirtualMachine::SetBasicString(Value &lhs, const char *rhs)
 	ReleaseValue(lhs);
 	lhs.type = ValueType_BasicString;
 	lhs.u.basic_string = rhs;
+	lhs.hash = HashString(lhs.u.basic_string);
 	return lhs;
 }
 
@@ -2028,6 +2054,7 @@ Value &VirtualMachine::SetConstString(Value &lhs, const std::string *rhs)
 	ReleaseValue(lhs);
 	lhs.type = ValueType_ConstString;
 	lhs.u.const_string = rhs;
+	lhs.hash = HashString(lhs.u.const_string->c_str());
 	return lhs;
 }
 
@@ -2079,28 +2106,36 @@ Value &VirtualMachine::SetEmpty(Value &lhs)
 	return lhs;
 }
 
-std::string VirtualMachine::ToString(const Value &val)
+const char *VirtualMachine::ToString(const Value &val, int64_t *len)
 {
+	static LS_THREADLOCAL char buf[64];
+	int cch;
+
 	switch (val.type)
 	{
 	default:
 	case ValueType_None:
-		return std::string();
+		if (len) *len = 0;
+		return "";
 	case ValueType_Integer:
-		return std::to_string(val.u.integer);
-	case ValueType_Real: {
-		char buf[64];
-		int cch = snprintf(buf, sizeof(buf), "%.8g", val.u.real);
-		return std::string(buf, cch);
-	}
+		cch = snprintf(buf, sizeof(buf), "%" PRId64, val.u.integer);
+		if (len) *len = cch;
+		return buf;
+	case ValueType_Real:
+		cch = snprintf(buf, sizeof(buf), "%.8g", val.u.real);
+		if (len) *len = cch;
+		return buf;
 	case ValueType_Bool:
-		return val.u.boolean ? std::string(TRUE_STRING, 4) : std::string(FALSE_STRING, 5);
+		return val.u.boolean ? TRUE_STRING : FALSE_STRING;
 	case ValueType_String:
-		return std::string(val.u.string->str, val.u.string->len);
+		if (len) *len = val.u.string->len;
+		return val.u.string->str;
 	case ValueType_BasicString:
+		if (len) *len = strlen(val.u.basic_string);
 		return val.u.basic_string;
 	case ValueType_ConstString:
-		return *val.u.const_string;
+		if (len) *len = val.u.const_string->size();
+		return val.u.const_string->c_str();
 	}
 }
 
@@ -2545,8 +2580,8 @@ void VirtualMachine::Render()
 				ImGui::LabelText("Loudness", "%.2f", _loudness);
 
 				ImGui::SeparatorText("Other");
-				ImGui::LabelText("Username", "%s", ToString(_username).c_str());
-				ImGui::LabelText("Answer", "%s", ToString(_answer).c_str());
+				ImGui::LabelText("Username", "%s", ToString(_username));
+				ImGui::LabelText("Answer", "%s", ToString(_answer));
 
 				ImGui::EndTabItem();
 			}
@@ -2557,8 +2592,14 @@ void VirtualMachine::Render()
 				ImGui::LabelText("Program Name", "%s", _progName.c_str());
 
 				ImGui::SeparatorText("Performance");
-				ImGui::LabelText("Clock Speed", "%d Hz", (int)FRAMERATE);
-				ImGui::LabelText("Interpreter Time", "%d us", (int)(_executionTime * 1000 * 1000));
+
+				if (FRAMERATE == 0)
+					ImGui::LabelText("Clock Speed", "(unlimited)");
+				else
+					ImGui::LabelText("Clock Speed", "%u Hz", (unsigned)FRAMERATE);
+
+				ImGui::LabelText("Interpreter Time", "%.2f ms", (_executionTime * 1000));
+				ImGui::LabelText("Utilization", "%.2f%%", _executionTime * FRAMERATE * 100.0);
 				ImGui::LabelText("Allocations", "%d", _allocations);
 
 				ImGui::SeparatorText("Scheduler");
@@ -2656,12 +2697,12 @@ void VirtualMachine::Render()
 					if (ImGui::CollapsingHeader(name))
 					{
 						ImGui::LabelText("State", States[script.state]);
-						ImGui::LabelText("Sprite", script.sprite->GetName().c_str());
-						ImGui::LabelText("Root", script.entry->sl[0]->ToString().c_str());
+						ImGui::LabelText("Sprite", "%s", script.sprite->GetName().c_str());
+						ImGui::LabelText("Root", "%s", script.entry->sl[0]->ToString().c_str());
 						ImGui::LabelText("Wakeup", "%.2f", script.sleepUntil);
 
 						if (script.waitExpr)
-							ImGui::LabelText("Wait", script.waitExpr->ToString().c_str());
+							ImGui::LabelText("Wait", "%s", script.waitExpr->ToString().c_str());
 						else
 							ImGui::LabelText("Wait", "(none)");
 
@@ -2926,7 +2967,11 @@ void VirtualMachine::Scheduler()
 
 void VirtualMachine::Main()
 {
+#if FRAMERATE != 0
 	constexpr double kMinExecutionTime = 1.0 / FRAMERATE;
+#else
+	constexpr double kMinExecutionTime = 0.0;
+#endif
 
 	memset(_panicJmp, 0, sizeof(_panicJmp));
 	int rc = setjmp(_panicJmp);
@@ -2984,14 +3029,20 @@ void VirtualMachine::Main()
 		{
 			_timer = _time - _timerStart;
 
-			//if (_time >= _nextExecution)
-			//{
+			if (_time >= _nextExecution)
+			{
+				double start = ls_time64();
+
 				_nextExecution = _time + kMinExecutionTime;
 				Scheduler();
-			//}
+
+				_executionTime = ls_time64() - start;
+			}
 		}
 
 		Render();
+
+		_allocations = 0;
 	}
 
 	ShutdownThread();
