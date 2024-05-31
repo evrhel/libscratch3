@@ -23,6 +23,43 @@ static const char False[5] = {
 	'f', 'a', 'l', 's', 'e'
 };
 
+static const char *States[] = {
+	"EMBRYO",
+	"RUNNABLE",
+	"WAITING",
+	"SUSPENDED",
+	"TERMINATED"
+};
+
+static const char *ExceptionString(ExceptionType type)
+{
+	switch (type)
+	{
+	default:
+		return "Unknown exception";
+	case Exception_None:
+		return "No exception";
+	case OutOfMemory:
+		return "Out of memory";
+	case StackOverflow:
+		return "Stack overflow";
+	case StackUnderflow:
+		return "Stack underflow";
+	case VariableNotFound:
+		return "Variable not found";
+	case IllegalOperation:
+		return "Illegal operation";
+	case InvalidArgument:
+		return "Invalid argument";
+	case UnsupportedOperation:
+		return "Unsupported operation";
+	case NotImplemented:
+		return "Not implemented";
+	case VMError:
+		return "VM error";
+	}
+}
+
 class Executor : public Visitor
 {
 public:
@@ -531,13 +568,8 @@ public:
 		vm->CvtString(lhs);
 		vm->CvtString(rhs);
 
-		if (lhs.type != ValueType_String || rhs.type != ValueType_String)
-			return; // exception
-
 		Value &v = vm->Push();
 		vm->AllocString(v, lhs.u.string->len + rhs.u.string->len);
-		if (v.type != ValueType_String)
-			return; // exception
 
 		memcpy(v.u.string->str, lhs.u.string->str, lhs.u.string->len);
 		memcpy(v.u.string->str + lhs.u.string->len, rhs.u.string->str, rhs.u.string->len);
@@ -557,8 +589,6 @@ public:
 		Value &v2 =	vm->StackAt(0);
 
 		vm->CvtString(v2);
-		if (v2.type != ValueType_String)
-			return; // exception
 
 		int64_t index = 0;
 		switch (v1.type)
@@ -580,8 +610,6 @@ public:
 		else
 		{
 			vm->AllocString(v1, 1);
-			if (v1.type != ValueType_String)
-				return; // exception
 			v1.u.string->str[0] = v2.u.string->str[index - 1];
 		}
 
@@ -609,10 +637,7 @@ public:
 
 		vm->CvtString(v1);
 		vm->CvtString(v2);
-
-		if (v1.type != ValueType_String || v2.type != ValueType_String)
-			return; // exception
-		
+				
 		// find v2 in v1, case-insensitive
 		bool found = false;
 		for (int64_t i = 0; i < v1.u.string->len; i++)
@@ -1540,28 +1565,19 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 			Value &v = _variables[vdef->name] = { 0 };
 			SetParsedString(v, vdef->value->value);
-
-			if (v.type == ValueType_Exception)
-			{
-				Cleanup();
-				return -1;
-			}
 		}
 
 		for (AutoRelease<StatementList> &sl : def->scripts->sll)
 		{
 			Script script = { 0 };
 
+			script.vm = this;
+
 			script.state = EMBRYO;
 			script.sprite = sprite;
 			script.entry = *sl;
 
-			script.lock = ls_lock_create();
-			if (!script.lock)
-			{
-				Cleanup();
-				return -1;
-			}
+			script.fiber = nullptr;
 
 			script.sleepUntil = 0.0;
 			script.waitExpr = nullptr;
@@ -1605,60 +1621,32 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 int VirtualMachine::VMStart()
 {
-	ls_lock(_lock);
-	if (_running)
-	{
-		ls_unlock(_lock);
+	if (_running || _panicing)
 		return -1;
-	}
 
 	_shouldStop = false;
 
-	ls_handle thread = ls_thread_create(&ThreadProc, this);
-	if (!thread)
-	{
-		ls_unlock(_lock);
+	_thread = ls_thread_create(&ThreadProc, this);
+	if (!_thread)
 		return -1;
-	}
-
-	SendFlagClicked();
-
-	while (!_running)
-		ls_cond_wait(_cond, _lock);
-	ls_unlock(_lock);
 
 	return 0;
 }
 
 void VirtualMachine::VMTerminate()
 {
-	ls_lock(_lock);
 	_shouldStop = true;
-	ls_unlock(_lock);
 }
 
 int VirtualMachine::VMWait(unsigned long ms)
 {
-	int rc = 0;
-
-	ls_lock(_lock);
-	_waitCount++;
-	while (_running)
-	{
-		rc = ls_cond_timedwait(_cond, _lock, ms);
-		if (rc == -1)
-			break;
-	}
-	_waitCount--;
-	ls_unlock(_lock);
-
-	return rc;
+	if (!_thread)
+		return 0;
+	return ls_timedwait(_thread, ms);
 }
 
 void VirtualMachine::VMSuspend()
 {
-	ls_lock(_lock);
-
 	if (!_suspend)
 	{
 		_suspend = true;
@@ -1666,14 +1654,10 @@ void VirtualMachine::VMSuspend()
 
 		SDL_SetWindowTitle(_renderer->GetWindow(), "Scratch 3 [Suspended]");
 	}
-
-	ls_unlock(_lock);
 }
 
 void VirtualMachine::VMResume()
 {
-	ls_lock(_lock);
-
 	if (_suspend)
 	{
 		_suspend = false;
@@ -1687,16 +1671,12 @@ void VirtualMachine::VMResume()
 
 		SDL_SetWindowTitle(_renderer->GetWindow(), "Scratch 3");
 	}
-
-	ls_unlock(_lock);
 }
 
 void VirtualMachine::SendFlagClicked()
 {
 	for (Script &script : _scripts)
 	{
-		ls_lock(script.lock);
-
 		AutoRelease<Statement> &s = script.entry->sl[0];
 		OnFlagClicked *fc = s->As<OnFlagClicked>();
 		if (fc)
@@ -1711,8 +1691,6 @@ void VirtualMachine::SendFlagClicked()
 			script.frames[0].flags = 0;
 			script.fp = 0;
 		}
-
-		ls_unlock(script.lock);
 	}
 }
 
@@ -1738,49 +1716,47 @@ void VirtualMachine::SendSpriteClicked(Sprite *sprite)
 
 void VirtualMachine::Sleep(double seconds)
 {
+	if (_current == nullptr)
+		Panic();
+
 	_current->sleepUntil = _time + seconds;
 	_current->state = WAITING;
+	Sched();
 }
 
 void VirtualMachine::WaitUntil(Expression *expr)
 {
+	if (_current == nullptr)
+		Panic();
+
 	_current->waitExpr = expr;
 	_current->state = WAITING;
+	Sched();
 }
 
 void VirtualMachine::AskAndWait()
 {
+	if (_current == nullptr)
+		Panic();
+
 	// TODO: implement
 }
 
 void VirtualMachine::Terminate()
 {
-	_current->state = TERMINATED;
-}
+	if (_current == nullptr)
+		Panic();
 
-void VirtualMachine::TerminateScript(unsigned long id)
-{
-	id--; // 1-indexed
-	if (id >= _scripts.size())
-		return;
-	Script &script = _scripts[id];
-	script.state = TERMINATED;
+	_current->state = TERMINATED;
+	Sched();
 }
 
 static void DumpScript(Script *script)
 {
-	static const char *STATES[] = {
-		"EMBRYO",
-		"RUNNABLE",
-		"WAITING",
-		"SUSPENDED",
-		"TERMINATED"
-	};
-
 	printf("Script %p\n", script);
 
 	if (script->state >= EMBRYO && script->state <= TERMINATED)
-		printf("    state = %s\n", STATES[script->state]);
+		printf("    state = %s\n", States[script->state]);
 	else
 		printf("    state = Unknown\n");
 
@@ -1814,88 +1790,57 @@ static void DumpScript(Script *script)
 		printf("        flags = %x\n", frame.flags);
 	}}
 
-Value &VirtualMachine::Raise(ExceptionType type)
+void LS_NORETURN VirtualMachine::Raise(ExceptionType type, const char *message)
 {
-#if _DEBUG
-	// TODO: report this in a cleaner way through api calls
-	if (type != Exception_None)
+	if (_current == nullptr)
+		Panic(); // thrown outside of a script
+
+	_exceptionType = type;
+	_exceptionMessage = message;
+
+	Terminate();
+}
+
+void LS_NORETURN VirtualMachine::Panic(const char *message)
+{
+	_panicing = true;
+	_panicMessage = message;
+
+	if (_current)
 	{
-		printf("<EXCEPTION> ");
-		switch (type)
-		{
-		case OutOfMemory:
-			printf("Out of memory\n");
-			break;
-		case StackOverflow:
-			printf("Stack overflow\n");
-			break;
-		case StackUnderflow:
-			printf("Stack underflow\n");
-			break;
-		case VariableNotFound:
-			printf("Variable not found\n");
-			break;
-		case IllegalOperation:
-			printf("Illegal operation\n");
-			break;
-		case InvalidArgument:
-			printf("Invalid argument\n");
-			break;
-		case UnsupportedOperation:
-			printf("Unsupported operation\n");
-			break;
-		case NotImplemented:
-			printf("Not implemented\n");
-			break;
-		case VMError:
-			printf("VM error\n");
-			break;
-		default:
-			printf("Unknown exception\n");
-			break;
-		}
-
-		if (_current)
-		{
-			Script *script = _current;
-			printf("Exception information:\n");
-			DumpScript(_current);
-		}
-		else
-			printf("No current script\n");
-
-		abort();
+		ls_fiber_sched();
+		abort(); // should be unreachable
 	}
 
-#endif // _DEBUG
-
-	if (_exception.u.exception == Exception_None)
-		_exception.u.exception = type;
-	return _exception;
+	longjmp(_panicJmp, 1);
 }
 
 Value &VirtualMachine::Push()
 {
-	if (_exception.u.exception != Exception_None)
-		return _exception;
+	assert(_current != nullptr);
 
 	if (_current->sp < _current->sp)		
-		return Raise(StackOverflow);
+		Raise(StackOverflow);
 	_current->sp--;
 	*_current->sp = { 0 }; // zero out the value
 	return *_current->sp;
 }
 
-bool VirtualMachine::Pop()
+static void PopUnsafe(VirtualMachine *vm, Script *script)
 {
-	if (_exception.u.exception != Exception_None)
-		return false;
+	if (script->sp >= script->stack + STACK_SIZE)
+		abort();
+	vm->ReleaseValue(*script->sp);
+	memset(script->sp, 0xab, sizeof(Value));
+	script->sp++;
+}
+
+void VirtualMachine::Pop()
+{
+	assert(_current != nullptr);
 
 	if (_current->sp >= _current->stack + STACK_SIZE)
-	{
 		Raise(StackUnderflow);
-		return false;
-	}
 
 	ReleaseValue(*_current->sp);
 
@@ -1903,31 +1848,20 @@ bool VirtualMachine::Pop()
 	memset(_current->sp, 0xab, sizeof(Value));
 
 	_current->sp++;
-
-	return true;
 }
 
 Value &VirtualMachine::StackAt(size_t i)
 {
-	if (_exception.u.exception != Exception_None)
-		return _exception;
-
 	if (_current->sp + i >= _current->stack + STACK_SIZE)
-		return Raise(StackUnderflow);
+		Raise(StackUnderflow);
 
 	return _current->sp[i];
 }
 
 void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 {
-	if (_exception.u.exception != Exception_None && count > 0)
-		return;
-
 	if (_current->fp >= SCRIPT_DEPTH - 1)
-	{
 		Raise(StackOverflow);
-		return;
-	}
 
 	if (sl == nullptr)
 	{
@@ -1945,20 +1879,11 @@ void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 
 bool VirtualMachine::Truth(const Value &val)
 {
-	// exceptions should propagate
-
-	if (_exception.u.exception != Exception_None)
-		return false;
-
-	if (val.type == ValueType_Exception)
-		return false;
-
 	if (val.type == ValueType_Bool)
 		return val.u.boolean;
 
 	if (val.type == ValueType_String)
 	{
-
 		if (val.u.string->len != 4)
 			return false;
 
@@ -1976,14 +1901,6 @@ bool VirtualMachine::Truth(const Value &val)
 
 bool VirtualMachine::Equals(const Value &lhs, const Value &rhs)
 {
-	// exceptions should propagate
-
-	if (_exception.u.exception != Exception_None)
-		return false;
-
-	if (lhs.type == ValueType_Exception || rhs.type == ValueType_Exception)
-		return false;
-
 	switch (lhs.type)
 	{
 	case ValueType_Integer: {
@@ -2048,17 +1965,6 @@ bool VirtualMachine::Equals(const Value &lhs, const Value &rhs)
 
 Value &VirtualMachine::Assign(Value &lhs, const Value &rhs)
 {
-	// exceptions should propagate
-
-	if (_exception.u.exception != Exception_None)
-	{
-		ReleaseValue(lhs);
-		return _exception;
-	}
-
-	if (lhs.type == ValueType_Exception)
-		return lhs;
-
 	if (&lhs == &rhs)
 		return lhs;
 
@@ -2072,16 +1978,6 @@ Value &VirtualMachine::Assign(Value &lhs, const Value &rhs)
 
 Value &VirtualMachine::SetInteger(Value &lhs, int64_t val)
 {
-	// exceptions should propagate
-	if (_exception.u.exception != Exception_None)
-	{
-		ReleaseValue(lhs);
-		return _exception;
-	}
-
-	if (lhs.type == ValueType_Exception)
-		return lhs;
-
 	ReleaseValue(lhs);
 	lhs.type = ValueType_Integer;
 	lhs.u.integer = val;
@@ -2090,17 +1986,6 @@ Value &VirtualMachine::SetInteger(Value &lhs, int64_t val)
 
 Value &VirtualMachine::SetReal(Value &lhs, double rhs)
 {
-	// exceptions should propagate
-
-	if (_exception.u.exception != Exception_None)
-	{
-		ReleaseValue(lhs);
-		return _exception;
-	}
-
-	if (lhs.type == ValueType_Exception)
-		return lhs;
-
 	ReleaseValue(lhs);
 	lhs.type = ValueType_Real;
 	lhs.u.real = rhs;
@@ -2109,17 +1994,6 @@ Value &VirtualMachine::SetReal(Value &lhs, double rhs)
 
 Value &VirtualMachine::SetBool(Value &lhs, bool rhs)
 {
-	// exceptions should propagate
-
-	if (_exception.u.exception != Exception_None)
-	{
-		ReleaseValue(lhs);
-		return _exception;
-	}
-
-	if (lhs.type == ValueType_Exception)
-		return lhs;
-
 	ReleaseValue(lhs);
 	lhs.type = ValueType_Bool;
 	lhs.u.boolean = rhs;
@@ -2128,17 +2002,6 @@ Value &VirtualMachine::SetBool(Value &lhs, bool rhs)
 
 Value &VirtualMachine::SetString(Value &lhs, const std::string &rhs)
 {
-	// exceptions should propagate
-
-	if (_exception.u.exception != Exception_None)
-	{
-		ReleaseValue(lhs);
-		return _exception;
-	}
-
-	if (lhs.type == ValueType_Exception)
-		return lhs;
-
 	ReleaseValue(lhs);
 
 	if (rhs.size() == 0)
@@ -2155,17 +2018,6 @@ Value &VirtualMachine::SetString(Value &lhs, const std::string &rhs)
 
 Value &VirtualMachine::SetParsedString(Value &lhs, const std::string &rhs)
 {
-	// exceptions should propagate
-
-	if (_exception.u.exception != Exception_None)
-	{
-		ReleaseValue(lhs);
-		return _exception;
-	}
-
-	if (lhs.type == ValueType_Exception)
-		return lhs;
-
 	std::string str = trim(rhs);
 	if (str.size() != 0)
 	{
@@ -2213,13 +2065,9 @@ Value &VirtualMachine::SetEmpty(Value &lhs)
 
 std::string VirtualMachine::ToString(const Value &val)
 {
-	if (_exception.u.exception != Exception_None)
-		return std::string();
-
 	switch (val.type)
 	{
 	default:
-	case ValueType_Exception:
 	case ValueType_None:
 		return std::string();
 	case ValueType_Integer:
@@ -2238,23 +2086,16 @@ std::string VirtualMachine::ToString(const Value &val)
 
 void VirtualMachine::CvtString(Value &v)
 {
-	if (_exception.u.exception != Exception_None)
-		return;
-
 	switch (v.type)
 	{
 	default:
-	case ValueType_Exception:
 	case ValueType_String:
 		break;
 	case ValueType_Integer: {
 		int cch;
 		cch = snprintf(nullptr, 0, "%" PRId64, v.u.integer);
 		if (cch < 0)
-		{
 			Raise(OutOfMemory);
-			break;
-		}
 
 		AllocString(v, cch);
 		if (v.type != ValueType_String)
@@ -2268,15 +2109,9 @@ void VirtualMachine::CvtString(Value &v)
 		int cch;
 		cch = snprintf(nullptr, 0, "%.8g", v.u.real);
 		if (cch < 0)
-		{
 			Raise(OutOfMemory);
-			break;
-		}
 
 		AllocString(v, cch);
-		if (v.type != ValueType_String)
-			break; // exception
-
 		snprintf(v.u.string->str, cch + 1, "%.8g", v.u.real);
 
 		break;
@@ -2289,13 +2124,9 @@ void VirtualMachine::CvtString(Value &v)
 
 int64_t VirtualMachine::ToInteger(const Value &val)
 {
-	if (_exception.u.exception != Exception_None)
-		return 0;
-
 	switch (val.type)
 	{
 	default:
-	case ValueType_Exception:
 	case ValueType_None:
 	case ValueType_Bool:
 	case ValueType_String:
@@ -2309,13 +2140,9 @@ int64_t VirtualMachine::ToInteger(const Value &val)
 
 double VirtualMachine::ToReal(const Value &val)
 {
-	if (_exception.u.exception != Exception_None)
-		return 0.0;
-
 	switch (val.type)
 	{
 	default:
-	case ValueType_Exception:
 	case ValueType_None:
 	case ValueType_Bool:
 	case ValueType_String:
@@ -2336,7 +2163,7 @@ Value &VirtualMachine::AllocString(Value &v, size_t len)
 	v.type = ValueType_String;
 	v.u.string = (String *)calloc(1, offsetof(String, str) + len + 1);
 	if (!v.u.string)
-		return Raise(OutOfMemory);
+		Raise(OutOfMemory);
 
 	v.u.string->len = len;
 	v.u.ref->count = 1;
@@ -2384,7 +2211,7 @@ Value &VirtualMachine::FindVariable(const std::string &id)
 {
 	auto it = _variables.find(id);
 	if (it == _variables.end())
-		return Raise(VariableNotFound);
+		Raise(VariableNotFound);
 	return it->second;
 }
 
@@ -2425,6 +2252,15 @@ void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
 	glide.end = _time + s;
 }
 
+void VirtualMachine::Sched()
+{
+	if (_current == nullptr)
+		Panic();
+
+	_current = nullptr;
+	ls_fiber_sched();
+}
+
 VirtualMachine::VirtualMachine()
 {
 	_prog = nullptr;
@@ -2459,7 +2295,13 @@ VirtualMachine::VirtualMachine()
 
 	_running = false;
 	_activeScripts = 0;
-	_exception = { 0 };
+	_waitingScripts = 0;
+	_exceptionType = Exception_None;
+	_exceptionMessage = nullptr;
+
+	_panicing = false;
+	_panicMessage = nullptr;
+	memset(_panicJmp, 0, sizeof(_panicJmp));
 
 	_current = nullptr;
 	_time = 0;
@@ -2469,8 +2311,7 @@ VirtualMachine::VirtualMachine()
 
 	_allocations = 0;
 
-	_lock = ls_lock_create();
-	_cond = ls_cond_create();
+	_thread = nullptr;
 
 	_emptyString = {};
 	AllocString(_emptyString, 0);
@@ -2498,14 +2339,6 @@ VirtualMachine::~VirtualMachine()
 	ReleaseValue(_answer);
 
 	Release(_prog);
-
-	ls_close(_cond);
-	ls_close(_lock);
-}
-
-bool VirtualMachine::InitGraphics()
-{
-	return false;
 }
 
 void VirtualMachine::DestroyGraphics()
@@ -2727,7 +2560,9 @@ void VirtualMachine::Render()
 
 				ImGui::SeparatorText("Scheduler");
 				ImGui::LabelText("Suspended", "%s", _suspend ? "true" : "false");
-				ImGui::LabelText("Running", "%d/%d", _activeScripts, (int)_scripts.size());
+				ImGui::LabelText("Script Count", "%d", (int)_scripts.size());
+				ImGui::LabelText("Running", "%d", _activeScripts);
+				ImGui::LabelText("Waiting", "%d", _waitingScripts);
 
 				ImGui::SeparatorText("Globals");
 				for (auto &p : _variables)
@@ -2737,8 +2572,8 @@ void VirtualMachine::Render()
 
 					switch (v.type)
 					{
-					case ValueType_Exception:
-						ImGui::LabelText(name, "%s => exception (%d)\n", v.u.exception);
+					default:
+						ImGui::LabelText(name, "<unknown>");
 						break;
 					case ValueType_None:
 						ImGui::LabelText(name, "None");
@@ -2795,6 +2630,56 @@ void VirtualMachine::Render()
 				ImGui::EndTabItem();
 			}
 
+			if (ImGui::BeginTabItem("Scripts"))
+			{
+				static bool onlyRunning = true;
+				ImGui::Checkbox("Only Running", &onlyRunning);
+
+				for (Script &script : _scripts)
+				{
+					bool running = script.state == RUNNABLE || script.state == WAITING;
+					if (onlyRunning && !running)
+						continue;
+
+					char name[128];
+					snprintf(name, sizeof(name), "%p (%s)", &script, script.sprite->GetName().c_str());
+
+					if (ImGui::CollapsingHeader(name))
+					{
+						ImGui::LabelText("State", States[script.state]);
+						ImGui::LabelText("Sprite", script.sprite->GetName().c_str());
+						ImGui::LabelText("Root", script.entry->sl[0]->ToString().c_str());
+						ImGui::LabelText("Wakeup", "%.2f", script.sleepUntil);
+
+						if (script.waitExpr)
+							ImGui::LabelText("Wait", script.waitExpr->ToString().c_str());
+						else
+							ImGui::LabelText("Wait", "(none)");
+
+						ImGui::LabelText("Wait Input", script.waitInput ? "true" : "false");
+
+						ImGui::LabelText("Frame", "%d", (int)script.fp);
+
+						for (uintptr_t fp = 0; fp <= script.fp; fp++)
+						{
+							Frame &f = script.frames[fp];
+							if (!f.sl)
+								continue;
+
+							if (f.pc == 0)
+								ImGui::Text("[%d] (start)", (int)fp);
+							else
+							{
+								Statement *stmt = *f.sl->sl[f.pc-1];
+								ImGui::Text("[%d] %s", (int)fp, stmt->ToString().c_str());
+							}
+						}
+					}
+				}
+
+				ImGui::EndTabItem();
+			}
+
 			ImGui::EndTabBar();
 		}
 	}
@@ -2828,6 +2713,13 @@ void VirtualMachine::Render()
 
 void VirtualMachine::Cleanup()
 {
+	if (_thread && ls_thread_id_self() != ls_thread_id(_thread))
+	{
+		_shouldStop = true;
+		ls_wait(_thread);
+		ls_close(_thread), _thread = nullptr;
+	}
+
 	_listeners.clear();
 	_keyListeners.clear();
 	_clickListeners.clear();
@@ -2838,7 +2730,7 @@ void VirtualMachine::Cleanup()
 
 	for (Script &script : _scripts)
 	{
-		ls_close(script.lock);
+		assert(script.fiber == nullptr);
 		free(script.stack);
 	}
 	_scripts.clear();
@@ -2848,162 +2740,210 @@ void VirtualMachine::Cleanup()
 	_loader = nullptr;
 }
 
-void VirtualMachine::Sched()
+static int ScriptMain(void *up)
 {
-	constexpr double kMinExecutionTime = 1.0 / FRAMERATE;
+	Script &script = *(Script *)up;
+	VirtualMachine &vm = *script.vm;
 
 	Executor executor;
-	executor.vm = this;
+	executor.script = &script;
+	executor.vm = &vm;
 
-	_lastTime = _time;
-	_time = ls_time64();
-	_timer = _time - _timerStart;
-
-	if (_time >= _nextExecution)
+	for (;;)
 	{
-		_nextExecution = _time + kMinExecutionTime;
-
-		_activeScripts = 0;
-		_allocations = 0;
-		for (Script &script : _scripts)
+		// Check if we should wait
+		if (script.waitExpr)
 		{
-			ls_lock(script.lock);
+			script.waitExpr->Accept(&executor);
+			bool truth = vm.Truth(vm.StackAt(0));
+			vm.Pop();
 
-			_current = &script;
-
-			// Handle waiting scripts
-			if (script.state == WAITING)
+			if (!truth)
 			{
-				if (script.waitExpr)
-				{
-					// Execute the wait expression
-					executor.script = &script;
-					script.waitExpr->Accept(&executor);
-
-					// If true, awaken the script
-					if (Truth(script.sp[0]))
-						script.state = RUNNABLE;
-
-					Pop(); // pop the result
-				}
-				else if (script.sleepUntil <= _time)
-				{
-					// Wake up the script
-					script.state = RUNNABLE;
-				}
-			}
-
-			// Don't execute scripts that are not runnable
-			if (script.state != RUNNABLE)
-			{
-				if (script.state == WAITING)
-					_activeScripts++;
-
-				_current = nullptr;
-				ls_unlock(script.lock);
+				vm.Sched();
 				continue;
 			}
 
-			// Pop frames until we find one that can execute
-			Frame *f = &script.frames[script.fp];
-			while (f->pc >= f->sl->sl.size())
-			{
-				// top of the stack, script is done
-				if (script.fp == 0)
-				{
-					script.state = TERMINATED;
-					break;
-				}
-
-				// this script should execute forever, so reset the program counter
-				if (f->flags & FRAME_EXEC_FOREVER)
-				{
-					f->pc = 0;
-					break;
-				}
-
-				// decrement the repeat count, if it's zero, pop the frame
-				f->count--;
-				if (f->count > 0)
-				{
-					f->pc = 0;
-					break;
-				}
-
-				bool again = (f->flags & FRAME_EXEC_AGAIN) != 0;
-
-				// Pop the frame
-				script.fp--;
-				f = &script.frames[script.fp];
-
-				// Counteracts the increment from the last iteration
-				if (again)
-					f->pc--;
-			}
-
-			// Execute the script
-			if (script.state == RUNNABLE)
-			{
-				_activeScripts++;
-
-				executor.script = &script;
-
-				if (f->pc < f->sl->sl.size())
-				{
-					// Run the statement
-					Statement *stmt = *f->sl->sl[f->pc];
-					stmt->Accept(&executor);
-
-					// Exception handling
-					if (_exception.u.exception == Exception_None)
-					{
-						if (script.sp != script.stack + STACK_SIZE)
-							Raise(VMError); // stack should be empty
-						else if (script.fp >= SCRIPT_DEPTH)
-							Raise(VMError); // invalid frame pointer
-					}
-
-					f->pc++;
-				}
-				else
-					Raise(VMError);
-			}
-
-			_current = nullptr;
-
-			ls_unlock(script.lock);
+			script.waitExpr = nullptr;
 		}
 
-		for (Sprite *s = _sprites; s < _spritesEnd; s++)
+		// Pop frames until we find one that we can execute
+		Frame *f = &script.frames[script.fp];
+		while (f->pc >= f->sl->sl.size())
 		{
-			GlideInfo &g = *s->GetGlide();
-
-			if (g.start < 0.0)
-				continue; // not gliding
-
-			double t = (_time - g.start) / (g.end - g.start);
-			if (t >= 1.0)
+			// top of the stack, script is done
+			if (script.fp == 0)
 			{
-				// done gliding
-				s->SetXY(g.x1, g.y1);
-				g.start = -1.0;
+				script.state = TERMINATED;
+				vm.Sched();
+				break;
 			}
-			else
+
+			// this script should execute forever, so reset the program counter
+			if (f->flags & FRAME_EXEC_FOREVER)
 			{
-				// linear interpolation
-				s->SetXY(g.x0 + (g.x1 - g.x0) * t, g.y0 + (g.y1 - g.y0) * t);
+				f->pc = 0;
+				break;
+			}
+
+			// decrement the repeat count, if it's zero, pop the frame
+			f->count--;
+			if (f->count > 0)
+			{
+				f->pc = 0;
+				break;
+			}
+
+			bool again = (f->flags & FRAME_EXEC_AGAIN) != 0;
+
+			// Pop the frame
+			script.fp--;
+			f = &script.frames[script.fp];
+
+			// Counteracts the increment from the last iteration
+			if (again)
+				f->pc--;
+		}
+
+		// Execute the script
+		if (f->pc < f->sl->sl.size())
+		{
+			// Run the statement
+			Statement *stmt = *f->sl->sl[f->pc];
+			stmt->Accept(&executor);
+
+			// Check stack
+			if (script.sp != script.stack + STACK_SIZE)
+				vm.Raise(VMError, "Nonempty stack");
+
+			// Check frame pointer
+			if (script.fp >= SCRIPT_DEPTH)
+				vm.Raise(VMError, "Invalid frame pointer");
+
+			f->pc++;
+
+			vm.Sched();
+		}
+		else
+			vm.Raise(VMError);
+	}
+
+	return 0;
+}
+
+void VirtualMachine::ShutdownThread()
+{
+	_activeScripts = 0;
+	_waitingScripts = 0;
+	_running = false;
+
+	DestroyGraphics(); // clean up graphics resources
+
+	// clean up fibers
+	for (Script &s : _scripts)
+		ls_close(s.fiber), s.fiber = nullptr;
+	ls_convert_to_thread();
+}
+
+void VirtualMachine::Scheduler()
+{
+	int activeScripts = 0, waitingScripts = 0;
+
+	for (Script &script : _scripts)
+	{
+		if (!script.fiber)
+			continue; // cannot be scheduled
+
+		_current = &script;
+
+		if (script.state == WAITING)
+		{
+			if (script.sleepUntil <= _time)
+			{
+				// wake up
+				script.state = RUNNABLE;
 			}
 		}
 
-		_executionTime = ls_time64() - _time;
+		if (script.state != RUNNABLE)
+		{
+			if (script.state == WAITING)
+				waitingScripts++;
+			continue;
+		}
+
+		activeScripts++;
+
+		// schedule the script
+		ls_fiber_switch(script.fiber);
+
+		assert(_current == nullptr);
+
+		if (_exceptionType != Exception_None)
+		{
+			// script raised an exception
+			printf("<EXCEPTION> %s\n", _exceptionMessage);
+			printf("Exception information:\n");
+			DumpScript(_current);
+
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", _exceptionMessage, _renderer->GetWindow());
+			
+			_activeScripts = 0;
+			_waitingScripts = 0;
+			return;
+		}
+
+		if (script.state == TERMINATED)
+		{
+			// script was just terminated
+			script.sleepUntil = 0.0;
+			script.waitExpr = nullptr;
+			script.waitInput = false;
+
+			// clean up the stack
+			while (script.sp < script.stack + STACK_SIZE)
+				PopUnsafe(this, &script);
+
+			memset(script.frames, 0, sizeof(script.frames));
+			script.fp = 0;
+
+			script.state = EMBRYO;
+		}
 	}
+
+	_activeScripts = activeScripts;
+	_waitingScripts = waitingScripts;
 }
 
 void VirtualMachine::Main()
 {
-	ls_lock(_lock);
+	constexpr double kMinExecutionTime = 1.0 / FRAMERATE;
+
+	memset(_panicJmp, 0, sizeof(_panicJmp));
+	int rc = setjmp(_panicJmp);
+	if (rc == 1)
+	{
+		assert(_panicing);
+
+		// panic
+		printf("<PANIC> %s\n", _panicMessage);
+		ShutdownThread();
+		return;
+	}
+
+	if (ls_convert_to_fiber(NULL) != 0)
+		Panic("Failed to convert to fiber");
+
+	for (Script &script : _scripts)
+	{
+		script.fiber = ls_fiber_create(ScriptMain, &script);
+		if (!script.fiber)
+			Panic("Failed to create fiber");
+	}
 
 	_renderer = new GLRenderer(_spritesEnd - _sprites - 1); // exclude the stage
+	if (_renderer->HasError())
+		Panic("Failed to initialize graphics");
 
 	// Initialize graphics resources
 	for (Sprite *s = _sprites; s < _spritesEnd; s++)
@@ -3016,44 +2956,36 @@ void VirtualMachine::Main()
 	_timerStart = _time;
 
 	_running = true;
-	ls_cond_signal(_cond);
 
 	_nextExecution = _time;
+	
+	SendFlagClicked();
 
 	for (;;)
 	{
-		if (_exception.u.exception != Exception_None)
-		{
-			printf("<EXCEPTION> %u\n", _exception.u.exception);
-			break;
-		}
+		_lastTime = _time;
+		_time = ls_time64();
 
 		PollEvents();
-
-		bool suspend = _suspend;
 
 		if (_shouldStop)
 			break;
 
-		ls_unlock(_lock);
+		if (!_suspend && _exceptionType == Exception_None)
+		{
+			_timer = _time - _timerStart;
 
-		if (!suspend)
-			Sched();
+			//if (_time >= _nextExecution)
+			//{
+				_nextExecution = _time + kMinExecutionTime;
+				Scheduler();
+			//}
+		}
 
 		Render();
-
-		ls_lock(_lock);
 	}
 
-	// Lock is held here
-
-	_activeScripts = 0;
-	_running = false;
-
-	DestroyGraphics(); // clean up graphics resources
-
-	ls_cond_broadcast(_cond); // notify waiting threads
-	ls_unlock(_lock);
+	ShutdownThread();
 }
 
 int VirtualMachine::ThreadProc(void *data)

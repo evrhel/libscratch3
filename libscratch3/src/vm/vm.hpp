@@ -3,6 +3,7 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
+#include <csetjmp>
 
 #include <lysys/lysys.hpp>
 
@@ -82,7 +83,7 @@ struct Script
 	Sprite *sprite; // Sprite that owns the script
 	StatementList *entry; // Root statement list
 	
-	ls_handle lock; // lock for the script
+	ls_handle fiber; // Fiber for the script
 
 	double sleepUntil; // Time to wake up
 	Expression *waitExpr; // Expression to wait for
@@ -93,6 +94,8 @@ struct Script
 
 	Frame frames[SCRIPT_DEPTH]; // Execution frames
 	uintptr_t fp; // Frame pointer (grows downwards)
+
+	VirtualMachine *vm; // VM that owns the script
 };
 
 class VirtualMachine final
@@ -189,17 +192,13 @@ public:
 	//! \brief Terminate the current script
 	void Terminate();
 
-	//! \brief Terminate a script by ID
-	//! 
-	//! \param id ID of the script to terminate
-	void TerminateScript(unsigned long id);
-
-	//! \brief Raise an exception.
+	//! \brief Raise an exception, does not return.
 	//! 
 	//! \param type Type of exception to raise
-	//! 
-	//! \return A reference to the exception value
-	Value &Raise(ExceptionType type);
+	//! \param message Message to associate with the exception
+	void LS_NORETURN Raise(ExceptionType type, const char *message = nullptr);
+
+	void LS_NORETURN Panic(const char *message = nullptr);
 
 	//! \brief Push a value onto the stack
 	//! 
@@ -209,9 +208,7 @@ public:
 	//! \brief Pop a value from the stack
 	//! 
 	//! Raises a StackUnderflow exception if the stack is empty.
-	//! 
-	//! \return true if the operation was successful, false otherwise
-	bool Pop();
+	void Pop();
 
 	//! \brief Retrieve a value from the stack
 	//! 
@@ -310,6 +307,9 @@ public:
 
 	void Glide(Sprite *sprite, double x, double y, double s);
 
+	//! \brief Schedule a script for execution
+	void Sched();
+
 	constexpr Loader *GetLoader() const { return _loader; }
 
 	VirtualMachine();
@@ -374,7 +374,14 @@ private:
 
 	bool _running; // VM is running
 	int _activeScripts; // Number of active scripts
-	Value _exception; // Exception value
+	int _waitingScripts; // Number of waiting scripts
+
+	ExceptionType _exceptionType; // Exception type
+	const char *_exceptionMessage; // Exception message
+
+	bool _panicing; // Panic flag
+	const char *_panicMessage; // Panic message
+	jmp_buf _panicJmp; // Panic jump buffer
 
 	Script *_current; // Currently executing script
 	double _time; // VM time
@@ -384,15 +391,12 @@ private:
 
 	int _allocations; // Number of allocations in a frame
 
-	ls_handle _lock;
-	ls_handle _cond;
+	ls_handle _thread; // VM thread
 
 	//
 	/////////////////////////////////////////////////////////////////
 	// Graphics Internals
 	//
-
-	bool InitGraphics();
 
 	void DestroyGraphics();
 
@@ -410,8 +414,10 @@ private:
 	//! function still leave the VM in a usable state.
 	void Cleanup();
 
+	void ShutdownThread();
+	 
 	//! \brief Handles script scheduling
-	void Sched();
+	void Scheduler();
 
 	//! \brief Main vm loop
 	void Main();

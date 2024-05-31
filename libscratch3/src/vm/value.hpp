@@ -4,8 +4,6 @@
 
 enum ValueType
 {
-	ValueType_Exception = -1,
-
 	ValueType_None = 0,
 
 	/* Numeric types */
@@ -33,8 +31,6 @@ struct Value
 		int64_t integer;
 		double real;
 		bool boolean;
-
-		uint32_t exception;
 
 		Reference *ref;
 		String *string;
