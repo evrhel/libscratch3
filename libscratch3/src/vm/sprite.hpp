@@ -7,12 +7,14 @@
 #include <mutil/mutil.h>
 
 #include "costume.hpp"
+#include "script.hpp"
 
 using namespace mutil;
 
 class SpriteDef;
 class Loader;
 class GLRenderer;
+class VirtualMachine;
 
 struct AABB
 {
@@ -120,9 +122,11 @@ public:
     void Init(SpriteDef *def);
 
     // call from render thread
-    void Load(Loader *loader, GLRenderer *renderer);
+    void Load(VirtualMachine *vm);
 
     void DebugUI() const;
+
+    constexpr const std::vector<Script *> &GetClickListeners() const { return _clickListeners; }
 
     Sprite();
     ~Sprite();
@@ -164,9 +168,10 @@ private:
     Matrix4 _model, _invModel;
     AABB _bbox;
 
-    GLRenderer *_renderer = nullptr;
+    VirtualMachine *_vm = nullptr;
 
     SpriteDef *_node = nullptr;
+    std::vector<Script *> _clickListeners;
 
     bool CheckSpriteAdv(const Sprite *sprite) const;
     bool CheckPointAdv(const Vector2 &point) const;

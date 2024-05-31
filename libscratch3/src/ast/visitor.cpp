@@ -757,8 +757,7 @@ public:
 
 	virtual void Visit(OnKeyPressed *node)
 	{
-		Printf("\033[33mOnKeyPressed\033[0m %s\n",
-			GetKeyName(node->key));
+		Printf("\033[33mOnKeyPressed\033[0m\n");
 	}
 
 	virtual void Visit(OnSpriteClicked *node)

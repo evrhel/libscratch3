@@ -207,6 +207,8 @@ public:
 
 	constexpr bool IsSuspended() const { return _suspend; }
 
+	constexpr const std::vector<Script> &GetScripts() const { return _scripts; }
+
 	void OnClick(int64_t x, int64_t y);
 	void OnKeyDown(int scancode);
 
@@ -231,9 +233,9 @@ private:
 
 	std::vector<Script> _scripts; // All scripts
 
-	std::unordered_map<std::string, Script *> _listeners; // Message listeners
-	std::unordered_map<std::string, Script *> _keyListeners; // Key listeners
-	std::vector<Script *> _clickListeners; // Click listeners
+	std::vector<Script *> _flagListeners; // Flag listeners
+	std::unordered_map<std::string, std::vector<Script *>> _messageListeners; // Message listeners
+	std::unordered_map<SDL_Scancode, std::vector<Script *>> _keyListeners; // Key listeners
 	
 	bool _flagClicked; // Flag clicked event
 	std::unordered_set<std::string> _toSend; // Messages to send

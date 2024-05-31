@@ -5,6 +5,8 @@
 #include "../render/renderer.hpp"
 #include "../ast/ast.hpp"
 
+#include "vm.hpp"
+
 // create AABB at the origin with extents [-0.5, 0.5]
 static constexpr AABB &CenterAABB(AABB &self)
 {
@@ -66,16 +68,12 @@ static constexpr bool AABBContains(const AABB &a, const Vector2 &p)
 
 void Sprite::SetLayer(int64_t layer)
 {
-    if (!_renderer)
-        return;
-    _renderer->SetLayer(_drawable, layer);
+    _vm->GetRenderer()->SetLayer(_drawable, layer);
 }
 
 void Sprite::MoveLayer(int64_t amount)
 {
-    if (!_renderer)
-        return;
-    _renderer->MoveLayer(_drawable, amount);
+    _vm->GetRenderer()->MoveLayer(_drawable, amount);
 }
 
 void Sprite::SetCostume(const std::string &name)
@@ -86,10 +84,7 @@ void Sprite::SetCostume(const std::string &name)
 }
 
 bool Sprite::TouchingColor(int64_t color) const
-{
-    if (!_renderer)
-        return true;
-        
+{        
     // TODO: implement
     return true;
 }
@@ -120,7 +115,8 @@ bool Sprite::TouchingPoint(const Vector2 &point) const
 
 void Sprite::Update()
 {
-    SpriteRenderInfo *s = _renderer->GetRenderInfo(_drawable);
+    GLRenderer *render = _vm->GetRenderer();
+    SpriteRenderInfo *s = render->GetRenderInfo(_drawable);
     s->shouldRender = _shown;
 
     double uniformScale = _size / 100;
@@ -167,7 +163,7 @@ void Sprite::Update()
         _effectDirty = false;
     }
 
-    c->Render(uniformScale, _renderer->GetScale());
+    c->Render(uniformScale, render->GetScale());
 }
 
 void Sprite::Init(SpriteDef *def)
@@ -211,16 +207,28 @@ void Sprite::Init(SpriteDef *def)
     _node = Retain(def);
 }
 
-void Sprite::Load(Loader *loader, GLRenderer *renderer)
+void Sprite::Load(VirtualMachine *vm)
 {
-    if (_renderer)
+    if (_vm)
         return; // already loaded
 
-    _renderer = renderer;
+    _vm = vm;
+    
+    // find all listeners
+    for (const Script &script : vm->GetScripts())
+    {
+        AutoRelease<Statement> &s = script.entry->sl[0];
+        OnSpriteClicked *sc = s->As<OnSpriteClicked>();
+        if (sc && script.sprite == this)
+            _clickListeners.push_back((Script *)&script);
+    }
+
+    Loader *loader = vm->GetLoader();
+    GLRenderer *render = vm->GetRenderer();
 
     if (!_isStage)
     {
-        _drawable = renderer->CreateSprite();
+        _drawable = render->CreateSprite();
         SetLayer(_node->layer);
     }
     else
@@ -233,7 +241,7 @@ void Sprite::Load(Loader *loader, GLRenderer *renderer)
             _costumes[i++].Load(loader, *cd);
     }
 
-    SpriteRenderInfo *ri = renderer->GetRenderInfo(_drawable);
+    SpriteRenderInfo *ri = render->GetRenderInfo(_drawable);
     ri->userData = this;
 
     // initial update
@@ -242,11 +250,13 @@ void Sprite::Load(Loader *loader, GLRenderer *renderer)
 
 void Sprite::DebugUI() const
 {
+    GLRenderer *render = _vm->GetRenderer();
+
     ImGui::SeparatorText("Transform");
     ImGui::LabelText("Position", "%.0f, %.0f", _x, _y);
     ImGui::LabelText("Direction", "%.0f", _direction);
     ImGui::LabelText("Size", "%.0f%%", _size);
-    ImGui::LabelText("Draw Order", "%d", _renderer->GetRenderInfo(_drawable)->GetLayer());
+    ImGui::LabelText("Draw Order", "%d", render->GetRenderInfo(_drawable)->GetLayer());
     ImGui::LabelText("Bounding Box", "(%.0f, %.0f) (%.0f, %.0f), size: %.0fx%.0f",
         		(double)_bbox.lo.x, (double)_bbox.lo.y, (double)_bbox.hi.x, (double)_bbox.hi.y,
                 (double)(_bbox.hi.x - _bbox.lo.x), (double)(_bbox.hi.y - _bbox.lo.y));
@@ -348,6 +358,8 @@ bool Sprite::CheckPointAdv(const Vector2 &point) const
 
 void Sprite::Cleanup()
 {
+    _clickListeners.clear();
+
     if (_costumes)
     {
         delete[] _costumes, _costumes = nullptr;
@@ -356,7 +368,7 @@ void Sprite::Cleanup()
 
     _drawable = -1;
 
-    _renderer = nullptr;
+    _vm = nullptr;
 
     _messageState = MESSAGE_STATE_NONE;
     _message.clear();

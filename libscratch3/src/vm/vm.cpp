@@ -1894,18 +1894,8 @@ void VirtualMachine::OnClick(int64_t x, int64_t y)
 		{
 			// sprite was clicked
 			printf("Clicked %s\n", sprite->GetName().c_str());
-
-			for (Script &script : _scripts)
-			{
-				if (script.sprite != sprite)
-					continue;
-
-				AutoRelease<Statement> &s = script.entry->sl[0];
-				OnSpriteClicked *sc = s->As<OnSpriteClicked>();
-				if (sc)
-					_clickQueue.push(&script);
-			}
-
+			for (Script *script : sprite->GetClickListeners())
+				_clickQueue.push(script);
 			break;
 		}
 	}
@@ -2017,9 +2007,8 @@ void VirtualMachine::Cleanup()
 	_question.clear();
 	memset(_inputBuf, 0, sizeof(_inputBuf));
 
-	_listeners.clear();
+	_messageListeners.clear();
 	_keyListeners.clear();
-	_clickListeners.clear();
 
 	for (auto &p : _variables)
 		ReleaseValue(p.second);
@@ -2183,14 +2172,8 @@ void VirtualMachine::DispatchEvents()
 	// Flag clicked
 	if (_flagClicked)
 	{
-		for (Script &script : _scripts)
-		{
-			AutoRelease<Statement> &s = script.entry->sl[0];
-			OnFlagClicked *fc = s->As<OnFlagClicked>();
-			if (fc)
-				StartScript(script);
-		}
-
+		for (Script *script : _flagListeners)
+			StartScript(*script);
 		_flagClicked = false;
 	}
 
@@ -2199,17 +2182,12 @@ void VirtualMachine::DispatchEvents()
 	{
 		for (const std::string &message : _toSend)
 		{
-			for (Script &script : _scripts)
-			{
-				AutoRelease<Statement> &s = script.entry->sl[0];
-				OnEvent *oe = s->As<OnEvent>();
-				if (oe)
-				{
-					bool eq = oe->message == message;
-					if (eq)
-						StartScript(script);
-				}
-			}
+			auto it = _messageListeners.find(message);
+			if (it == _messageListeners.end())
+				continue;
+
+			for (Script *script : it->second)
+				StartScript(*script);
 		}
 
 		_toSend.clear();
@@ -2326,7 +2304,39 @@ void VirtualMachine::Main()
 
 	// Initialize graphics resources
 	for (Sprite *s = _sprites; s < _spritesEnd; s++)
-		s->Load(_loader, _render);
+		s->Load(this);
+
+	_messageListeners.clear();
+	_keyListeners.clear();
+	_flagListeners.clear();
+
+	// Find listeners
+	for (Script &script : _scripts)
+	{
+		AutoRelease<Statement> &s = script.entry->sl[0];
+		OnEvent *oe = s->As<OnEvent>();
+		if (oe)
+		{
+			_messageListeners[oe->message].push_back(&script);
+			continue;
+		}
+
+		OnKeyPressed *okp = s->As<OnKeyPressed>();
+		if (okp)
+		{
+			SDL_Scancode sc = SDL_GetScancodeFromName(okp->key.c_str());
+			if (sc != SDL_SCANCODE_UNKNOWN)
+				_keyListeners[sc].push_back(&script);
+			continue;
+		}
+
+		OnFlagClicked *ofc = s->As<OnFlagClicked>();
+		if (ofc)
+		{
+			_flagListeners.push_back(&script);
+			continue;
+		}
+	}
 
 	SDL_Window *window = _render->GetWindow();
 	SDL_SetWindowTitle(window, "Scratch 3");

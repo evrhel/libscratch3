@@ -914,16 +914,14 @@ struct OnKeyPressed : public Statement
 	{
 		if (key == "KEY_OPTION")
 		{
-			if (this->key != Key_Unknown)
-				return false;
-			this->key = KeyFromString(value);
-			return this->key != Key_Unknown;
+			this->key = value;
+			return true;
 		}
 
 		return false;
 	}
 
-	Key key = Key_Unknown;
+	std::string key;
 };
 
 // [when this sprite clicked]
