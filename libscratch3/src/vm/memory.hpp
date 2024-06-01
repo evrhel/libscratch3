@@ -101,6 +101,7 @@ int64_t ListGetLength(const Value &list);
 bool ListContainsValue(const Value &list, const Value &v);
 void ListAppend(const Value &list, const Value &v);
 void ListDelete(const Value &list, int64_t index);
+void ListDelete(const Value &list, const Value &index);
 void ListClear(const Value &list);
 void ListInsert(const Value &list, int64_t index, const Value &v);
 
@@ -128,7 +129,7 @@ const char *GetRawString(const Value &v, int64_t *len = nullptr);
 
 Value &AllocString(Value &v, int64_t len);
 
-Value &AllocList(Value &v);
+Value &AllocList(Value &v, int64_t len);
 
 //! \brief Initialize a value
 //! 

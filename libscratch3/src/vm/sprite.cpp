@@ -122,6 +122,15 @@ void Sprite::Update()
     double uniformScale = _size / 100;
     Costume *c = _costumes + _costume - 1;
 
+    if (_vm->GetTime() < _glide.end)
+    {
+        // linear interpolation
+        double t = (_vm->GetTime() - _glide.start) / (_glide.end - _glide.start);
+        double x = _glide.x0 + t * (_glide.x1 - _glide.x0);
+        double y = _glide.y0 + t * (_glide.y1 - _glide.y0);
+        SetXY(x, y);
+    }
+
     if (_transDirty)
     {
         const Vector2 &cCenter = c->GetLogicalCenter();

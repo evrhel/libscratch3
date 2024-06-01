@@ -27,25 +27,25 @@ bool StringEquals(const char *lstr, const char *rstr)
 		return true;
 
 	const char *lstart = lstr;
-	while (isspace(*lstart))
+	while (*lstart && isspace(*lstart))
 		lstart++;
 
-	const char *rend = lstart;
-	while (!isspace(*rend))
-		rend++;
-
-	const char *rstart = rstr;
-	while (isspace(*rstart))
-		rstart++;
-
-	const char *lend = rend;
-	while (!isspace(*lend))
+	const char *lend = lstart;
+	while (*lend && !isspace(*lend))
 		lend++;
 
-	if (rend - lstart != lend - rstart)
+	const char *rstart = rstr;
+	while (*rstart && isspace(*rstart))
+		rstart++;
+
+	const char *rend = rstart;
+	while (*rend && !isspace(*rend))
+		rend++;
+
+	if (lend - lstart != rend - rstart)
 		return false;
 
-	size_t len = rend - lstart;
+	size_t len = lend - lstart;
 	for (size_t i = 0; i < len; i++)
 	{
 		if (tolower(lstart[i]) != tolower(rstart[i]))
@@ -127,6 +127,23 @@ bool Equals(const Value &lhs, const Value &rhs)
 		else if (rhs.type == ValueType_ConstString)
 			return StringEquals(lhs.u.const_string->c_str(), rhs.u.const_string->c_str());
 		return false;
+	case ValueType_List:
+		if (rhs.type != ValueType_List)
+			return false;
+
+		if (lhs.u.list == rhs.u.list)
+			return true;
+
+		if (lhs.u.list->len != rhs.u.list->len)
+			return false;
+
+		for (int64_t i = 0; i < lhs.u.list->len; i++)
+		{
+			if (!Equals(lhs.u.list->values[i], rhs.u.list->values[i]))
+				return false;
+		}
+
+		return true;
 	}
 }
 
@@ -359,10 +376,9 @@ bool ListContainsValue(const Value &list, const Value &v)
 	return ListIndexOf(list, v) != 0;
 }
 
-void ListAppend(const Value &list, const Value &v)
+static bool ListGrow(const Value &list)
 {
-	if (list.type != ValueType_List)
-		return;
+	assert(list.type == ValueType_List);
 
 	List *l = list.u.list;
 
@@ -375,15 +391,28 @@ void ListAppend(const Value &list, const Value &v)
 
 		Value *newValues = (Value *)realloc(l->values, newCapacity * sizeof(Value));
 		if (!newValues)
-			return;
+			return false;
 
 		l->values = newValues;
 		l->capacity = newCapacity;
 	}
 
 	InitializeValue(l->values[l->len]); // uninitialized data
-	Assign(l->values[l->len], v);
 	l->len = newLen;
+
+	return true;
+}
+
+void ListAppend(const Value &list, const Value &v)
+{
+	if (list.type != ValueType_List)
+		return;
+
+	if (!ListGrow(list))
+		return;
+
+	List *l = list.u.list;	
+	Assign(l->values[l->len - 1], v);
 }
 
 void ListDelete(const Value &list, int64_t index)
@@ -406,6 +435,31 @@ void ListDelete(const Value &list, int64_t index)
 	InitializeValue(l->values[l->len]); // clear the last value
 }
 
+void ListDelete(const Value &list, const Value &index)
+{
+	if (index.type == ValueType_String || index.type == ValueType_BasicString || index.type == ValueType_ConstString)
+	{
+		const char *position = GetRawString(index, nullptr);
+		if (StringEquals(position, "first"))
+		{
+			ListDelete(list, 1);
+			return;
+		}
+		else if (StringEquals(position, "last"))
+		{
+			ListDelete(list, ListGetLength(list));
+			return;
+		}
+		else if (StringEquals(position, "all"))
+		{
+			ListClear(list);
+			return;
+		}
+	}
+	
+	ListDelete(list, ToInteger(index));
+}
+
 void ListClear(const Value &list)
 {
 	if (list.type != ValueType_List)
@@ -414,11 +468,28 @@ void ListClear(const Value &list)
 	List *l = list.u.list;
 	for (int64_t i = 0; i < l->len; i++)
 		ReleaseValue(l->values[i]);
+	l->len = 0;
 }
 
 void ListInsert(const Value &list, int64_t index, const Value &v)
 {
-	// TODO: implement
+	if (index < 1 || list.type != ValueType_List)
+		return;
+
+	List *l = list.u.list;
+
+	if (index > l->len + 1)
+		return;
+
+	if (!ListGrow(list))
+		return;
+
+	int64_t target = index - 1;
+	for (int64_t i = l->len - 1; i > target; i--)
+		l->values[i] = l->values[i - 1]; // direct assignment, no need to retain/release
+
+	InitializeValue(l->values[target]); // prevents double release
+	Assign(l->values[target], v);
 }
 
 void CvtString(Value &v)
@@ -462,6 +533,9 @@ void CvtString(Value &v)
 	case ValueType_Bool:
 		SetBasicString(v, v.u.boolean ? TRUE_STRING : FALSE_STRING);
 		break;
+	case ValueType_List:
+		SetBasicString(v, "<list>");
+		break;
 	}
 }
 
@@ -477,6 +551,7 @@ int64_t ValueLength(const Value &v)
 		return 0;
 	case ValueType_Integer:
 	case ValueType_Real:
+	case ValueType_List:
 		InitializeValue(tmp);
 		Assign(tmp, v), CvtString(tmp);
 		len = tmp.u.string->len; // will always be type ValueType_String
@@ -608,6 +683,7 @@ int64_t ToInteger(const Value &v)
 	case ValueType_String:
 	case ValueType_BasicString:
 	case ValueType_ConstString:
+	case ValueType_List:
 		return 0;
 	case ValueType_Real:
 		return static_cast<int64_t>(round(v.u.real));
@@ -626,6 +702,7 @@ double ToReal(const Value &v)
 	case ValueType_String:
 	case ValueType_BasicString:
 	case ValueType_ConstString:
+	case ValueType_List:
 		return 0.0;
 	case ValueType_Real:
 		return v.u.real;
@@ -656,12 +733,18 @@ const char *ToString(const Value &v, int64_t *len)
 	case ValueType_Bool:
 		if (len) *len = v.u.boolean ? TRUE_SIZE : FALSE_SIZE;
 		return v.u.boolean ? TRUE_STRING : FALSE_STRING;
+	case ValueType_String:
+		if (len) *len = v.u.string->len;
+		return v.u.string->str;
 	case ValueType_BasicString:
 		if (len) *len = strlen(v.u.basic_string);
 		return v.u.basic_string;
 	case ValueType_ConstString:
 		if (len) *len = v.u.const_string->size();
 		return v.u.const_string->c_str();
+	case ValueType_List:
+		if (len) *len = 6;
+		return "<list>";
 	}
 }
 
@@ -673,11 +756,15 @@ const char *GetRawString(const Value &v, int64_t *len)
 	case ValueType_None:
 	case ValueType_Integer:
 	case ValueType_Real:
+	case ValueType_List:
 		if (len) *len = 0;
 		return "";
 	case ValueType_Bool:
 		if (len) *len = v.u.boolean ? sizeof(TRUE_STRING) - 1 : sizeof(FALSE_STRING) - 1;
 		return v.u.boolean ? TRUE_STRING : FALSE_STRING;
+	case ValueType_String:
+		if (len) *len = v.u.string->len;
+		return v.u.string->str;
 	case ValueType_BasicString:
 		if (len) *len = strlen(v.u.basic_string);
 		return v.u.basic_string;
@@ -708,12 +795,15 @@ Value &AllocString(Value &v, int64_t len)
 	return v;
 }
 
-Value &AllocList(Value &v)
+Value &AllocList(Value &v, int64_t len)
 {
 	ReleaseValue(v);
 
+	if (len < 0)
+		len = 0;
+
 	v.type = ValueType_List;
-	v.u.list = (List *)malloc(sizeof(List));
+	v.u.list = (List *)calloc(1, sizeof(List));
 	if (!v.u.list)
 	{
 		v.type = ValueType_None;
@@ -722,15 +812,19 @@ Value &AllocList(Value &v)
 
 	List *list = v.u.list;
 
-	list->len = 0;
-	list->capacity = INITIAL_CAPACITY;
-	list->values = (Value *)calloc(INITIAL_CAPACITY, sizeof(Value));
+	list->ref.count = 1;
+	list->len = len;
+	list->capacity = std::max<int64_t>(INITIAL_CAPACITY, len);
+	list->values = (Value *)calloc(list->capacity, sizeof(Value));
 	if (!list->values)
 	{
 		free(list);
 		v.type = ValueType_None;
 		return v;
 	}
+
+	for (int64_t i = 0; i < len; i++)
+		InitializeValue(list->values[i]);
 
 	return v;
 }

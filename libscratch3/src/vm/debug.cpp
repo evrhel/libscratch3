@@ -153,7 +153,7 @@ void Debugger::Render()
 				ImGui::LabelText("Running", "%d", _vm->_activeScripts);
 				ImGui::LabelText("Waiting", "%d", _vm->_waitingScripts);
 
-				ImGui::SeparatorText("Globals");
+				ImGui::SeparatorText("Global Variables");
 				for (auto &p : _vm->_variables)
 				{
 					Value &v = p.second;
@@ -168,7 +168,7 @@ void Debugger::Render()
 						ImGui::LabelText(name, "None");
 						break;
 					case ValueType_Integer:
-						ImGui::LabelText(name, "%llu", v.u.integer);
+						ImGui::LabelText(name, "%lld", v.u.integer);
 						break;
 					case ValueType_Real:
 						ImGui::LabelText(name, "%g", v.u.real);
@@ -185,6 +185,57 @@ void Debugger::Render()
 					case ValueType_ConstString:
 						ImGui::LabelText(name, "\"%s\"", v.u.const_string->c_str());
 						break;
+					}
+				}
+
+				ImGui::SeparatorText("Global Lists");
+				for (auto &p : _vm->_lists)
+				{
+					Value &v = p.second;
+					const char *name = p.first.c_str();
+
+					if (v.type != ValueType_List)
+					{
+						ImGui::LabelText(name, "<unknown>");
+						continue;
+					}
+
+					ImGui::Text("%s (length: %lld)", name, v.u.list->len);
+					if (v.u.list->len && ImGui::BeginItemTooltip())
+					{
+						for (int64_t i = 0; i < v.u.list->len; i++)
+						{
+							Value &item = v.u.list->values[i];
+							switch (item.type)
+							{
+							default:
+								ImGui::Text("[%lld] <unknown>", i + 1);
+								break;
+							case ValueType_None:
+								ImGui::Text("[%lld] None", i + 1);
+								break;
+							case ValueType_Integer:
+								ImGui::Text("[%lld] %lld", i + 1, item.u.integer);
+								break;
+							case ValueType_Real:
+								ImGui::Text("[%lld] %g", i + 1, item.u.real);
+								break;
+							case ValueType_Bool:
+								ImGui::Text("[%lld] %s", i + 1, item.u.boolean ? "true" : "false");
+								break;
+							case ValueType_String:
+								ImGui::Text("[%lld] \"%s\"", i + 1, item.u.string->str);
+								break;
+							case ValueType_BasicString:
+								ImGui::Text("[%lld] \"%s\"", i + 1, item.u.basic_string);
+								break;
+							case ValueType_ConstString:
+								ImGui::Text("[%lld] \"%s\"", i + 1, item.u.const_string->c_str());
+								break;
+							}
+						}
+
+						ImGui::EndTooltip();
 					}
 				}
 

@@ -186,6 +186,7 @@ public:
 	constexpr const std::string &GetProgramName() const { return _progName; }
 
 	Value &FindVariable(const std::string &id);
+	Value &FindList(const std::string &id);
 
 	constexpr double GetTime() const { return _time; }
 
@@ -230,6 +231,7 @@ private:
 	std::unordered_map<std::string, intptr_t> _spriteNames; // Sprite name lookup
 
 	std::unordered_map<std::string, Value> _variables; // Global variables
+	std::unordered_map<std::string, Value> _lists; // Global lists
 
 	std::vector<Script> _scripts; // All scripts
 

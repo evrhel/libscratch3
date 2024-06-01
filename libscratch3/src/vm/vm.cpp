@@ -685,32 +685,34 @@ public:
 
 	virtual void Visit(ListExpr *node)
 	{
-		// TODO: implement
-		vm->Push(); // None
+		vm->FindList(node->name);
 	}
 
 	virtual void Visit(ListAccess *node)
 	{
-		// TODO: implement
-		vm->Push(); // None
+		Value &list = vm->FindList(node->name);
+		node->e->Accept(this); // index
+		ListGet(vm->StackAt(0), list, ToInteger(vm->StackAt(0)));
 	}
 
 	virtual void Visit(IndexOf *node)
 	{
-		// TODO: implement
-		SetInteger(vm->Push(), 0);
+		Value &list = vm->FindList(node->name);
+		node->e->Accept(this); // value
+		SetInteger(vm->StackAt(0), ListIndexOf(list, vm->StackAt(0)));
 	}
 
 	virtual void Visit(ListLength *node)
 	{
-		// TODO: implement
-		SetInteger(vm->Push(), 0);
+		Value &list = vm->FindList(node->name);
+		SetInteger(vm->Push(), ListGetLength(list));
 	}
 
 	virtual void Visit(ListContains *node)
 	{
-		// TODO: implement
-		SetBool(vm->Push(), false);
+		Value &list = vm->FindList(node->name);
+		node->e->Accept(this);
+		SetBool(vm->StackAt(0), ListContainsValue(list, vm->StackAt(0)));
 	}
 
 	//
@@ -885,12 +887,12 @@ public:
 		const char *mstr = ToString(message, &len);
 		double secs = ToReal(duration);
 
-		vm->Pop();
-		vm->Pop();
-
 		printf("%s saying \"%s\" for %g secs\n",
 			script->sprite->GetName().c_str(),
 			mstr, secs);
+
+		vm->Pop();
+		vm->Pop();
 
 		if (len)
 			script->sprite->SetMessage(std::string(mstr, len), MESSAGE_STATE_SAY);
@@ -909,11 +911,11 @@ public:
 		int64_t len;
 		const char *mstr = ToString(message, &len);
 
-		vm->Pop();
-
 		printf("%s saying \"%s\"\n",
 			script->sprite->GetName().c_str(),
 			mstr);
+
+		vm->Pop();
 
 		if (len)
 			script->sprite->SetMessage(std::string(mstr, len), MESSAGE_STATE_SAY);
@@ -933,12 +935,12 @@ public:
 		const char *mstr = ToString(message, &len);
 		double secs = ToReal(duration);
 
-		vm->Pop();
-		vm->Pop();
-
 		printf("%s thinking \"%s\" for %g secs\n",
 			script->sprite->GetName().c_str(),
 			mstr, secs);
+
+		vm->Pop();
+		vm->Pop();
 
 		if (len)
 			script->sprite->SetMessage(mstr, MESSAGE_STATE_THINK);
@@ -957,11 +959,11 @@ public:
 		int64_t len;
 		const char *mstr = ToString(message, &len);
 
-		vm->Pop();
-
 		printf("%s thinking \"%s\"\n",
 			script->sprite->GetName().c_str(),
 			mstr);
+
+		vm->Pop();
 
 		if (len)
 			script->sprite->SetMessage(mstr, MESSAGE_STATE_THINK);
@@ -1374,11 +1376,46 @@ public:
 	virtual void Visit(ShowVariable *node) {}
 	virtual void Visit(HideVariable *node) {}
 
-	virtual void Visit(AppendToList *node) {}
-	virtual void Visit(DeleteFromList *node) {}
-	virtual void Visit(DeleteAllList *node) {}
-	virtual void Visit(InsertInList *node) {}
-	virtual void Visit(ReplaceInList *node) {}
+	virtual void Visit(AppendToList *node)
+	{
+		Value &list = vm->FindList(node->name);
+
+		node->e->Accept(this);
+		ListAppend(list, vm->StackAt(0));
+		vm->Pop();
+	}
+
+	virtual void Visit(DeleteFromList *node)
+	{
+		Value &list = vm->FindList(node->name);
+
+		node->e->Accept(this);
+		ListDelete(list, vm->StackAt(0));
+		vm->Pop();
+	}
+
+	virtual void Visit(DeleteAllList *node)
+	{
+		Value &list = vm->FindList(node->name);
+		ListClear(list);
+	}
+
+	virtual void Visit(InsertInList *node)
+	{
+		Value &list = vm->FindList(node->name);
+		node->e1->Accept(this); // value
+		node->e2->Accept(this); // index
+		ListInsert(list, ToInteger(vm->StackAt(0)), vm->StackAt(1));
+	}
+
+	virtual void Visit(ReplaceInList *node)
+	{
+		Value &list = vm->FindList(node->name);
+		node->e1->Accept(this); // index
+		node->e2->Accept(this); // value
+		ListSet(list, ToInteger(vm->StackAt(1)), vm->StackAt(0));
+	}
+
 	virtual void Visit(ShowList *node) {}
 	virtual void Visit(HideList *node) {}
 
@@ -1525,9 +1562,7 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 		for (AutoRelease<VariableDef> &vdef : def->variables->variables)
 		{
-			std::string name = def->isStage ? vdef->name : def->name + "::" + vdef->name;
-
-			auto it = _variables.find(name);
+			auto it = _variables.find(vdef->name);
 			if (it != _variables.end())
 			{
 				// duplicate variable name
@@ -1535,8 +1570,35 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 				return -1;
 			}
 
-			Value &v = _variables[name] = { 0 };
+			Value &v = _variables[vdef->name];
+			InitializeValue(v);
 			SetParsedString(v, vdef->value->value);
+		}
+
+		for (AutoRelease<ListDef> &ldef : def->lists->lists)
+		{
+			auto it = _lists.find(ldef->name);
+			if (it != _lists.end())
+			{
+				// duplicate list name
+				Cleanup();
+				return -1;
+			}
+
+			Value &v = _lists[ldef->name];
+			InitializeValue(v);
+			AllocList(v, ldef->value.size());
+			if (v.type != ValueType_List)
+			{
+				Cleanup();
+				return -1;
+			}
+
+			for (int64_t i = 0; i < ldef->value.size(); i++)
+			{
+				AutoRelease<Constexpr> &elem = ldef->value[i];
+				SetParsedString(v.u.list->values[i], elem->value);
+			}
 		}
 
 		for (AutoRelease<StatementList> &sl : def->scripts->sll)
@@ -1827,14 +1889,16 @@ void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 Value &VirtualMachine::FindVariable(const std::string &id)
 {
 	auto it = _variables.find(id);
-	if (it != _variables.end())
-		return it->second;
-
-	std::string name = _current->sprite->GetName() + "::" + id;
-	it = _variables.find(name);
 	if (it == _variables.end())
 		Raise(VariableNotFound);
+	return it->second;
+}
 
+Value &VirtualMachine::FindList(const std::string &id)
+{
+	auto it = _lists.find(id);
+	if (it == _lists.end())
+		Raise(VariableNotFound);
 	return it->second;
 }
 
@@ -1873,6 +1937,10 @@ void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
 	glide.y1 = y;
 	glide.start = _time;
 	glide.end = _time + s;
+
+	_current->state = WAITING;
+
+	Sched();
 }
 
 void VirtualMachine::Sched()
@@ -1988,6 +2056,8 @@ void VirtualMachine::Render()
 		drawList->AddText(position, s->IsShown() ? textColor : hiddenColor, s->GetName().c_str());
 	}
 
+	_debug.Render();
+
 	_render->EndRender();
 }
 
@@ -2013,6 +2083,10 @@ void VirtualMachine::Cleanup()
 	for (auto &p : _variables)
 		ReleaseValue(p.second);
 	_variables.clear();
+
+	for (auto &p : _lists)
+		ReleaseValue(p.second);
+	_lists.clear();
 
 	for (Script &script : _scripts)
 	{
@@ -2225,7 +2299,9 @@ void VirtualMachine::Scheduler()
 
 		if (script.state == WAITING)
 		{
-			if (!script.waitExpr && !script.waitInput && !script.askInput && script.sleepUntil <= _time)
+			bool gliding = script.sprite->GetGlide()->end > _time;
+
+			if (!gliding && !script.waitExpr && !script.waitInput && !script.askInput && script.sleepUntil <= _time)
 			{
 				// wake up
 				script.state = RUNNABLE;
