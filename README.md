@@ -6,21 +6,21 @@ Currently, some projects will run, but there is no way to interact with them or 
 
 The library adheres to the unofficial [Scratch 3 JSON project format](https://en.scratch-wiki.info/wiki/Scratch_File_Format).
 
-The project should build on Windows, macOS, and Linux.
+The project runs on Windows but should eventually run on Linux and macOS as well.
 
 ## Building
 
-Use CMake to build the project. The dependencies are provided as git submodules.
+[vcpkg](https://github.com/microsoft/vcpkg) is used as the dependency manager and installation is required to build the project alongside CMake. Other dependencies are included in the repository as submodules.
 
-To build the project, first generate the build files with CMake:
+To build the project, first generate the build files with CMake, using the `windows-vcpkg` preset.
 
 ```bash
 mkdir build
 cd build
-cmake ..
+cmake .. --preset windows-vcpkg
 ```
 
-The build the project using whatever build system you have.
+Then build the project using the generated build files.
 
 ### Use in external projects
 
@@ -35,6 +35,8 @@ Then, link your target to the library:
 ```cmake
 target_link_libraries(your_target PRIVATE libscratch3)
 ```
+
+You will need `vcpkg` as well, to ensure the dependencies are installed.
 
 ## Usage
 
@@ -91,7 +93,7 @@ int main(int argc, char *argv[])
 
 ## Running
 
-To run a Scratch 3 project, use the `scratch3` command line tool. It takes a single argument, the path to the project file. Assuming the executable is in your path, you can run a project like this:
+To run a Scratch 3 project, use the `scratch3` command line tool. It takes a single argument, the path to the project file. Assuming the executable is in your path, projects can be run using:
 
 ```bash
 scratch3 path/to/project.sb3
