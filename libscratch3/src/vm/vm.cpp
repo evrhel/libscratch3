@@ -242,7 +242,7 @@ public:
 
 	virtual void Visit(TimerValue *node)
 	{
-		SetReal(vm->Push(), vm->GetIO().GetTimer());
+		SetReal(vm->Push(), vm->GetTimer());
 	}
 
 	virtual void Visit(PropertyOf *node)
@@ -502,29 +502,44 @@ public:
 	virtual void Visit(LogicalAnd *node)
 	{
 		node->e1->Accept(this);
+		bool lhs = Truth(vm->StackAt(0));
+		vm->Pop();
+
+		if (!lhs)
+		{
+			// short-circuit
+			SetBool(vm->Push(), false);
+			return;
+		}
+
 		node->e2->Accept(this);
-
-		bool lhs = Truth(vm->StackAt(1));
 		bool rhs = Truth(vm->StackAt(0));
-
-		vm->Pop();
 		vm->Pop();
 
-		SetBool(vm->Push(), lhs && rhs);
+		SetBool(vm->Push(), rhs);
 	}
 
 	virtual void Visit(LogicalOr *node)
 {
 		node->e1->Accept(this);
-		node->e2->Accept(this);
-
-		bool lhs = Truth(vm->StackAt(1));
-		bool rhs = Truth(vm->StackAt(0));
-
-		vm->Pop();
+		bool lhs = Truth(vm->StackAt(0));
 		vm->Pop();
 
-		SetBool(vm->Push(), lhs || rhs);
+		if (!lhs)
+		{
+			// short-circuit
+			node->e2->Accept(this);
+			bool rhs = Truth(vm->StackAt(0));
+			vm->Pop();
+
+			if (!rhs)
+			{
+				SetBool(vm->Push(), false);
+				return;
+			}
+		}
+
+		SetBool(vm->Push(), true);
 	}
 
 	virtual void Visit(LogicalNot *node)
@@ -730,9 +745,9 @@ public:
 
 		Sprite *s = script->sprite;
 
-		const double dir = s->GetDirection() * DEG2RAD;
+		const double dir = (s->GetDirection() - 90.0) * DEG2RAD;
 		double dx = steps * cos(dir);
-		double dy = steps * sin(dir);
+		double dy = -steps * sin(dir); // y-axis is inverted
 
 		s->SetXY(s->GetX() + dx, s->GetY() + dy);
 	}
@@ -799,10 +814,10 @@ public:
 			}
 		}
 
-		vm->Glide(script->sprite, x, y, secs);
+		vm->Pop();
+		vm->Pop();
 
-		vm->Pop();
-		vm->Pop();
+		vm->Glide(script->sprite, x, y, secs);
 	}
 
 	virtual void Visit(GlideXY *node)
@@ -815,11 +830,11 @@ public:
 		double x = ToReal(vm->StackAt(1));
 		double y = ToReal(vm->StackAt(0));
 
-		vm->Glide(script->sprite, x, y, secs);
+		vm->Pop();
+		vm->Pop();
+		vm->Pop();
 
-		vm->Pop();
-		vm->Pop();
-		vm->Pop();
+		vm->Glide(script->sprite, x, y, secs);
 	}
 
 	virtual void Visit(PointDir *node)
@@ -827,7 +842,6 @@ public:
 		node->e->Accept(this);
 		script->sprite->SetDirection(ToReal(vm->StackAt(0)));
 		vm->Pop();
-	
 	}
 
 	virtual void Visit(PointTowards *node)
@@ -872,7 +886,7 @@ public:
 
 	virtual void Visit(SetRotationStyle *node)
 	{
-		// TODO: implement
+		script->sprite->SetRotationStyle(node->style);
 	}
 
 	virtual void Visit(SayForSecs *node)
@@ -898,8 +912,6 @@ public:
 			script->sprite->SetMessage(std::string(mstr, len), MESSAGE_STATE_SAY);
 		else
 			script->sprite->ClearMessage();
-
-		vm->Sleep(secs);
 	}
 
 	virtual void Visit(Say *node)
@@ -1237,7 +1249,17 @@ public:
 		vm->Send(std::string(message, len));
 	}
 
-	virtual void Visit(BroadcastAndWait *node) {}
+	virtual void Visit(BroadcastAndWait *node)
+	{
+		node->e->Accept(this);
+
+		int64_t len;
+		const char *message = ToString(vm->StackAt(0), &len);
+
+		vm->Pop();
+
+		vm->SendAndWait(std::string(message, len));
+	}
 
 	virtual void Visit(WaitSecs *node)
 	{
@@ -1249,9 +1271,11 @@ public:
 	virtual void Visit(Repeat *node)
 	{
 		node->e->Accept(this);
+
 		int64_t count = ToInteger(vm->StackAt(0));
 		vm->Pop();
-		vm->PushFrame(*node->sl, count, 0);
+
+		vm->PushFrame(*node->sl, count, FRAME_EXEC_MULTIPLE);
 	}
 
 	virtual void Visit(Forever *node)
@@ -1283,19 +1307,23 @@ public:
 
 	virtual void Visit(WaitUntil *node)
 	{
-		// NOTE: don't evaluate the expression here
-		vm->WaitUntil(*node->e);
+		// check the condition before waiting
+		node->e->Accept(this);
+		bool truth = Truth(vm->StackAt(0));
+		vm->Pop();
+
+		if (!truth)
+			vm->WaitUntil(*node->e);
 	}
 
 	virtual void Visit(RepeatUntil *node)
 	{
 		node->e->Accept(this);
-
 		bool truth = Truth(vm->StackAt(0));
 		vm->Pop();
 
 		if (!truth)
-			vm->PushFrame(*node->sl, 1, FRAME_EXEC_AGAIN);
+			vm->PushFrame(*node->sl, 1, FRAME_EXEC_MULTIPLE);
 	}
 
 	virtual void Visit(Stop *node)
@@ -1339,8 +1367,9 @@ public:
 
 		int64_t len;
 		const char *question = ToString(vm->StackAt(0), &len);
-		vm->AskAndWait(std::string(question, len));
 		vm->Pop();
+
+		vm->AskAndWait(std::string(question, len));
 	}
 
 	virtual void Visit(SetDragMode *node)
@@ -1373,8 +1402,13 @@ public:
 		SetReal(var, lhs + rhs);
 	}
 
-	virtual void Visit(ShowVariable *node) {}
-	virtual void Visit(HideVariable *node) {}
+	virtual void Visit(ShowVariable *node)
+	{
+	}
+
+	virtual void Visit(HideVariable *node)
+	{
+	}
 
 	virtual void Visit(AppendToList *node)
 	{
@@ -1416,8 +1450,13 @@ public:
 		ListSet(list, ToInteger(vm->StackAt(1)), vm->StackAt(0));
 	}
 
-	virtual void Visit(ShowList *node) {}
-	virtual void Visit(HideList *node) {}
+	virtual void Visit(ShowList *node)
+	{
+	}
+
+	virtual void Visit(HideList *node)
+	{
+	}
 
 	virtual void Visit(ProcProto *node) {}
 	virtual void Visit(DefineProc *node) {}
@@ -1613,8 +1652,7 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 			script.fiber = nullptr;
 
-			script.sleepUntil = 0.0;
-			script.waitExpr = nullptr;
+			script.restart = false;
 
 			script.stack = (Value *)malloc(sizeof(Value) * STACK_SIZE);
 			if (!script.stack)
@@ -1625,8 +1663,9 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 			// fill stack with garbage
 			memset(script.stack, 0xab, sizeof(Value) * STACK_SIZE);
-
 			script.sp = script.stack + STACK_SIZE;
+
+			ResetScript(script);
 
 			_scripts.push_back(script);
 		}
@@ -1638,6 +1677,20 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 		Cleanup();
 		return -1;
 	}
+
+
+	assert(_waitRunner.stack == nullptr);
+	memset(&_waitRunner, 0, sizeof(_waitRunner));
+	_waitRunner.stack = (Value *)malloc(sizeof(Value) * STACK_SIZE);
+	if (!_waitRunner.stack)
+	{
+		Cleanup();
+		return -1;
+	}
+	
+	memset(_waitRunner.stack, 0xab, sizeof(Value) * STACK_SIZE);
+	_waitRunner.vm = this;
+	_waitRunner.sp = _waitRunner.stack + STACK_SIZE;
 
 	_prog = Retain(prog);
 	_progName = name;
@@ -1710,7 +1763,7 @@ void VirtualMachine::Send(const std::string &message)
 
 void VirtualMachine::SendAndWait(const std::string &message)
 {
-
+	Sched();
 }
 
 void VirtualMachine::SendKeyPressed(int scancode)
@@ -1720,18 +1773,24 @@ void VirtualMachine::SendKeyPressed(int scancode)
 
 void VirtualMachine::Sleep(double seconds)
 {
-	if (_current == nullptr)
-		Panic();
+	if (_current == &_waitRunner)
+		Panic("Cannot sleep");
 
-	_current->sleepUntil = _time + seconds;
+	if (_current == nullptr)
+		Panic("No script");
+
+	_current->sleepUntil = GetTime() + seconds;
 	_current->state = WAITING;
 	Sched();
 }
 
 void VirtualMachine::WaitUntil(Expression *expr)
 {
+	if (_current == &_waitRunner)
+		Panic("Cannot wait");
+
 	if (_current == nullptr)
-		Panic();
+		Panic("No script");
 
 	_current->waitExpr = expr;
 	_current->state = WAITING;
@@ -1740,8 +1799,11 @@ void VirtualMachine::WaitUntil(Expression *expr)
 
 void VirtualMachine::AskAndWait(const std::string &question)
 {
+	if (_current == &_waitRunner)
+		Panic("Cannot ask");
+
 	if (_current == nullptr)
-		Panic();
+		Panic("No script");
 
 	_current->askInput = true;
 	_current->state = WAITING;
@@ -1751,11 +1813,22 @@ void VirtualMachine::AskAndWait(const std::string &question)
 
 void VirtualMachine::Terminate()
 {
+	if (_current == &_waitRunner)
+		Panic("Cannot terminate");
+
 	if (_current == nullptr)
-		Panic();
+		Panic("No script");
 
 	_current->state = TERMINATED;
 	Sched();
+
+	assert(_current != nullptr);
+
+	if (_current->state != RUNNABLE)
+		Panic("Terminated script was rescheduled");
+
+	// The script has been restarted
+	longjmp(_current->scriptMain, 1);
 }
 
 static void DumpScript(Script *script)
@@ -1800,7 +1873,7 @@ static void DumpScript(Script *script)
 void LS_NORETURN VirtualMachine::Raise(ExceptionType type, const char *message)
 {
 	if (_current == nullptr)
-		Panic(); // thrown outside of a script
+		Panic("No script");
 
 	printf("<EXCEPTION> %s: %s\n", ExceptionString(type), message);
 
@@ -1812,6 +1885,8 @@ void LS_NORETURN VirtualMachine::Raise(ExceptionType type, const char *message)
 
 void LS_NORETURN VirtualMachine::Panic(const char *message)
 {
+	printf("<PANIC> %s\n", message);
+
 	_panicing = true;
 	_panicMessage = message;
 
@@ -1869,6 +1944,9 @@ Value &VirtualMachine::StackAt(size_t i)
 
 void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 {
+	if (_current == &_waitRunner)
+		Panic("Cannot push frame");
+
 	if (_current->fp >= SCRIPT_DEPTH - 1)
 		Raise(StackOverflow);
 
@@ -1876,14 +1954,19 @@ void VirtualMachine::PushFrame(StatementList *sl, int64_t count, uint32_t flags)
 	{
 		// empty loop
 		_current->frames[_current->fp].pc -= 1; // loop back to the same statement
+		Sched();
 		return;
 	}
 
 	Frame &f = _current->frames[++_current->fp];
 	f.sl = sl;
 	f.pc = 0;
-	f.count = count;
 	f.flags = flags;
+
+	if (flags & FRAME_EXEC_MULTIPLE)
+		f.count = count;
+	else
+		f.count = 0;
 }
 
 Value &VirtualMachine::FindVariable(const std::string &id)
@@ -1918,7 +2001,7 @@ Sprite *VirtualMachine::FindSprite(intptr_t id)
 
 void VirtualMachine::ResetTimer()
 {
-	_timerStart = _time;
+	_timerStart = GetTime();
 }
 
 void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
@@ -1926,6 +2009,7 @@ void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
 	if (s <= 0.0)
 	{
 		sprite->SetXY(x, y);
+		Sched();
 		return;
 	}
 
@@ -1935,8 +2019,8 @@ void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
 	glide.y0 = sprite->GetY();
 	glide.x1 = x;
 	glide.y1 = y;
-	glide.start = _time;
-	glide.end = _time + s;
+	glide.start = GetTime();
+	glide.end = glide.start + s;
 
 	_current->state = WAITING;
 
@@ -1945,11 +2029,20 @@ void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
 
 void VirtualMachine::Sched()
 {
-	if (_current == nullptr)
-		Panic();
+	if (_current == &_waitRunner)
+		Panic("Cannot schedule");
 
+	if (_current == nullptr)
+		Panic("No script");
+
+	_current->ticks = 0;
 	_current = nullptr;
 	ls_fiber_sched();
+
+	assert(_current != nullptr);
+
+	if (_current->restart)
+		longjmp(_current->scriptMain, 1);
 }
 
 void VirtualMachine::OnClick(int64_t x, int64_t y)
@@ -2009,12 +2102,13 @@ VirtualMachine::VirtualMachine() :
 
 	_current = nullptr;
 	_epoch = 0;
-	_time = 0;
 
 	_interpreterTime = 0;
 	_deltaExecution = 0;
 
 	_thread = nullptr;
+
+	memset(&_waitRunner, 0, sizeof(_waitRunner));
 }
 
 VirtualMachine::~VirtualMachine()
@@ -2095,6 +2189,12 @@ void VirtualMachine::Cleanup()
 	}
 	_scripts.clear();
 
+	if (_waitRunner.stack)
+	{
+		free(_waitRunner.stack);
+		memset(&_waitRunner, 0, sizeof(_waitRunner));
+	}
+
 	_io.Release();
 
 	if (_render)
@@ -2114,8 +2214,18 @@ static int ScriptMain(void *up)
 	executor.script = &script;
 	executor.vm = &vm;
 
+	// ignore return, this is just a way to restart
+	// the script after it has been terminated
+	setjmp(script.scriptMain);
+
+	// check the stack/frames
+	assert(script.sp == script.stack + STACK_SIZE);
+	assert(script.fp == 0);
+
 	for (;;)
 	{
+		script.ticks++;
+
 		// Check if we should wait
 		if (script.waitExpr)
 		{
@@ -2125,7 +2235,7 @@ static int ScriptMain(void *up)
 
 			if (!truth)
 			{
-				vm.Sched();
+				vm.Sched(); // schedule so I/O can be processed
 				continue;
 			}
 
@@ -2138,36 +2248,33 @@ static int ScriptMain(void *up)
 		{
 			// top of the stack, script is done
 			if (script.fp == 0)
-			{
-				script.state = TERMINATED;
-				vm.Sched();
-				break;
-			}
+				vm.Terminate();
 
 			// this script should execute forever, so reset the program counter
 			if (f->flags & FRAME_EXEC_FOREVER)
 			{
 				f->pc = 0;
+
+				vm.Sched();
 				break;
 			}
 
 			// decrement the repeat count, if it's zero, pop the frame
-			f->count--;
-			if (f->count > 0)
+			if (f->flags & FRAME_EXEC_MULTIPLE)
 			{
-				f->pc = 0;
-				break;
-			}
+				f->count--;
+				if (f->count > 0)
+				{
+					f->pc = 0;
 
-			bool again = (f->flags & FRAME_EXEC_AGAIN) != 0;
+					vm.Sched();
+					break;
+				}
+			}
 
 			// Pop the frame
 			script.fp--;
 			f = &script.frames[script.fp];
-
-			// Counteracts the increment from the last iteration
-			if (again)
-				f->pc--;
 		}
 
 		// Execute the script
@@ -2186,8 +2293,6 @@ static int ScriptMain(void *up)
 				vm.Raise(VMError, "Invalid frame pointer");
 
 			f->pc++;
-
-			vm.Sched();
 		}
 		else
 			vm.Raise(VMError, "Invalid program counter");
@@ -2218,6 +2323,9 @@ void VirtualMachine::ResetScript(Script &script)
 	script.sleepUntil = 0.0;
 	script.waitExpr = nullptr;
 	script.waitInput = false;
+	script.askInput = false;
+
+	script.ticks = 0;
 
 	// clean up the stack
 	while (script.sp < script.stack + STACK_SIZE)
@@ -2288,37 +2396,99 @@ void VirtualMachine::DispatchEvents()
 
 void VirtualMachine::Scheduler()
 {
-	int activeScripts = 0, waitingScripts = 0;
+	constexpr long long kUpdateInterval = 1000000000ll / FRAMERATE;
 
-	for (Script &script : _scripts)
+	int activeScripts = 0, waitingScripts = 0;
+	
+	// current time in nanoseconds
+	long long time = ls_nanotime();
+
+	bool screenUpdated;
+	if ((screenUpdated = time >= _nextScreenUpdate))
+		_nextScreenUpdate = time + kUpdateInterval;
+
+	// executes the wait script
+	Executor exec;
+	exec.vm = this;
+	exec.script = &_waitRunner;
+
+	size_t ran = 0;
+	for (;;) // round-robin scheduler
 	{
+		if (ran >= _scripts.size())
+			break; // iterated through all scripts
+
+		Script &script = *(_scripts.data() + _nextScript);
+		_nextScript = (_nextScript + 1) % _scripts.size();
+		ran++;
+
+		time = ls_nanotime();
+		if (time >= _nextScreenUpdate)
+			break; // a script is likely taking too long
+
 		if (!script.fiber)
 			continue; // cannot be scheduled
+
+		if (script.state == EMBRYO || script.state == TERMINATED)
+			continue; // not active
 
 		_current = &script;
 
 		if (script.state == WAITING)
 		{
-			bool gliding = script.sprite->GetGlide()->end > _time;
+			double time = GetTime();
 
-			if (!gliding && !script.waitExpr && !script.waitInput && !script.askInput && script.sleepUntil <= _time)
+			bool gliding = script.sprite->GetGlide()->end > time;
+			if (gliding)
+				continue; // not waiting
+
+			if (script.waitExpr)
 			{
-				// wake up
-				script.state = RUNNABLE;
+				// run the wait expression here to avoid overhead
+				// when scheduling the script
+
+				_current = &_waitRunner;
+				_current->sprite = script.sprite;
+
+				script.waitExpr->Accept(&exec);
+				bool truth = Truth(StackAt(0));
+				Pop();
+
+				if (!truth)
+				{
+					// condition not met
+					_current = nullptr;
+					waitingScripts++;
+					continue;
+				}
+
+				script.waitExpr = nullptr;
+
+				_current = &script; // restore the current script
 			}
+			else if (script.waitInput || script.askInput || script.sleepUntil > time)
+			{
+				waitingScripts++;
+				continue;
+			}
+
+			// wake up
+			script.state = RUNNABLE;
 		}
 
 		if (script.state != RUNNABLE)
-		{
-			if (script.state == WAITING)
-				waitingScripts++;
 			continue;
-		}
 
 		activeScripts++;
 
+		if (!screenUpdated)
+			continue;
+
 		// schedule the script
 		ls_fiber_switch(script.fiber);
+
+		if (_panicing)
+			longjmp(_panicJmp, 1);
 
 		assert(_current == nullptr);
 
@@ -2346,11 +2516,10 @@ void VirtualMachine::Scheduler()
 
 void VirtualMachine::Main()
 {
-#if CLOCK_SPEED != 0
-	constexpr double kMinExecutionTime = 1.0 / CLOCK_SPEED;
-#else
-	constexpr double kMinExecutionTime = 0.0;
-#endif
+	assert(_waitRunner.stack != nullptr);
+
+	_nextScript = 0;
+	_enableScreenUpdates = true;
 
 	memset(_panicJmp, 0, sizeof(_panicJmp));
 	int rc = setjmp(_panicJmp);
@@ -2424,7 +2593,6 @@ void VirtualMachine::Main()
 	_question.clear();
 	memset(_inputBuf, 0, sizeof(_inputBuf));
 
-	_time = 0.0;
 	_timerStart = 0.0;
 	_deltaExecution = 0.0;
 
@@ -2434,15 +2602,10 @@ void VirtualMachine::Main()
 	
 	SendFlagClicked();
 
-	double lastTime = _time;
-	double lastExecution = _time;
-	double nextExecution = _time;
+	double lastExecution = GetTime();
 
 	for (;;)
 	{
-		lastTime = _time;
-		_time = ls_time64() - _epoch;
-
 		_io.PollEvents();
 
 		if (_shouldStop)
@@ -2452,18 +2615,14 @@ void VirtualMachine::Main()
 
 		if (!_suspend && _exceptionType == Exception_None)
 		{
-			if (_time >= nextExecution)
-			{
-				double start = ls_time64();
+			double start = GetTime();
 
-				_deltaExecution = _time - lastExecution;
-				lastExecution = _time;
-				nextExecution = _time + kMinExecutionTime;
+			_deltaExecution = start - lastExecution;
+			lastExecution = start;
 
-				Scheduler();
+			Scheduler();
 
-				_interpreterTime = ls_time64() - start;
-			}
+			_interpreterTime = GetTime() - start;
 		}
 
 		Render();

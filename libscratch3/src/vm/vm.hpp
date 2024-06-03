@@ -20,8 +20,8 @@
 #include "io.hpp"
 #include "debug.hpp"
 
-// Rate at which scripts are executed
-#define CLOCK_SPEED 30
+// Rate of screen updates
+#define FRAMERATE 30
 
 class Loader;
 class VirtualMachine;
@@ -119,7 +119,7 @@ public:
 	//! 
 	//! \param seconds Number of seconds to sleep
 	void Sleep(double seconds);
-
+	
 	//! \brief Wait until an expression is true
 	//! 
 	//! The script will not be scheduled for execution until the
@@ -137,7 +137,10 @@ public:
 	void AskAndWait(const std::string &question);
 
 	//! \brief Terminate the current script
-	void Terminate();
+	//! 
+	//! The script will be scheduled for termination. Does not
+	//! return.
+	void LS_NORETURN Terminate();
 
 	//! \brief Raise an exception, does not return.
 	//! 
@@ -188,7 +191,9 @@ public:
 	Value &FindVariable(const std::string &id);
 	Value &FindList(const std::string &id);
 
-	constexpr double GetTime() const { return _time; }
+	inline double GetTime() const { return ls_time64() - _epoch; }
+
+	inline double GetTimer() const { return GetTime() - _timerStart; }
 
 	Sprite *FindSprite(const std::string &name);
 
@@ -198,7 +203,9 @@ public:
 
 	void Glide(Sprite *sprite, double x, double y, double s);
 
-	//! \brief Schedule a script for execution
+	//! \brief Yeild control to the scheduler
+	//! 
+	//! The script yeilds for at least until the next screen update.
 	void Sched();
 
 	constexpr Loader *GetLoader() const { return _loader; }
@@ -234,6 +241,7 @@ private:
 	std::unordered_map<std::string, Value> _lists; // Global lists
 
 	std::vector<Script> _scripts; // All scripts
+	size_t _nextScript; // Next script to run
 
 	std::vector<Script *> _flagListeners; // Flag listeners
 	std::unordered_map<std::string, std::vector<Script *>> _messageListeners; // Message listeners
@@ -294,11 +302,16 @@ private:
 	jmp_buf _panicJmp; // Panic jump buffer
 
 	Script *_current; // Currently executing script
+	Script _waitRunner; // Used to handle WaitUntil inside the scheduler
+
 	double _epoch; // VM start time
-	double _time; // Current time
 
 	double _interpreterTime; // Time taken to run the interpreter once
 	double _deltaExecution; // Time since last scheduled execution
+
+	long long _lastScreenUpdate; // Time of last screen update
+	long long _nextScreenUpdate; // Time of next screen update
+	bool _enableScreenUpdates; // Enable screen updates
 
 	ls_handle _thread; // VM thread
 

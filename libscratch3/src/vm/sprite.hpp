@@ -9,6 +9,8 @@
 #include "costume.hpp"
 #include "script.hpp"
 
+#include "../ast/astdef.hpp"
+
 using namespace mutil;
 
 class SpriteDef;
@@ -61,7 +63,15 @@ public:
     constexpr void SetSize(double size) { _size = size, _transDirty = true; }
 
     constexpr double GetDirection() const { return _direction; }
-    constexpr void SetDirection(double direction) { _direction = direction, _transDirty = true; }
+    inline void SetDirection(double direction)
+    {
+        // direction is in the range of [-180, 180]
+        _direction = fmod(direction + 180.0, 360.0) - 180.0;
+        _transDirty = true;
+    }
+
+    constexpr RotationStyle GetRotationStyle() const { return _rotationStyle; }
+    constexpr void SetRotationStyle(RotationStyle rotationStyle) { _rotationStyle = rotationStyle, _transDirty = true; }
 
     constexpr int64_t GetCostume() const { return _costume; }
     constexpr const std::string &GetCostumeName() const { return _costumes[_costume - 1].GetName(); }
@@ -139,6 +149,8 @@ private:
     double _x = 0.0, _y = 0.0;
     double _size = 100.0;
     double _direction = 90.0;
+
+    RotationStyle _rotationStyle = RotationStyle_AllAround;
 
     GlideInfo _glide;
 

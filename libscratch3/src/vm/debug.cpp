@@ -115,7 +115,7 @@ void Debugger::Render()
 				ls_get_time(&ts);
 
 				ImGui::SeparatorText("Timers");
-				ImGui::LabelText("Timer", "%.2f", io.GetTimer());
+				ImGui::LabelText("Timer", "%.2f", _vm->GetTimer());
 				ImGui::LabelText("Year", "%d", ts.year);
 				ImGui::LabelText("Month", "%d", ts.month);
 				ImGui::LabelText("Date", "%d", ts.day);
@@ -139,12 +139,12 @@ void Debugger::Render()
 			{
 				ImGui::SeparatorText("Information");
 				ImGui::LabelText("Program Name", "%s", _vm->GetProgramName().c_str());
-				ImGui::LabelText("Clock Speed", "%u Hz", (unsigned)CLOCK_SPEED);
+				ImGui::LabelText("Framerate", "%d Hz", (int)FRAMERATE);
 
 				ImGui::SeparatorText("Performance");
 				ImGui::LabelText("Interpreter Time", "%.2f ms", (_vm->_interpreterTime * 1000));
 				ImGui::LabelText("Delta Execution", "%.2f ms", (_vm->_deltaExecution * 1000));
-				ImGui::LabelText("Utilization", "%.2f%%", _vm->_interpreterTime * CLOCK_SPEED * 100.0);
+				ImGui::LabelText("Utilization", "%.2f%%", _vm->_interpreterTime * FRAMERATE * 100.0);
 
 				ImGui::SeparatorText("Scheduler");
 				ImGui::LabelText("Suspended", "%s", _vm->IsSuspended() ? "true" : "false");
@@ -278,14 +278,57 @@ void Debugger::Render()
 
 			if (ImGui::BeginTabItem("Scripts"))
 			{
-				static bool onlyRunning = true;
-				ImGui::Checkbox("Only Running", &onlyRunning);
+				static bool showRunning = true;
+				static bool showWaiting = true;
+				static bool showWaitingForScreen = true;
+				static bool showSuspended = false;
+				static bool showTerminated = false;
+				static bool showEmbryo = false;
+
+				ImGui::Checkbox("Running", &showRunning);
+				
+				ImGui::SameLine();
+				ImGui::Checkbox("Waiting", &showWaiting);
+
+				ImGui::SameLine();
+				ImGui::Checkbox("Suspended", &showSuspended);
+
+				ImGui::SameLine();
+				ImGui::Checkbox("Terminated", &showTerminated);
+
+				ImGui::SameLine();
+				ImGui::Checkbox("Embryo", &showEmbryo);
 
 				for (Script &script : _vm->_scripts)
 				{
-					bool running = script.state == RUNNABLE || script.state == WAITING;
-					if (onlyRunning && !running)
-						continue;
+					switch (script.state)
+					{
+					default:
+						abort();
+						break;
+					case EMBRYO:
+						if (!showEmbryo)
+							continue;
+						break;
+					case RUNNABLE:
+					case RUNNING:
+						if (!showRunning)
+							continue;
+						break;
+					case WAITING:
+						if (!showWaiting)
+							continue;
+						break;
+					case SUSPENDED:
+						if (!showSuspended)
+							continue;
+						break;
+					case TERMINATED:
+						if (!showTerminated)
+							continue;
+						break;
+					}
+
 
 					char name[128];
 					snprintf(name, sizeof(name), "%p (%s)", &script, script.sprite->GetName().c_str());

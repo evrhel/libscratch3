@@ -138,11 +138,25 @@ void Sprite::Update()
 
         Vector2 size = cSize * static_cast<float>(uniformScale);
 
+        float rotation;
+        if (_rotationStyle == RotationStyle_DontRotate)
+            rotation = 0.0f;
+        else if (_rotationStyle == RotationStyle_LeftRight)
+        {
+            if (_direction < 0)
+                rotation = 180.0f;
+			else
+				rotation = 0.0f;
+        }
+		else
+			rotation = static_cast<float>(_direction - 90.0);
+        rotation = mutil::radians(rotation);
+
         // setup matrices
 
         Matrix4 scale = mutil::scale(Matrix4(), Vector3(size, 1.0f));
         Matrix4 transPos = mutil::translate(Matrix4(), Vector3(_x, _y, 0.0f));
-        Quaternion q = mutil::rotateaxis(Vector3(0.0f, 0.0f, 1.0f), mutil::radians(_direction - 90.0));
+        Quaternion q = mutil::rotateaxis(Vector3(0.0f, 0.0f, 1.0f), rotation);
         Matrix4 transCenter = mutil::translate(Matrix4(), Vector3(-cCenter, 0.0f));
 
         // compute model matrix

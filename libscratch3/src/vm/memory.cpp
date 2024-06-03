@@ -83,16 +83,24 @@ bool Equals(const Value &lhs, const Value &rhs)
 			return lhs.u.integer == rhs.u.integer;
 		if (rhs.type == ValueType_Real)
 			return lhs.u.integer == rhs.u.real;
+		if (rhs.type == ValueType_Bool)
+			return rhs.u.boolean ? lhs.u.integer == 1 : lhs.u.integer == 0;
 		return false;
 	case ValueType_Real:
 		if (rhs.type == ValueType_Real)
 			return lhs.u.real == rhs.u.real;
 		if (rhs.type == ValueType_Integer)
 			return lhs.u.real == rhs.u.integer;
+		if (rhs.type == ValueType_Bool)
+			return rhs.u.boolean ? lhs.u.real == 1.0 : lhs.u.real == 0.0;
 		return false;
 	case ValueType_Bool:
 		if (rhs.type == ValueType_Bool)
 			return lhs.u.boolean == rhs.u.boolean;
+		else if (rhs.type == ValueType_Integer)
+			return lhs.u.boolean ? 1 == rhs.u.integer : 0 == rhs.u.integer;
+		else if (rhs.type == ValueType_Real)
+			return lhs.u.boolean ? 1.0 == rhs.u.real : 0.0 == rhs.u.real;
 		return false;
 	case ValueType_String:
 		if (lhs.hash != rhs.hash)

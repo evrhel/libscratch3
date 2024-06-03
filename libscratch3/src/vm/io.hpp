@@ -21,7 +21,6 @@ public:
 	bool GetKey(const Value &key) const;
 	constexpr int GetKeysPressed() const { return _keysPressed; }
 	constexpr double GetLoudness() const { return _loudness; }
-	constexpr double GetTimer() const { return _timer; }
 	constexpr const Value &GetUsername() const { return _username; }
 
 	constexpr Script *GetAsker() const { return _asker; }
@@ -53,7 +52,6 @@ private:
 	bool _keyStates[SDL_NUM_SCANCODES];
 	int _keysPressed;
 	double _loudness;
-	double _timer;
 	Value _username;
 
 	double _timerStart;

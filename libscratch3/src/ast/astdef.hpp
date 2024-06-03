@@ -579,9 +579,6 @@ enum SoundEffect
 extern const char *const SoundEffectStrings[];
 SoundEffect SoundEffectFromString(const std::string &str);
 
-unsigned int KeyFromString(const std::string &str);
-const char *GetKeyName(unsigned int key);
-
 enum ListenValueType
 {
 	ListenValueType_Unknown,

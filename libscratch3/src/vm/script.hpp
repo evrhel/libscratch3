@@ -1,5 +1,7 @@
 #pragma once
 
+#include <csetjmp>
+
 #include <lysys/lysys.hpp>
 
 // Script has been created but not yet started
@@ -26,11 +28,14 @@
 // Maximum nesting depth of scripts
 #define SCRIPT_DEPTH 32
 
-// Execute the invoking statement again
-#define FRAME_EXEC_AGAIN 0x1
-
 // Execute the frame forever
-#define FRAME_EXEC_FOREVER 0x2
+#define FRAME_EXEC_FOREVER 0x1
+
+// Execute the frame multiple times, as specified by the count field
+#define FRAME_EXEC_MULTIPLE 0x2
+
+// Disable screen updates
+#define FRAME_NO_SCREEN_UPDATE 0x4
 
 class StatementList;
 class Sprite;
@@ -59,6 +64,8 @@ struct Script
 	bool waitInput;  // Wait for input
 	bool askInput;  // Ask for input
 
+	uint64_t ticks;  // Number of ticks executed since the last yield
+
 	Value *stack;  // Base of the stack (lowest address)
 	Value *sp;  // Stack pointer (highest address, grows downwards) sp - 1 is the next free slot
 
@@ -66,6 +73,9 @@ struct Script
 	uintptr_t fp; // Frame pointer (index of the top frame, grows upwards)
 
 	VirtualMachine *vm; // Virtual machine
+
+	jmp_buf scriptMain; // Jump buffer for script main loop
+	bool restart; // Whether this script should restart itself
 };
 
 const char *GetStateName(int state);

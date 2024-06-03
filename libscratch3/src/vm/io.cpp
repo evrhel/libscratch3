@@ -20,8 +20,6 @@ void IOHandler::ResetTimer()
 
 void IOHandler::PollEvents()
 {
-	_timer = _vm->GetTime() - _timerStart;
-	
 	GLRenderer *render = _vm->GetRenderer();
 	if (!render)
 		return;
@@ -133,7 +131,6 @@ IOHandler::IOHandler(VirtualMachine *vm) :
 	_clickX(0), _clickY(0),
 	_keysPressed(0),
 	_loudness(0),
-	_timer(0),
 	_timerStart(0),
 	_asker(nullptr)
 {
