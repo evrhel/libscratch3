@@ -4,14 +4,12 @@
 
 #include <stdexcept>
 
-#include <semantics/syminfo.hpp>
-
 // expression
 struct Expression : public ASTNode
 {
 	AST_IMPL(Expression, ASTNode);
 
-	SymInfo syminfo = SymbolType_Any;
+	SymInfo syminfo;
 };
 
 // expression evaluatable to a constant expression
@@ -25,116 +23,37 @@ struct Consteval : public Expression
 // constant expression
 struct Constexpr : public Consteval
 {
-	static inline Constexpr *OfString(const std::string &value)
-	{
-		Constexpr *ce = new Constexpr();
-
-		if (value.empty())
-		{
-			ce->syminfo = SymbolType_String;
-			return ce;
-		}
-
-		ce->value = value;
-
-		// attempt to parse a "true" or "false" boolean literal
-		if (value == "true")
-		{
-			ce->bvalue = true;
-			ce->syminfo = SymbolType_Bool;
-			return ce;
-		}
-
-		if (value == "false")
-		{
-			ce->bvalue = false;
-			ce->syminfo = SymbolType_Bool;
-			return ce;
-		}
-
-		// attempt to parse as a number
-		try
-		{
-			size_t idx;
-			double dval = std::stod(value, &idx);
-			if (idx != value.size())
-				throw std::invalid_argument("invalid number literal");
-
-			ce->dvalue = dval;
-			ce->syminfo = SymbolType_Number;
-			return ce;
-		}
-		catch (std::invalid_argument) {}
-		catch (std::out_of_range) {}
-
-		// finally, it's just a string
-
-		ce->syminfo = SymbolType_String;
-		return ce;
-	}
-
-	static inline Constexpr *OfNumber(double value)
-	{
-		Constexpr *ce = new Constexpr();
-
-		size_t len = snprintf(NULL, 0, "%.11g", value);
-		std::string str(len, '\0');
-		sprintf_s(&str[0], len + 1, "%.11g", value);
-
-		ce->value = str;
-		ce->dvalue = value;
-		ce->bvalue = false;
-		ce->syminfo = SymbolType_Number;
-		return ce;
-	}
-
-	static inline Constexpr *OfBool(bool value)
-	{
-		Constexpr *ce = new Constexpr();
-
-		if (value)
-			ce->value = "true";
-		else
-			ce->value = "false";
-		ce->dvalue = 0.0;
-		ce->bvalue = value;
-		ce->syminfo = SymbolType_Bool;
-		return ce;
-	}
-
 	AST_IMPL(Constexpr, Consteval);
 	AST_ACCEPTOR;
 
 	std::string value;
-	double dvalue = 0.0;
-	bool bvalue = false;
 };
 
 // (x position)
 struct XPos : public Expression
 {
-	EXPR_IMPL(XPos, Expression, SymbolType_Number);
+	EXPR_IMPL(XPos, Expression);
 	AST_ACCEPTOR;
 };
 
 // (y position)
 struct YPos : public Expression
 {
-	EXPR_IMPL(YPos, Expression, SymbolType_Number);
+	EXPR_IMPL(YPos, Expression);
 	AST_ACCEPTOR;
 };
 
 // (direction)
 struct Direction : public Expression
 {
-	EXPR_IMPL(Direction, Expression, SymbolType_Number);
+	EXPR_IMPL(Direction, Expression);
 	AST_ACCEPTOR;
 };
 
 // (costume ?type)
 struct CurrentCostume : public Expression
 {
-	EXPR_IMPL(CurrentCostume, Expression, SymbolType_String);
+	EXPR_IMPL(CurrentCostume, Expression);
 	AST_ACCEPTOR;
 
 	AST_FIELD_SETTER(key, value, id)
@@ -144,9 +63,9 @@ struct CurrentCostume : public Expression
 			if (type == PropGetType_Unknown)
 			{
 				if (value == "number")
-					type = PropGetType_Number, syminfo = SymbolType_Number;
+					type = PropGetType_Number;
 				else if (value == "name")
-					type = PropGetType_Name, syminfo = SymbolType_String;
+					type = PropGetType_Name;
 				else
 					return false;
 
@@ -163,7 +82,7 @@ struct CurrentCostume : public Expression
 // (backdrop ?type)
 struct CurrentBackdrop : public Expression
 {
-	EXPR_IMPL(CurrentBackdrop, Expression, SymbolType_String);
+	EXPR_IMPL(CurrentBackdrop, Expression);
 	AST_ACCEPTOR;
 
 	AST_FIELD_SETTER(key, value, id)
@@ -173,9 +92,9 @@ struct CurrentBackdrop : public Expression
 			if (type == PropGetType_Unknown)
 			{
 				if (value == "number")
-					type = PropGetType_Number, syminfo = SymbolType_Number;
+					type = PropGetType_Number;
 				else if (value == "name")
-					type = PropGetType_Name, syminfo = SymbolType_String;
+					type = PropGetType_Name;
 				else
 					return false;
 
@@ -192,21 +111,21 @@ struct CurrentBackdrop : public Expression
 // (size)
 struct Size : public Expression
 {
-	EXPR_IMPL(Size, Expression, SymbolType_Number);
+	EXPR_IMPL(Size, Expression);
 	AST_ACCEPTOR;
 };
 
 // (volume)
 struct Volume : public Expression
 {
-	EXPR_IMPL(Volume, Expression, SymbolType_Number);
+	EXPR_IMPL(Volume, Expression);
 	AST_ACCEPTOR;
 };
 
 // <touching $e>
 struct Touching : public Expression
 {
-	EXPR_IMPL(Touching, Expression, SymbolType_Bool);
+	EXPR_IMPL(Touching, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, value)
@@ -227,7 +146,7 @@ struct Touching : public Expression
 // <touching color $e ?>
 struct TouchingColor : public Expression
 {
-	EXPR_IMPL(TouchingColor, Expression, SymbolType_Bool);
+	EXPR_IMPL(TouchingColor, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -248,7 +167,7 @@ struct TouchingColor : public Expression
 // <color $e1 is touching $e2 ?>
 struct ColorTouching : public Expression
 {
-	EXPR_IMPL(ColorTouching, Expression, SymbolType_Bool);
+	EXPR_IMPL(ColorTouching, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -283,7 +202,7 @@ struct ColorTouching : public Expression
 // (distance to $e)
 struct DistanceTo : public Expression
 {
-	EXPR_IMPL(DistanceTo, Expression, SymbolType_Number);
+	EXPR_IMPL(DistanceTo, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, value)
@@ -304,14 +223,14 @@ struct DistanceTo : public Expression
 // (answer)
 struct Answer : public Expression
 {
-	EXPR_IMPL(Answer, Expression, SymbolType_String);
+	EXPR_IMPL(Answer, Expression);
 	AST_ACCEPTOR;
 };
 
 // <key $e pressed>
 struct KeyPressed : public Expression
 {
-	EXPR_IMPL(KeyPressed, Expression, SymbolType_Bool);
+	EXPR_IMPL(KeyPressed, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, value)
@@ -332,42 +251,42 @@ struct KeyPressed : public Expression
 // <mouse down>
 struct MouseDown : public Expression
 {
-	EXPR_IMPL(MouseDown, Expression, SymbolType_Bool);
+	EXPR_IMPL(MouseDown, Expression);
 	AST_ACCEPTOR;
 };
 
 // (mouse x)
 struct MouseX : public Expression
 {
-	EXPR_IMPL(MouseX, Expression, SymbolType_Number);
+	EXPR_IMPL(MouseX, Expression);
 	AST_ACCEPTOR;
 };
 
 // (mouse y)
 struct MouseY : public Expression
 {
-	EXPR_IMPL(MouseY, Expression, SymbolType_Number);
+	EXPR_IMPL(MouseY, Expression);
 	AST_ACCEPTOR;
 };
 
 // (loudness)
 struct Loudness : public Expression
 {
-	EXPR_IMPL(Loudness, Expression, SymbolType_Number);
+	EXPR_IMPL(Loudness, Expression);
 	AST_ACCEPTOR;
 };
 
 // (timer)
 struct TimerValue : public Expression
 {
-	EXPR_IMPL(TimerValue, Expression, SymbolType_Number);
+	EXPR_IMPL(TimerValue, Expression);
 	AST_ACCEPTOR;
 };
 
 // (?target of $e)
 struct PropertyOf : public Expression
 {
-	EXPR_IMPL(PropertyOf, Expression, SymbolType_Any);
+	EXPR_IMPL(PropertyOf, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, value)
@@ -389,54 +308,26 @@ struct PropertyOf : public Expression
 			if (target == PropertyTarget_Unknown)
 			{
 				if (value == "backdrop #")
-				{
 					target = PropertyTarget_BackdropNumber;
-					syminfo = SymbolType_Number;
-				}
 				else if (value == "backdrop name")
-				{
 					target = PropertyTarget_BackdropName;
-					syminfo = SymbolType_String;
-				}
 				else if (value == "x position")
-				{
 					target = PropertyTarget_XPosition;
-					syminfo = SymbolType_Number;
-				}
 				else if (value == "y position")
-				{
 					target = PropertyTarget_YPosition;
-					syminfo = SymbolType_Number;
-				}
 				else if (value == "direction")
-				{
 					target = PropertyTarget_Direction;
-					syminfo = SymbolType_Number;
-				}
 				else if (value == "costume #")
-				{
 					target = PropertyTarget_CostumeNumber;
-					syminfo = SymbolType_Number;
-				}
 				else if (value == "costume name")
-				{
 					target = PropertyTarget_CostumeName;
-					syminfo = SymbolType_String;
-				}
 				else if (value == "size")
-				{
 					target = PropertyTarget_Size;
-					syminfo = SymbolType_Number;
-				}
 				else if (value == "volume")
-				{
 					target = PropertyTarget_Volume;
-					syminfo = SymbolType_Number;
-				}
 				else
 				{
 					target = PropertyTarget_Variable;
-					syminfo = SymbolType_Any;
 					name = value;
 					this->id = id;
 				}
@@ -456,7 +347,7 @@ struct PropertyOf : public Expression
 // (current $format)
 struct CurrentDate : public Expression
 {
-	EXPR_IMPL(CurrentDate, Expression, SymbolType_Number);
+	EXPR_IMPL(CurrentDate, Expression);
 	AST_ACCEPTOR;
 
 	AST_FIELD_SETTER(key, value, id)
@@ -495,21 +386,21 @@ struct CurrentDate : public Expression
 // (days since 2000)
 struct DaysSince2000 : public Expression
 {
-	EXPR_IMPL(DaysSince2000, Expression, SymbolType_Number);
+	EXPR_IMPL(DaysSince2000, Expression);
 	AST_ACCEPTOR;
 };
 
 // (username)
 struct Username : public Expression
 {
-	EXPR_IMPL(Username, Expression, SymbolType_String);
+	EXPR_IMPL(Username, Expression);
 	AST_ACCEPTOR;
 };
 
 // ($e1 + $e2)
 struct Add : public Consteval
 {
-	EXPR_IMPL(Add, Consteval, SymbolType_Number);
+	EXPR_IMPL(Add, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -538,7 +429,7 @@ struct Add : public Consteval
 // ($e1 - $e2)
 struct Sub : public Consteval
 {
-	EXPR_IMPL(Sub, Consteval, SymbolType_Number);
+	EXPR_IMPL(Sub, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -567,7 +458,7 @@ struct Sub : public Consteval
 // ($e1 * $e2)
 struct Mul : public Consteval
 {
-	EXPR_IMPL(Mul, Consteval, SymbolType_Number);
+	EXPR_IMPL(Mul, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -596,7 +487,7 @@ struct Mul : public Consteval
 // ($e1 / $e2)
 struct Div : public Consteval
 {
-	EXPR_IMPL(Div, Consteval, SymbolType_Number);
+	EXPR_IMPL(Div, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -625,7 +516,7 @@ struct Div : public Consteval
 // (pick random $e1 to $e2)
 struct Random : public Expression
 {
-	EXPR_IMPL(Random, Expression, SymbolType_Number);
+	EXPR_IMPL(Random, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -654,7 +545,7 @@ struct Random : public Expression
 // ($e1 > $e2)
 struct Greater : public Consteval
 {
-	EXPR_IMPL(Greater, Consteval, SymbolType_Bool);
+	EXPR_IMPL(Greater, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -683,7 +574,7 @@ struct Greater : public Consteval
 // ($e1 < $e2)
 struct Less : public Consteval
 {
-	EXPR_IMPL(Less, Consteval, SymbolType_Bool);
+	EXPR_IMPL(Less, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -712,7 +603,7 @@ struct Less : public Consteval
 // ($e1 = $e2)
 struct Equal : public Consteval
 {
-	EXPR_IMPL(Equal, Consteval, SymbolType_Bool);
+	EXPR_IMPL(Equal, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -741,7 +632,7 @@ struct Equal : public Consteval
 // ($e1 and $e2)
 struct LogicalAnd : public Consteval
 {
-	EXPR_IMPL(LogicalAnd, Consteval, SymbolType_Bool);
+	EXPR_IMPL(LogicalAnd, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -770,7 +661,7 @@ struct LogicalAnd : public Consteval
 // ($e1 or $e2)
 struct LogicalOr : public Consteval
 {
-	EXPR_IMPL(LogicalOr, Consteval, SymbolType_Bool);
+	EXPR_IMPL(LogicalOr, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -799,7 +690,7 @@ struct LogicalOr : public Consteval
 // (not $e)
 struct LogicalNot : public Consteval
 {
-	EXPR_IMPL(LogicalNot, Consteval, SymbolType_Bool);
+	EXPR_IMPL(LogicalNot, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -820,7 +711,7 @@ struct LogicalNot : public Consteval
 // (join $e1 $e2)
 struct Concat : public Consteval
 {
-	EXPR_IMPL(Concat, Consteval, SymbolType_String);
+	EXPR_IMPL(Concat, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -849,7 +740,7 @@ struct Concat : public Consteval
 // (letter $e1 of $e2)
 struct CharAt : public Consteval
 {
-	EXPR_IMPL(CharAt, Consteval, SymbolType_String);
+	EXPR_IMPL(CharAt, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -878,7 +769,7 @@ struct CharAt : public Consteval
 // (length of $e)
 struct StringLength : public Consteval
 {
-	EXPR_IMPL(StringLength, Consteval, SymbolType_Number);
+	EXPR_IMPL(StringLength, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -899,7 +790,7 @@ struct StringLength : public Consteval
 // <$e1 contains $e2 ?>
 struct StringContains : public Consteval
 {
-	EXPR_IMPL(StringContains, Consteval, SymbolType_Bool);
+	EXPR_IMPL(StringContains, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -928,7 +819,7 @@ struct StringContains : public Consteval
 // ($e1 mod $e2)
 struct Mod : public Consteval
 {
-	EXPR_IMPL(Mod, Consteval, SymbolType_Number);
+	EXPR_IMPL(Mod, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -957,7 +848,7 @@ struct Mod : public Consteval
 // (round $e)
 struct Round : public Consteval
 {
-	EXPR_IMPL(Round, Consteval, SymbolType_Number);
+	EXPR_IMPL(Round, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -978,7 +869,7 @@ struct Round : public Consteval
 // (?func of $e)
 struct MathFunc : public Consteval
 {
-	EXPR_IMPL(MathFunc, Consteval, SymbolType_Number);
+	EXPR_IMPL(MathFunc, Consteval);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -1013,7 +904,7 @@ struct MathFunc : public Consteval
 // (?id)
 struct VariableExpr : public Expression
 {
-	EXPR_IMPL(VariableExpr, Expression, SymbolType_Any);
+	EXPR_IMPL(VariableExpr, Expression);
 	AST_ACCEPTOR;
 
 	std::string id, name;
@@ -1022,7 +913,7 @@ struct VariableExpr : public Expression
 // broadcast id
 struct BroadcastExpr : public Expression
 {
-	EXPR_IMPL(BroadcastExpr, Expression, SymbolType_Any);
+	EXPR_IMPL(BroadcastExpr, Expression);
 	AST_ACCEPTOR;
 
 	std::string id, name;
@@ -1031,7 +922,7 @@ struct BroadcastExpr : public Expression
 // (?id)
 struct ListExpr : public Expression
 {
-	EXPR_IMPL(ListExpr, Expression, SymbolType_String);
+	EXPR_IMPL(ListExpr, Expression);
 	AST_ACCEPTOR;
 
 	std::string id, name;
@@ -1040,7 +931,7 @@ struct ListExpr : public Expression
 // (item $e of ?id)
 struct ListAccess : public Expression
 {
-	EXPR_IMPL(ListAccess, Expression, SymbolType_Any);
+	EXPR_IMPL(ListAccess, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -1076,7 +967,7 @@ struct ListAccess : public Expression
 // (item # of $e in ?id)
 struct IndexOf : public Expression
 {
-	EXPR_IMPL(IndexOf, Expression, SymbolType_Number);
+	EXPR_IMPL(IndexOf, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)
@@ -1112,7 +1003,7 @@ struct IndexOf : public Expression
 // (length of ?id)
 struct ListLength : public Expression
 {
-	EXPR_IMPL(ListLength, Expression, SymbolType_Number);
+	EXPR_IMPL(ListLength, Expression);
 	AST_ACCEPTOR;
 
 	AST_FIELD_SETTER(key, value, id)
@@ -1135,7 +1026,7 @@ struct ListLength : public Expression
 // <?id contains $e>
 struct ListContains : public Expression
 {
-	EXPR_IMPL(ListContains, Expression, SymbolType_Bool);
+	EXPR_IMPL(ListContains, Expression);
 	AST_ACCEPTOR;
 
 	AST_INPUT_SETTER(key, val)

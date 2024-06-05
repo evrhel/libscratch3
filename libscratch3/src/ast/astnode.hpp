@@ -9,6 +9,7 @@
 #include <ref.hpp>
 
 #include "visitor.hpp"
+#include "../codegen/syminfo.hpp"
 
 class Visitor;
 class ASTStack;
@@ -54,6 +55,9 @@ struct ASTNode : public RefCounted
 	}
 
 	std::string nodeid;
+
+	// for semantic analysis
+	AutoRelease<KnownState> known;
 
 	ASTNode() = default;
 	virtual ~ASTNode() = default;

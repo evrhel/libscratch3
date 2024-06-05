@@ -32,30 +32,28 @@ static ASTNode *NodeFromOpcode(const std::string &opcode);
 
 //! \brief Parse a literal value from a JSON value.
 //! 
-//! Tries to parse a literal value from a JSON value. The value can be
-//! a string, integer, double, boolean, or null. If the value is a string,
-//! the function will attempt to interpret it as a more specific type
-//! (e.g. integer, double, boolean, etc.).
-//! 
 //! \param v The JSON value to parse.
 //! 
 //! \return A Constexpr object representing the literal value, or nullptr
 //! if parsing failed.
 static Constexpr *ParseLiteral(rapidjson::Value &v)
 {
+	Constexpr *c = new Constexpr();
+
 	if (v.IsString())
-		return Constexpr::OfString(v.GetString());
+		c->value = v.GetString();
+	else if (v.IsInt())
+		c->value = std::to_string(v.GetInt());
+	else if (v.IsDouble())
+	{
+		char buf[64];
+		snprintf(buf, sizeof(buf), "%g", v.GetDouble());
+		c->value = buf;
+	}
+	else if (v.IsBool())
+		c->value = v.GetBool() ? "true" : "false";
 
-	if (v.IsInt())
-		return Constexpr::OfNumber(static_cast<double>(v.GetInt()));
-
-	if (v.IsDouble())
-		return Constexpr::OfNumber(v.GetDouble());
-
-	if (v.IsBool())
-		return Constexpr::OfBool(v.GetBool());
-
-	return new Constexpr();
+	return c;
 }
 
 class Parser

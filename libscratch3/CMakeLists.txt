@@ -18,10 +18,12 @@ set(SOURCES
 	${src}/ast/ast.cpp
 	${src}/ast/astdef.cpp
 	${src}/ast/visitor.cpp
+	${src}/codegen/codegen.cpp
+	${src}/codegen/semantics.cpp
+	${src}/codegen/syminfo.cpp
 	${src}/render/renderer.cpp
 	${src}/render/shader.cpp
 	${src}/render/stb.cpp
-	${src}/semantics/syminfo.cpp
 	${src}/vm/costume.cpp
 	${src}/vm/debug.cpp
 	${src}/vm/io.cpp

@@ -257,9 +257,9 @@ struct Program;
 	static constexpr AstType TYPE = AST( _Type ); \
 	inline _Type () { ASTNode::SetType(AST( _Type )); }
 
-#define EXPR_IMPL(_Type, _Parent, ...) \
+#define EXPR_IMPL(_Type, _Parent) \
 	static constexpr AstType TYPE = AST( _Type ); \
-	inline _Type () { ASTNode::SetType(AST( _Type )); syminfo = SymInfo( __VA_ARGS__); }
+	inline _Type () { ASTNode::SetType(AST( _Type )); }
 
 #define REPORTER_IMPL(_Type, _Parent, _Key) \
 	static constexpr AstType TYPE = AST( _Type ); \
