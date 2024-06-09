@@ -19,7 +19,8 @@ set(SOURCES
 	${src}/ast/astdef.cpp
 	${src}/ast/visitor.cpp
 	${src}/codegen/codegen.cpp
-	${src}/codegen/semantics.cpp
+	${src}/codegen/compiler.cpp
+	${src}/codegen/linker.cpp
 	${src}/codegen/syminfo.cpp
 	${src}/render/renderer.cpp
 	${src}/render/shader.cpp

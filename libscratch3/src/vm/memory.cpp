@@ -10,17 +10,6 @@
 #define TRUE_SIZE (sizeof(TRUE_STRING) - 1)
 #define FALSE_SIZE (sizeof(FALSE_STRING) - 1)
 
-static constexpr uint32_t HashString(const char *s)
-{
-	uint32_t hash = 1315423911;
-	while (*s)
-		hash ^= ((hash << 5) + *s++ + (hash >> 2));
-	return hash;
-}
-
-static constexpr uint32_t kTrueHash = HashString(TRUE_STRING);
-static constexpr uint32_t kFalseHash = HashString(FALSE_STRING);
-
 bool StringEquals(const char *lstr, const char *rstr)
 {
 	if (lstr == rstr)
@@ -65,10 +54,6 @@ bool Truth(const Value &val)
 		return val.u.boolean;
 	case ValueType_String:
 		return StringEquals(val.u.string->str, TRUE_STRING);
-	case ValueType_BasicString:
-		return StringEquals(val.u.basic_string, TRUE_STRING);
-	case ValueType_ConstString:
-		return StringEquals(val.u.const_string->c_str(), TRUE_STRING);
 	}
 }
 
@@ -103,37 +88,8 @@ bool Equals(const Value &lhs, const Value &rhs)
 			return lhs.u.boolean ? 1.0 == rhs.u.real : 0.0 == rhs.u.real;
 		return false;
 	case ValueType_String:
-		if (lhs.hash != rhs.hash)
-			return false;
-
-		if (rhs.type == ValueType_String)
+		if (rhs.type == ValueType_String && lhs.u.string->hash == rhs.u.string->hash)
 			return StringEquals(lhs.u.string->str, rhs.u.string->str);
-		else if (rhs.type == ValueType_BasicString)
-			return StringEquals(lhs.u.string->str, rhs.u.basic_string);
-		else if (rhs.type == ValueType_ConstString)
-			return StringEquals(lhs.u.string->str, rhs.u.const_string->c_str());
-		return false;
-	case ValueType_BasicString:
-		if (lhs.hash != rhs.hash)
-			return false;
-
-		if (rhs.type == ValueType_String)
-			return StringEquals(lhs.u.basic_string, rhs.u.string->str);
-		else if (rhs.type == ValueType_BasicString)
-			return StringEquals(lhs.u.basic_string, rhs.u.basic_string);
-		else if (rhs.type == ValueType_ConstString)
-			return StringEquals(lhs.u.basic_string, rhs.u.const_string->c_str());
-		return false;
-	case ValueType_ConstString:
-		if (lhs.hash != rhs.hash)
-			return false;
-
-		if (rhs.type == ValueType_String)
-			return StringEquals(lhs.u.const_string->c_str(), rhs.u.string->str);
-		else if (rhs.type == ValueType_BasicString)
-			return StringEquals(lhs.u.const_string->c_str(), rhs.u.basic_string);
-		else if (rhs.type == ValueType_ConstString)
-			return StringEquals(lhs.u.const_string->c_str(), rhs.u.const_string->c_str());
 		return false;
 	case ValueType_List:
 		if (rhs.type != ValueType_List)
@@ -210,7 +166,7 @@ Value &SetString(Value &lhs, const char *rhs, size_t len)
 		return SetEmpty(lhs);
 
 	memcpy(lhs.u.string->str, rhs, len);
-	lhs.hash = HashString(lhs.u.string->str);
+	lhs.u.string->hash = HashString(lhs.u.string->str);
 	return lhs;
 }
 
@@ -224,21 +180,12 @@ Value &SetString(Value &lhs, const std::string &rhs)
 	return SetString(lhs, rhs.data(), rhs.size());
 }
 
-Value &SetBasicString(Value &lhs, const char *rhs)
+Value &SetStaticString(Value &lhs, String *rhs)
 {
 	ReleaseValue(lhs);
-	lhs.type = ValueType_BasicString;
-	lhs.u.basic_string = rhs;
-	lhs.hash = HashString(rhs);
-	return lhs;
-}
-
-Value &SetConstString(Value &lhs, const std::string *rhs)
-{
-	ReleaseValue(lhs);
-	lhs.type = ValueType_ConstString;
-	lhs.u.const_string = rhs;
-	lhs.hash = HashString(rhs->c_str());
+	lhs.type = ValueType_String;
+	lhs.flags = VALUE_STATIC;
+	lhs.u.string = rhs;
 	return lhs;
 }
 
@@ -312,18 +259,11 @@ Value &SetParsedString(Value &lhs, const std::string &rhs)
 	return SetString(lhs, rhs);
 }
 
-Value &SetParsedBasicString(Value &lhs, const char *rhs)
+Value &SetParsedString(Value &lhs, const char *rhs)
 {
 	if (ParseString(lhs, rhs) != ValueType_None)
 		return lhs;
-	return SetBasicString(lhs, rhs);
-}
-
-Value &SetParsedConstString(Value &lhs, const std::string *rhs)
-{
-	if (ParseString(lhs, *rhs) != ValueType_None)
-		return lhs;
-	return SetConstString(lhs, rhs);
+	return SetString(lhs, rhs);
 }
 
 Value &SetEmpty(Value &lhs)
@@ -445,7 +385,7 @@ void ListDelete(const Value &list, int64_t index)
 
 void ListDelete(const Value &list, const Value &index)
 {
-	if (index.type == ValueType_String || index.type == ValueType_BasicString || index.type == ValueType_ConstString)
+	if (index.type == ValueType_String)
 	{
 		const char *position = GetRawString(index, nullptr);
 		if (StringEquals(position, "first"))
@@ -509,8 +449,6 @@ void CvtString(Value &v)
 	{
 	default:
 	case ValueType_String:
-	case ValueType_BasicString:
-	case ValueType_ConstString:
 		break;
 	case ValueType_Integer:
 		cch = snprintf(buf, sizeof(buf), "%lld", v.u.integer);
@@ -519,19 +457,19 @@ void CvtString(Value &v)
 	case ValueType_Real:
 		if (v.u.real == NAN)
 		{
-			SetBasicString(v, "NaN");
+			SetString(v, "NaN");
 			break;
 		}
 
 		if (v.u.real == INFINITY)
 		{
-			SetBasicString(v, "Infinity");
+			SetString(v, "Infinity");
 			break;
 		}
 
 		if (v.u.real == -INFINITY)
 		{
-			SetBasicString(v, "-Infinity");
+			SetString(v, "-Infinity");
 			break;
 		}
 
@@ -539,10 +477,10 @@ void CvtString(Value &v)
 		SetString(v, buf, cch);
 		break;
 	case ValueType_Bool:
-		SetBasicString(v, v.u.boolean ? TRUE_STRING : FALSE_STRING);
+		SetString(v, v.u.boolean ? TRUE_STRING : FALSE_STRING);
 		break;
 	case ValueType_List:
-		SetBasicString(v, "<list>");
+		SetString(v, "<list>");
 		break;
 	}
 }
@@ -569,10 +507,6 @@ int64_t ValueLength(const Value &v)
 		return v.u.boolean ? TRUE_SIZE : FALSE_SIZE - 1;
 	case ValueType_String:
 		return v.u.string->len;
-	case ValueType_BasicString:
-		return strlen(v.u.basic_string);
-	case ValueType_ConstString:
-		return v.u.const_string->size();
 	}
 }
 
@@ -689,8 +623,6 @@ int64_t ToInteger(const Value &v)
 	case ValueType_None:
 	case ValueType_Bool:
 	case ValueType_String:
-	case ValueType_BasicString:
-	case ValueType_ConstString:
 	case ValueType_List:
 		return 0;
 	case ValueType_Real:
@@ -708,8 +640,6 @@ double ToReal(const Value &v)
 	case ValueType_None:
 	case ValueType_Bool:
 	case ValueType_String:
-	case ValueType_BasicString:
-	case ValueType_ConstString:
 	case ValueType_List:
 		return 0.0;
 	case ValueType_Real:
@@ -744,12 +674,6 @@ const char *ToString(const Value &v, int64_t *len)
 	case ValueType_String:
 		if (len) *len = v.u.string->len;
 		return v.u.string->str;
-	case ValueType_BasicString:
-		if (len) *len = strlen(v.u.basic_string);
-		return v.u.basic_string;
-	case ValueType_ConstString:
-		if (len) *len = v.u.const_string->size();
-		return v.u.const_string->c_str();
 	case ValueType_List:
 		if (len) *len = 6;
 		return "<list>";
@@ -773,12 +697,6 @@ const char *GetRawString(const Value &v, int64_t *len)
 	case ValueType_String:
 		if (len) *len = v.u.string->len;
 		return v.u.string->str;
-	case ValueType_BasicString:
-		if (len) *len = strlen(v.u.basic_string);
-		return v.u.basic_string;
-	case ValueType_ConstString:
-		if (len) *len = v.u.const_string->size();
-		return v.u.const_string->c_str();
 	}
 }
 
@@ -839,10 +757,13 @@ Value &AllocList(Value &v, int64_t len)
 
 Value &RetainValue(Value &v)
 {
-	if (v.type == ValueType_String || v.type == ValueType_List)
+	if (!(v.flags & VALUE_STATIC))
 	{
-		assert(v.u.ref->count > 0);
-		v.u.ref->count++;
+		if (v.type == ValueType_String || v.type == ValueType_List)
+		{
+			assert(v.u.ref->count > 0);
+			v.u.ref->count++;
+		}
 	}
 
 	return v;
@@ -850,12 +771,15 @@ Value &RetainValue(Value &v)
 
 void ReleaseValue(Value &v)
 {
-	if (v.type == ValueType_String || v.type == ValueType_List)
+	if (!(v.flags & VALUE_STATIC))
 	{
-		assert(v.u.ref->count > 0);
+		if (v.type == ValueType_String || v.type == ValueType_List)
+		{
+			assert(v.u.ref->count > 0);
 
-		if (--v.u.ref->count == 0)
-			FreeValue(v);
+			if (--v.u.ref->count == 0)
+				FreeValue(v);
+		}
 	}
 
 	v.type = ValueType_None;
@@ -864,6 +788,8 @@ void ReleaseValue(Value &v)
 
 void FreeValue(Value &v)
 {
+	assert(!(v.flags & VALUE_STATIC));
+
 	if (v.type == ValueType_String)
 	{
 		assert(v.u.ref->count == 0);

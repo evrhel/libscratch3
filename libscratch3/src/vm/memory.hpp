@@ -7,6 +7,8 @@
 
 #define INITIAL_CAPACITY 8
 
+#define VALUE_STATIC 0x01 // value is statically allocated
+
 enum ValueType
 {
 	ValueType_None = 0,
@@ -20,12 +22,7 @@ enum ValueType
 	/* Reference types */
 
 	ValueType_String,
-	ValueType_List,
-
-	/* Other types */
-
-	ValueType_BasicString,
-	ValueType_ConstString
+	ValueType_List
 };
 
 struct Reference;
@@ -35,9 +32,9 @@ struct List;
 struct Value
 {
 	uint16_t type;
-	uint8_t __padding[2];
+	uint16_t flags;
 
-	uint32_t hash;
+	uint8_t __padding[4];
 
 	union
 	{
@@ -48,9 +45,6 @@ struct Value
 		Reference *ref;
 		String *string;
 		List *list;
-
-		const char *basic_string; // weak reference
-		const std::string *const_string; // weak reference
 	} u;
 };
 
@@ -64,6 +58,7 @@ struct String
 {
 	Reference ref;
 	int64_t len;
+	int64_t hash;
 	char str[1];
 };
 
@@ -74,6 +69,14 @@ struct List
 	int64_t capacity;
 	Value *values;
 };
+
+constexpr uint32_t HashString(const char *s)
+{
+	uint32_t hash = 1315423911;
+	while (*s)
+		hash ^= ((hash << 5) + *s++ + (hash >> 2));
+	return hash;
+}
 
 bool StringEquals(const char *lstr, const char *rstr);
 
@@ -87,11 +90,9 @@ Value &SetChar(Value &lhs, char c);
 Value &SetString(Value &lhs, const char *rhs, size_t len);
 Value &SetString(Value &lhs, const char *rhs);
 Value &SetString(Value &lhs, const std::string &rhs);
-Value &SetBasicString(Value &lhs, const char *rhs);
-Value &SetConstString(Value &lhs, const std::string *rhs);
+Value &SetStaticString(Value &lhs, String *rhs);
 Value &SetParsedString(Value &lhs, const std::string &rhs);
-Value &SetParsedBasicString(Value &lhs, const char *rhs);
-Value &SetParsedConstString(Value &lhs, const std::string *rhs);
+Value &SetParsedString(Value &lhs, const char *rhs);
 Value &SetEmpty(Value &lhs);
 
 Value &ListGet(Value &lhs, const Value &list, int64_t index);
