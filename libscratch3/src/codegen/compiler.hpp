@@ -15,7 +15,7 @@ enum SegmentType
 {
 	Segment_text,
 	Segment_data,
-	Segment_rodata,
+	Segment_rdata,
 	Segment_bss
 };
 
@@ -36,6 +36,16 @@ struct SpriteProto
 	double rotationStyle;
 };
 
+struct ProgramHeader
+{
+	uint32_t magic;
+	uint32_t version;
+	uint32_t text; // Offset of text segment
+	uint32_t rdata; // Offset of rdata segment
+	uint32_t data; // Offset of data segment
+	uint32_t bss; // Size of BSS segment
+};
+
 class CompiledProgram final
 {
 public:
@@ -47,17 +57,13 @@ public:
 	~CompiledProgram() = default;
 private:
 	Segment _text;
+	Segment _rdata;
 	Segment _data;
-	Segment _rodata;
-	Segment _bss;
+	size_t _bss; // Size of BSS segment
 
-	DataReference _stage = { Segment_text, -1 };
-	std::unordered_map<std::string, DataReference> _sprites;
+	std::unordered_map<std::string, DataReference> _strings;
 
-	std::vector<std::pair<DataReference, DataReference>> _references;
-
-	void PushEventHandler(const std::string &event);
-	void PushEventSender(const std::string &event);
+	std::vector<std::pair<DataReference, DataReference>> _references; // (from, to)
 
 	void WriteText(const void *data, size_t size);
 
@@ -74,18 +80,16 @@ private:
 	template <typename T>
 	inline void WriteData(const T &data) { WriteData(&data, sizeof(T)); }
 
-	void WriteRodata(const void *data, size_t size);
+	void AllocRdata(size_t size);
+
+	void WriteRdata(const void *data, size_t size);
 
 	template <typename T>
-	inline void WriteRodata(const T &data) { WriteRodata(&data, sizeof(T)); }
+	inline void WriteRdata(const T &data) { WriteRodata(&data, sizeof(T)); }
 
 	void WriteBss(size_t size);
 
-	void Align(SegmentType segment);
-
-	void CreateReference(SegmentType src, uint64_t srcOffset, SegmentType dst, uint64_t dstOffset);
-
-	void EmitSprite(const std::string &name, bool isStage);
+	void CreateReference(SegmentType src, SegmentType dst, uint64_t dstoff);
 
 	friend class Compiler;
 };

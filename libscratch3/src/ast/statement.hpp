@@ -1790,15 +1790,11 @@ struct Call : public Statement
 
 	AST_INPUT_SETTER(key, val)
 	{
-		auto it = args.find(key);
-		if (it != args.end())
-			return false;
-
 		Expression *expr = val->As<Expression>();
 		if (!expr)
 			return false;
 
-		args[key] = expr;
+		args.emplace_back(key, expr);
 		return true;
 	}
 

@@ -8,25 +8,23 @@ enum Opcode : uint8_t
 
 	Op_int = 0x01,
 
-	Op_pop,
-	Op_pushsym,
-
-	Op_getstatic,
-	Op_getfield,
-	Op_getsprite,
-	Op_getreporter,
-	Op_findfield,
-
-	Op_setstatic,
-	Op_addstatic,
-	Op_setfield,
-	Op_addfield,
+	Op_varset,
+	Op_varadd,
+	Op_varget,
 
 	Op_jmp, // Relative jump
 	Op_jz, // Relative jump if false
 	Op_jnz, // Relative jump if true
 
 	Op_yield, // Auto yield on backwards jump (loops)
+
+	Op_pop,
+	Op_pushnone,
+	Op_pushint,
+	Op_pushreal,
+	Op_pushtrue,
+	Op_pushfalse,
+	Op_pushstring,
 
 	Op_eq,
 	Op_neq,
@@ -62,17 +60,6 @@ enum Opcode : uint8_t
 	Op_charat,
 	Op_strlen,
 	Op_strstr,
-
-	Op_inc,
-	Op_addi,
-	Op_addr,
-	Op_dec,
-	Op_subi,
-	Op_subr,
-	Op_muli,
-	Op_mulr,
-	Op_divi,
-	Op_divr,
 
 	Op_movesteps,
 	Op_turndegrees,
@@ -163,10 +150,8 @@ enum Opcode : uint8_t
 
 	Op_rand,
 
-	Op_showstatic,
-	Op_showfield,
-	Op_hidestatic,
-	Op_hidefield,
+	Op_varshow,
+	Op_varhide,
 
 	Op_listadd,
 	Op_listremove,
@@ -177,8 +162,6 @@ enum Opcode : uint8_t
 	Op_listfind,
 	Op_listlen,
 	Op_listcontains,
-	Op_listshow,
-	Op_listhide,
 
 	Op_invoke,
 

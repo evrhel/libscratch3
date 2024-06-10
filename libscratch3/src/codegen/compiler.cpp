@@ -308,7 +308,6 @@ public:
 
 	virtual void Visit(BroadcastExpr *node)
 	{
-
 	}
 
 	virtual void Visit(ListExpr *node)
@@ -399,120 +398,212 @@ public:
 
 	virtual void Visit(ChangeX *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_addx);
 	}
 
 	virtual void Visit(SetX *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_setx);
 	}
 
 	virtual void Visit(ChangeY *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_addy);
 	}
 
 	virtual void Visit(SetY *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_sety);
 	}
 
 	virtual void Visit(BounceIfOnEdge *node)
 	{
+		cp.WriteOpcode(Op_bounceonedge);
 	}
 
 	virtual void Visit(SetRotationStyle *node)
 	{
+		cp.WriteOpcode(Op_setrotationstyle);
+		cp.WriteText<uint8_t>(node->style);
 	}
 
 	virtual void Visit(SayForSecs *node)
 	{
+		node->e1->Accept(this);
+		cp.WriteOpcode(Op_say);
+
+		node->e2->Accept(this);
+		cp.WriteOpcode(Op_waitsecs);
+		
+		// clear speech bubble
+		cp.WriteOpcode(Op_pushnone);
+		cp.WriteOpcode(Op_say);
 	}
 
 	virtual void Visit(Say *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_say);
 	}
 
 	virtual void Visit(ThinkForSecs *node)
 	{
+		node->e1->Accept(this);
+		cp.WriteOpcode(Op_think);
+
+		node->e2->Accept(this);
+		cp.WriteOpcode(Op_waitsecs);
+
+		// clear thought bubble
+		cp.WriteOpcode(Op_pushnone);
+		cp.WriteOpcode(Op_think);
 	}
 
 	virtual void Visit(Think *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_think);
 	}
 
 	virtual void Visit(SwitchCostume *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_setcostume);
 	}
 
 	virtual void Visit(NextCostume *node)
 	{
+		cp.WriteOpcode(Op_nextcostume);
 	}
 
 	virtual void Visit(SwitchBackdrop *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_setbackdrop);
 	}
 
 	virtual void Visit(SwitchBackdropAndWait *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_setbackdrop);
+		// TODO: Implement wait
 	}
 
 	virtual void Visit(NextBackdrop *node)
 	{
+		cp.WriteOpcode(Op_nextbackdrop);
 	}
 
 	virtual void Visit(ChangeSize *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_addsize);
 	}
 
 	virtual void Visit(SetSize *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_setsize);
 	}
 
 	virtual void Visit(ChangeGraphicEffect *node)
 	{
+		node->e->Accept(this);
+
+		cp.WriteOpcode(Op_addgraphiceffect);
+		cp.WriteText<uint8_t>(node->effect);
 	}
 
 	virtual void Visit(SetGraphicEffect *node)
 	{
+		node->e->Accept(this);
+
+		cp.WriteOpcode(Op_setgraphiceffect);
+		cp.WriteText<uint8_t>(node->effect);
 	}
 
 	virtual void Visit(ClearGraphicEffects *node)
 	{
+		cp.WriteOpcode(Op_cleargraphiceffects);
 	}
 
 	virtual void Visit(ShowSprite *node)
 	{
+		cp.WriteOpcode(Op_show);
 	}
 
 	virtual void Visit(HideSprite *node)
 	{
+		cp.WriteOpcode(Op_hide);
 	}
 
 	virtual void Visit(GotoLayer *node)
 	{
+		cp.WriteOpcode(Op_gotolayer);
+		cp.WriteText<int8_t>(node->layer);
 	}
 
 	virtual void Visit(MoveLayer *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_movelayer);
 	}
 
-	virtual void Visit(PlaySoundUntilDone *node) {}
-	virtual void Visit(StartSound *node) {}
+	virtual void Visit(PlaySoundUntilDone *node)
+	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_playsoundandwait);
+	}
 
-	virtual void Visit(StopAllSounds *node) {}
-	virtual void Visit(ChangeSoundEffect *node) {}
-	virtual void Visit(SetSoundEffect *node) {}
-	virtual void Visit(ClearSoundEffects *node) {}
+	virtual void Visit(StartSound *node)
+	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_playsound);
+	}
+
+	virtual void Visit(StopAllSounds *node)
+	{
+		cp.WriteOpcode(Op_stopsound);
+	}
+
+	virtual void Visit(ChangeSoundEffect *node)
+	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_addsoundeffect);
+		cp.WriteText<uint8_t>(node->effect);
+	}
+
+	virtual void Visit(SetSoundEffect *node)
+	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_setsoundeffect);
+		cp.WriteText<uint8_t>(node->effect);
+	}
+
+	virtual void Visit(ClearSoundEffects *node)
+	{
+		cp.WriteOpcode(Op_clearsoundeffects);
+	}
 
 	virtual void Visit(ChangeVolume *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_addvolume);
 	}
 
 	virtual void Visit(SetVolume *node)
 	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_setvolume);
 	}
 
 	virtual void Visit(OnFlagClicked *node)
 	{
 		cp.WriteOpcode(Op_onflag);
-		cp.Align(Segment_text);
 	}
 
 	virtual void Visit(OnKeyPressed *node)
@@ -521,13 +612,11 @@ public:
 		
 		cp.WriteOpcode(Op_onkey);
 		cp.WriteText(scancode);
-		cp.Align(Segment_text);
 	}
 
 	virtual void Visit(OnSpriteClicked *node)
 	{
 		cp.WriteOpcode(Op_onclick);
-		cp.Align(Segment_text);
 	}
 
 	virtual void Visit(OnStageClicked *node)
@@ -552,29 +641,13 @@ public:
 
 	virtual void Visit(Broadcast *node)
 	{
-		if (node->e->Is(Ast_BroadcastReporter))
-		{
-			BroadcastReporter &br = static_cast<BroadcastReporter &>(*node->e);
-			cp.PushEventSender(br.value);
-			cp.WriteOpcode(Op_pushsym);
-		}
-		else
-			cp.WriteOpcode(Op_findevent);
-
+		node->e->Accept(this);
 		cp.WriteOpcode(Op_send);
 	}
 
 	virtual void Visit(BroadcastAndWait *node)
 	{
-		if (node->e->Is(Ast_BroadcastReporter))
-		{
-			BroadcastReporter &br = static_cast<BroadcastReporter &>(*node->e);
-			cp.PushEventSender(br.value);
-			cp.WriteOpcode(Op_pushsym);
-		}
-		else
-			cp.WriteOpcode(Op_findevent);
-
+		node->e->Accept(this);
 		cp.WriteOpcode(Op_sendandwait);
 	}
 
@@ -699,80 +772,107 @@ public:
 
 	virtual void Visit(CloneStart *node)
 	{
+		// TODO: Implement
 	}
 
 	virtual void Visit(CreateClone *node)
 	{
+		// TODO: Implement
 	}
 
 	virtual void Visit(DeleteClone *node)
 	{
+		cp.WriteOpcode(Op_deleteclone);
 	}
 
 	virtual void Visit(AskAndWait *node)
 	{
-
+		cp.WriteOpcode(Op_ask);
 	}
 
 	virtual void Visit(SetDragMode *node)
 	{
-
+		cp.WriteOpcode(Op_setdragmode);
+		cp.WriteText<uint8_t>(node->mode);
 	}
 
 	virtual void Visit(ResetTimer *node)
 	{
-
+		cp.WriteOpcode(Op_resettimer);
 	}
 
 	virtual void Visit(SetVariable *node)
 	{
-
+		node->e->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varset);
 	}
 
 	virtual void Visit(ChangeVariable *node)
 	{
-
+		node->e->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varadd);
 	}
 
 	virtual void Visit(ShowVariable *node)
 	{
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varshow);
 	}
 
 	virtual void Visit(HideVariable *node)
 	{
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varhide);
 	}
 
 	virtual void Visit(AppendToList *node)
 	{
-
+		node->e->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_listadd);
 	}
 
 	virtual void Visit(DeleteFromList *node)
 	{
-
+		node->e->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_listremove);
 	}
 
 	virtual void Visit(DeleteAllList *node)
 	{
-
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_listclear);
 	}
 
 	virtual void Visit(InsertInList *node)
 	{
-
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_listinsert);
 	}
 
 	virtual void Visit(ReplaceInList *node)
 	{
-
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_listreplace);
 	}
 
 	virtual void Visit(ShowList *node)
 	{
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varshow);
 	}
 
 	virtual void Visit(HideList *node)
 	{
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varhide);
 	}
 
 	virtual void Visit(ProcProto *node) {}
@@ -786,83 +886,99 @@ public:
 
 	virtual void Visit(GotoReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(GlideReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(PointTowardsReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(CostumeReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(BackdropReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(SoundReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(BroadcastReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(CloneReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(TouchingReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(DistanceReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(KeyReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(PropertyOfReporter *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(ArgReporterStringNumber *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(ArgReporterBoolean *node)
 	{
+		cp.PushString(node->value);
 	}
 
 	virtual void Visit(VariableDef *node)
 	{
-
+		cp.PushString(node->id);
 	}
 
 	virtual void Visit(VariableDefList *node)
 	{
-
+		for (AutoRelease<VariableDef> &vd : node->variables)
+			vd->Accept(this);
 	}
 
 	virtual void Visit(ListDef *node)
 	{
-
+		// TODO: Implement
 	}
 
 	virtual void Visit(ListDefList *node)
 	{
-
+		for (AutoRelease<ListDef> &ld : node->lists)
+			ld->Accept(this);
 	}
 
 	virtual void Visit(StatementListList *node)
 	{
-
+		// TODO: Implement
 	}
 
 	virtual void Visit(CostumeDef *node)
@@ -892,9 +1008,12 @@ public:
 		cp.WriteData<uint8_t>(node->draggable);
 		cp.WriteData<uint8_t>(RotationStyleFromString(node->rotationStyle));
 
-		cp.Align(Segment_data);
-
 		node->costumes->Accept(this);
+
+		node->variables->Accept(this);
+		node->lists->Accept(this);
+
+		node->scripts->Accept(this);
 	}
 
 	CompiledProgram &cp;
@@ -903,14 +1022,66 @@ public:
 	Compiler(CompiledProgram *cp, Loader *loader) : cp(*cp), loader(*loader) {}
 };
 
+void CompiledProgram::WriteText(const void *data, size_t size)
+{
+	_text.resize(_text.size() + size);
+	memcpy(_text.data() + _text.size() - size, data, size);
+}
+
 void CompiledProgram::PushString(const std::string &str)
 {
+	WriteOpcode(Op_pushstring);
 
+	auto it = _strings.find(str);
+	if (it != _strings.end())
+	{
+		DataReference &dr = it->second;
+		CreateReference(Segment_text, dr.seg, dr.off);
+
+		WriteText<uint64_t>(0); // placeholder
+		return;
+	}
+
+	uint64_t off = _data.size();
+
+	size_t size = offsetof(String, str) + str.size() + 1;
+	AllocRdata(size);
+
+	String *s = (String *)(_rdata.data() + _rdata.size() - size);
+	s->ref.count = 1;
+	s->ref.flags = 0;
+	s->len = str.size();
+	s->hash = HashString(str.c_str());
+	memcpy(s->str, str.c_str(), str.size() + 1);
+
+	CreateReference(Segment_text, Segment_rdata, off);
+	WriteText<uint64_t>(0); // placeholder
+
+	_strings[str] = DataReference{ Segment_rdata, off };
 }
 
 void CompiledProgram::PushValue(const Value &value)
 {
-
+	switch (value.type)
+	{
+	default:
+	case ValueType_None:
+		WriteOpcode(Op_pushnone);
+		break;
+	case ValueType_Integer:
+		WriteOpcode(Op_pushint);
+		WriteData(value.u.integer);
+		break;
+	case ValueType_Real:
+		WriteOpcode(Op_pushreal);
+		WriteData(value.u.real);
+		break;
+	case ValueType_Bool:
+		WriteOpcode(value.u.boolean ? Op_pushtrue : Op_pushfalse);
+		break;
+	case ValueType_String:
+		break;
+	}
 }
 
 void CompiledProgram::WriteData(const void *data, size_t size)
@@ -919,16 +1090,50 @@ void CompiledProgram::WriteData(const void *data, size_t size)
 	memcpy(_data.data() + _data.size() - size, data, size);
 }
 
-void CompiledProgram::WriteRodata(const void *data, size_t size)
+void CompiledProgram::AllocRdata(size_t size)
 {
-	_rodata.resize(_rodata.size() + size);
-	memcpy(_rodata.data() + _rodata.size() - size, data, size);
+	_rdata.resize(_rdata.size() + size);
+}
+
+void CompiledProgram::WriteRdata(const void *data, size_t size)
+{
+	_rdata.resize(_rdata.size() + size);
+	memcpy(_rdata.data() + _rdata.size() - size, data, size);
 }
 
 void CompiledProgram::WriteBss(size_t size)
 {
-	_bss.resize(_bss.size() + size);
-	memset(_bss.data() + _bss.size() - size, 0, size);
+	_bss += size;
+}
+
+void CompiledProgram::CreateReference(SegmentType src, SegmentType dst, uint64_t dstoff)
+{
+	DataReference from;
+	from.seg = src;
+
+	switch (src)
+	{
+	default:
+		return;
+	case Segment_text:
+		from.off = _text.size();
+		break;
+	case Segment_data:
+		from.off = _data.size();
+		break;
+	case Segment_rdata:
+		from.off = _rdata.size();
+		break;
+	case Segment_bss:
+		from.off = _bss;
+		break;
+	}
+
+	DataReference to;
+	to.seg = dst;
+	to.off = dstoff;
+
+	_references.emplace_back(from, to);
 }
 
 CompiledProgram *Compile(Program *p, Loader *loader)
