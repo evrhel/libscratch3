@@ -179,12 +179,6 @@ void Debugger::Render()
 					case ValueType_String:
 						ImGui::LabelText(name, "\"%s\"", v.u.string->str);
 						break;
-					case ValueType_BasicString:
-						ImGui::LabelText(name, "\"%s\"", v.u.basic_string);
-						break;
-					case ValueType_ConstString:
-						ImGui::LabelText(name, "\"%s\"", v.u.const_string->c_str());
-						break;
 					}
 				}
 
@@ -225,12 +219,6 @@ void Debugger::Render()
 								break;
 							case ValueType_String:
 								ImGui::Text("[%lld] \"%s\"", i + 1, item.u.string->str);
-								break;
-							case ValueType_BasicString:
-								ImGui::Text("[%lld] \"%s\"", i + 1, item.u.basic_string);
-								break;
-							case ValueType_ConstString:
-								ImGui::Text("[%lld] \"%s\"", i + 1, item.u.const_string->c_str());
 								break;
 							}
 						}
@@ -359,8 +347,8 @@ void Debugger::Render()
 								ImGui::Text("[%d] (start)", (int)fp);
 							else
 							{
-								Statement *stmt = *f.sl->sl[f.pc - 1];
-								ImGui::Text("[%d] %s", (int)fp, stmt->ToString().c_str());
+								Statement &stmt = *f.sl->sl[f.pc - 1];
+								ImGui::Text("[%d] %s", (int)fp, stmt.ToString().c_str());
 							}
 						}
 					}

@@ -202,8 +202,8 @@ void Sprite::Init(SpriteDef *def)
         _costumes = new Costume[_nCostumes];
         for (int64_t i = 0; i < _nCostumes; i++)
         {
-            CostumeDef *cdef = *def->costumes->costumes[i];
-            _costumeNames[cdef->name] = i + 1;
+            CostumeDef &cdef = *def->costumes->costumes[i];
+            _costumeNames[cdef.name] = i + 1;
         }
     }
 
@@ -261,7 +261,7 @@ void Sprite::Load(VirtualMachine *vm)
     {
         size_t i = 0;
         for (AutoRelease<CostumeDef> &cd : _node->costumes->costumes)
-            _costumes[i++].Load(loader, *cd);
+            _costumes[i++].Load(loader, cd.get());
     }
 
     SpriteRenderInfo *ri = render->GetRenderInfo(_drawable);

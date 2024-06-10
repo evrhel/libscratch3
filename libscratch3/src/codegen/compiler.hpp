@@ -98,7 +98,7 @@ private:
 	void WriteRdata(const void *data, size_t size);
 
 	template <typename T>
-	inline void WriteRdata(const T &data) { WriteRodata(&data, sizeof(T)); }
+	inline void WriteRdata(const T &data) { WriteRdata(&data, sizeof(T)); }
 
 	void CreateReference(SegmentType src, SegmentType dst, uint64_t dstoff);
 

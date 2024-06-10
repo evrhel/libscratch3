@@ -151,9 +151,21 @@ constexpr bool operator==(const AutoRelease<T> &a, const void *b)
 }
 
 template <typename T>
+constexpr bool operator==(const AutoRelease<T> &a, std::nullptr_t b)
+{
+	return a.get() == nullptr;
+}
+
+template <typename T>
 constexpr bool operator==(const void *a, const AutoRelease<T> &b)
 {
 	return a == *b;
+}
+
+template <typename T>
+constexpr bool operator==(std::nullptr_t a, const AutoRelease<T> &b)
+{
+	return b.get() == nullptr;
 }
 
 template <typename T, typename U>
@@ -172,4 +184,16 @@ template <typename T>
 constexpr bool operator!=(const void *a, const AutoRelease<T> &b)
 {
 	return a != *b;
+}
+
+template <typename T>
+constexpr bool operator!=(const AutoRelease<T> &a, std::nullptr_t b)
+{
+	return a.get() != nullptr;
+}
+
+template <typename T>
+constexpr bool operator!=(std::nullptr_t a, const AutoRelease<T> &b)
+{
+	return b.get() != nullptr;
 }

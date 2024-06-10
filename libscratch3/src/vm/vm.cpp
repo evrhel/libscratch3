@@ -89,7 +89,7 @@ public:
 			break;
 		case PropGetType_Name:
 			// TODO: implement
-			SetBasicString(val, "costume1"); // always costume1
+			SetString(val, "costume1"); // always costume1
 			break;
 		}
 	}
@@ -250,9 +250,10 @@ public:
 		node->e->Accept(this);
 		int64_t len;
 		const char *name = ToString(vm->StackAt(0), &len);
-		vm->Pop();
 
 		Sprite *s = vm->FindSprite(std::string(name, len));
+		vm->Pop();
+
 		if (!s)
 		{
 			vm->Push();
@@ -268,7 +269,7 @@ public:
 			SetInteger(vm->Push(), 1);
 			break;
 		case PropertyTarget_BackdropName:
-			SetBasicString(vm->Push(), "backdrop1");
+			SetString(vm->Push(), "backdrop1");
 			break;
 		case PropertyTarget_XPosition:
 			SetReal(vm->Push(), s->GetX());
@@ -283,7 +284,7 @@ public:
 			SetInteger(vm->Push(), s->GetCostume());
 			break;
 		case PropertyTarget_CostumeName:
-			SetConstString(vm->Push(), &s->GetCostumeName());
+			SetString(vm->Push(), s->GetCostumeName().c_str());
 			break;
 		case PropertyTarget_Size:
 			SetReal(vm->Push(), s->GetSize());
@@ -695,7 +696,7 @@ public:
 
 	virtual void Visit(BroadcastExpr *node)
 	{
-		SetConstString(vm->Push(), &node->name);
+		SetString(vm->Push(), node->name.c_str());
 	}
 
 	virtual void Visit(ListExpr *node)
@@ -998,8 +999,6 @@ public:
 			script->sprite->SetCostume(static_cast<int64_t>(costume.u.real));
 			break;
 		case ValueType_String:
-		case ValueType_BasicString:
-		case ValueType_ConstString:
 			script->sprite->SetCostume(ToString(costume));
 			break;
 		default:
@@ -1033,9 +1032,7 @@ public:
 			stage->SetCostume(ToInteger(v));
 			break;
 		case ValueType_Bool:
-		case ValueType_String:
-		case ValueType_BasicString:
-		case ValueType_ConstString: {
+		case ValueType_String: {
 			int64_t len;
 			const char *name = ToString(v, &len);
 			stage->SetCostume(std::string(name, len));
@@ -1244,9 +1241,9 @@ public:
 		int64_t len;
 		const char *message = ToString(vm->StackAt(0), &len);
 
-		vm->Pop();
-
 		vm->Send(std::string(message, len));
+
+		vm->Pop();
 	}
 
 	virtual void Visit(BroadcastAndWait *node)
@@ -1256,9 +1253,9 @@ public:
 		int64_t len;
 		const char *message = ToString(vm->StackAt(0), &len);
 
-		vm->Pop();
-
 		vm->SendAndWait(std::string(message, len));
+
+		vm->Pop();
 	}
 
 	virtual void Visit(WaitSecs *node)
@@ -1275,12 +1272,12 @@ public:
 		int64_t count = ToInteger(vm->StackAt(0));
 		vm->Pop();
 
-		vm->PushFrame(*node->sl, count, FRAME_EXEC_MULTIPLE);
+		vm->PushFrame(node->sl.get(), count, FRAME_EXEC_MULTIPLE);
 	}
 
 	virtual void Visit(Forever *node)
 	{
-		vm->PushFrame(*node->sl, 0, FRAME_EXEC_FOREVER);
+		vm->PushFrame(node->sl.get(), 0, FRAME_EXEC_FOREVER);
 	}
 
 	virtual void Visit(If *node)
@@ -1290,7 +1287,7 @@ public:
 		vm->Pop();
 
 		if (truth)
-			vm->PushFrame(*node->sl, 1, 0);
+			vm->PushFrame(node->sl.get(), 1, 0);
 	}
 
 	virtual void Visit(IfElse *node)
@@ -1300,9 +1297,9 @@ public:
 		vm->Pop();
 
 		if (truth)
-			vm->PushFrame(*node->sl1, 1, 0);
+			vm->PushFrame(node->sl1.get(), 1, 0);
 		else
-			vm->PushFrame(*node->sl2, 1, 0);
+			vm->PushFrame(node->sl2.get(), 1, 0);
 	}
 
 	virtual void Visit(WaitUntil *node)
@@ -1313,7 +1310,7 @@ public:
 		vm->Pop();
 
 		if (!truth)
-			vm->WaitUntil(*node->e);
+			vm->WaitUntil(node->e.get());
 	}
 
 	virtual void Visit(RepeatUntil *node)
@@ -1323,7 +1320,7 @@ public:
 		vm->Pop();
 
 		if (!truth)
-			vm->PushFrame(*node->sl, 1, FRAME_EXEC_MULTIPLE);
+			vm->PushFrame(node->sl.get(), 1, FRAME_EXEC_MULTIPLE);
 	}
 
 	virtual void Visit(Stop *node)
@@ -1469,72 +1466,72 @@ public:
 
 	virtual void Visit(GotoReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(GlideReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(PointTowardsReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(CostumeReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(BackdropReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(SoundReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(BroadcastReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(CloneReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(TouchingReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(DistanceReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(KeyReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(PropertyOfReporter *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(ArgReporterStringNumber *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	virtual void Visit(ArgReporterBoolean *node)
 	{
-		SetConstString(vm->Push(), &node->value);
+		SetString(vm->Push(), node->value);
 	}
 
 	VirtualMachine *vm = nullptr;
@@ -1585,7 +1582,7 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 		Sprite *sprite = _sprites + nextSpriteId - 1;
 		_spriteNames[def->name] = nextSpriteId++;
 
-		sprite->Init(*def);
+		sprite->Init(def.get());
 
 		if (sprite->IsStage())
 		{
@@ -1648,7 +1645,7 @@ int VirtualMachine::Load(Program *prog, const std::string &name, Loader *loader)
 
 			script.state = EMBRYO;
 			script.sprite = sprite;
-			script.entry = *sl;
+			script.entry = sl.get();
 
 			script.fiber = nullptr;
 
@@ -2281,8 +2278,8 @@ static int ScriptMain(void *up)
 		if (f->pc < f->sl->sl.size())
 		{
 			// Run the statement
-			Statement *stmt = *f->sl->sl[f->pc];
-			stmt->Accept(&executor);
+			Statement &stmt = *f->sl->sl[f->pc];
+			stmt.Accept(&executor);
 
 			// Check stack
 			if (script.sp != script.stack + STACK_SIZE)

@@ -56,9 +56,6 @@ struct ASTNode : public RefCounted
 
 	std::string nodeid;
 
-	// for semantic analysis
-	AutoRelease<KnownState> known;
-
 	ASTNode() = default;
 	virtual ~ASTNode() = default;
 protected:
