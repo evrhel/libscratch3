@@ -13,10 +13,10 @@ using Segment = std::vector<uint8_t>;
 
 enum SegmentType
 {
+	Segment_stable, // Sprite table
 	Segment_text,
 	Segment_data,
-	Segment_rdata,
-	Segment_bss
+	Segment_rdata
 };
 
 struct DataReference
@@ -33,7 +33,13 @@ struct SpriteProto
 	double direction;
 	int64_t costume;
 	int64_t layer;
-	double rotationStyle;
+
+	uint8_t visible;
+	uint8_t isStage;
+	uint8_t draggable;
+	uint8_t rotationStyle;
+
+	uint64_t initializers; // Offset of initializer in text
 };
 
 struct ProgramHeader
@@ -56,10 +62,10 @@ public:
 	CompiledProgram(const CompiledProgram &) = delete;
 	~CompiledProgram() = default;
 private:
+	Segment _stable;
 	Segment _text;
 	Segment _rdata;
 	Segment _data;
-	size_t _bss; // Size of BSS segment
 
 	std::unordered_map<std::string, DataReference> _strings;
 
@@ -72,8 +78,15 @@ private:
 	template <typename T>
 	inline void WriteText(const T &data) { WriteText(&data, sizeof(T)); }
 
+	void WriteString(SegmentType seg, const std::string &str);
+
 	void PushString(const std::string &str);
 	void PushValue(const Value &value);
+
+	void WriteStable(const void *data, size_t size);
+
+	template <typename T>
+	void WriteStable(const T &data) { WriteStable(&data, sizeof(T)); }
 
 	void WriteData(const void *data, size_t size);
 
@@ -86,8 +99,6 @@ private:
 
 	template <typename T>
 	inline void WriteRdata(const T &data) { WriteRodata(&data, sizeof(T)); }
-
-	void WriteBss(size_t size);
 
 	void CreateReference(SegmentType src, SegmentType dst, uint64_t dstoff);
 

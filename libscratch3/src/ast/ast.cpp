@@ -272,7 +272,7 @@ private:
 				goto failure;
 			}
 
-			ParseVariables(variables, *sd->variables);
+			ParseVariables(variables, sd->variables.get());
 		}
 
 		// Lists that this target defines
@@ -287,7 +287,7 @@ private:
 				goto failure;
 			}
 
-			ParseLists(lists, *sd->lists);
+			ParseLists(lists, sd->lists.get());
 		}
 
 		// Blocks in the target
@@ -381,7 +381,7 @@ private:
 				goto failure;
 			}
 
-			ParseCostumes(costumes, *sd->costumes);
+			ParseCostumes(costumes, sd->costumes.get());
 		}
 		else
 			Warn("Missing `costumes` member in target");

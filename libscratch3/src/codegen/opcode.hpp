@@ -12,6 +12,8 @@ enum Opcode : uint8_t
 	Op_varadd,
 	Op_varget,
 
+	Op_listcreate, // Create list
+
 	Op_jmp, // Relative jump
 	Op_jz, // Relative jump if false
 	Op_jnz, // Relative jump if true

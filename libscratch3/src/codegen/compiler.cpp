@@ -1,5 +1,7 @@
 #include "compiler.hpp"
 
+#include <cstdio>
+
 #include "opcode.hpp"
 
 #include <SDL.h>
@@ -12,7 +14,10 @@ public:
 		Value v;
 		InitializeValue(v);
 		SetParsedString(v, node->value);
+
 		cp.PushValue(v);
+
+		ReleaseValue(v);
 	}
 
 	virtual void Visit(XPos *node)
@@ -114,6 +119,8 @@ public:
 	virtual void Visit(PropertyOf *node)
 	{
 		// TODO: Implement
+		printf("Warning: PropertyOf will not return a value\n");
+		cp.WriteOpcode(Op_pushnone);
 	}
 
 	virtual void Visit(CurrentDate *node)
@@ -304,36 +311,58 @@ public:
 
 	virtual void Visit(VariableExpr *node)
 	{
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
 	}
 
 	virtual void Visit(BroadcastExpr *node)
 	{
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
 	}
 
 	virtual void Visit(ListExpr *node)
 	{
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
 	}
 
 	virtual void Visit(ListAccess *node)
 	{
+		node->e->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
+		cp.WriteOpcode(Op_listat);
 	}
 
 	virtual void Visit(IndexOf *node)
 	{
+		node->e->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
+		cp.WriteOpcode(Op_listfind);
 	}
 
 	virtual void Visit(ListLength *node)
 	{
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
+		cp.WriteOpcode(Op_listlen);
 	}
 
 	virtual void Visit(ListContains *node)
 	{
+		node->e->Accept(this);
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
+		cp.WriteOpcode(Op_listcontains);
 	}
 
 	virtual void Visit(StatementList *node)
 	{
 		for (AutoRelease<Statement> &stmt : node->sl)
 			stmt->Accept(this);
+		cp.WriteOpcode(Op_stopself); // implicit stop
 	}
 
 	virtual void Visit(MoveSteps *node)
@@ -353,7 +382,6 @@ public:
 		node->e->Accept(this);
 		cp.WriteOpcode(Op_neg);
 		cp.WriteOpcode(Op_turndegrees);
-
 	}
 
 	virtual void Visit(Goto *node)
@@ -491,6 +519,8 @@ public:
 		node->e->Accept(this);
 		cp.WriteOpcode(Op_setbackdrop);
 		// TODO: Implement wait
+		
+		printf("Warning: SwitchBackdropAndWait will not wait\n");
 	}
 
 	virtual void Visit(NextBackdrop *node)
@@ -831,6 +861,7 @@ public:
 	{
 		node->e->Accept(this);
 		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
 		cp.WriteOpcode(Op_listadd);
 	}
 
@@ -838,12 +869,14 @@ public:
 	{
 		node->e->Accept(this);
 		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
 		cp.WriteOpcode(Op_listremove);
 	}
 
 	virtual void Visit(DeleteAllList *node)
 	{
 		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
 		cp.WriteOpcode(Op_listclear);
 	}
 
@@ -852,6 +885,7 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
 		cp.WriteOpcode(Op_listinsert);
 	}
 
@@ -860,6 +894,7 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varget);
 		cp.WriteOpcode(Op_listreplace);
 	}
 
@@ -956,7 +991,15 @@ public:
 
 	virtual void Visit(VariableDef *node)
 	{
+		Value v;
+		InitializeValue(v);
+		SetParsedString(v, node->value->value);
+
+		cp.PushValue(v);
 		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varset);
+
+		ReleaseValue(v);
 	}
 
 	virtual void Visit(VariableDefList *node)
@@ -967,7 +1010,24 @@ public:
 
 	virtual void Visit(ListDef *node)
 	{
-		// TODO: Implement
+		Value v;
+		InitializeValue(v);
+
+		int64_t size = static_cast<int64_t>(node->value.size());
+
+		for (int64_t i = size - 1; i >= 0; --i)
+		{
+			SetParsedString(v, node->value[i]->value);
+			cp.PushValue(v);
+		}
+		
+		cp.WriteOpcode(Op_listcreate);
+		cp.WriteText<int64_t>(size);
+
+		cp.PushString(node->id);
+		cp.WriteOpcode(Op_varset);
+
+		ReleaseValue(v);
 	}
 
 	virtual void Visit(ListDefList *node)
@@ -978,7 +1038,12 @@ public:
 
 	virtual void Visit(StatementListList *node)
 	{
-		// TODO: Implement
+		cp.WriteStable<int64_t>(node->sll.size());
+		for (AutoRelease<StatementList> &sl : node->sll)
+		{
+			cp.WriteStable<int64_t>(cp._text.size()); // offset
+			sl->Accept(this);
+		}
 	}
 
 	virtual void Visit(CostumeDef *node)
@@ -986,34 +1051,51 @@ public:
 		Resource *rsrc = loader.Find(node->md5ext);
 		const uint8_t *data = rsrc->Data();
 		size_t size = rsrc->Size();
+
+		cp.WriteString(Segment_stable, node->name);
+		cp.WriteString(Segment_stable, node->dataFormat);
+		cp.WriteRdata<int32_t>(node->bitmapResolution);
+		cp.WriteRdata<double>(node->rotationCenterX);
+		cp.WriteRdata<double>(node->rotationCenterY);
+		cp.WriteRdata<int64_t>(size);
+
+		cp.WriteRdata(data, size);
 	}
 
 	virtual void Visit(CostumeDefList *node)
 	{
+		cp.WriteStable<int64_t>(node->costumes.size());
 		for (AutoRelease<CostumeDef> &costume : node->costumes)
 			costume->Accept(this);
 	}
 
 	virtual void Visit(SpriteDef *node)
 	{
-		cp.WriteData<double>(node->x);
-		cp.WriteData<double>(node->y);
-		cp.WriteData<double>(node->size);
-		cp.WriteData<double>(node->direction);
-		cp.WriteData<int64_t>(node->costumes);
-		cp.WriteData<int64_t>(node->layer);
+		cp.WriteString(Segment_stable, node->name);
+		cp.WriteStable<double>(node->x);
+		cp.WriteStable<double>(node->y);
+		cp.WriteStable<double>(node->size);
+		cp.WriteStable<double>(node->direction);
+		cp.WriteStable<int64_t>(node->currentCostume);
+		cp.WriteStable<int64_t>(node->layer);
 
-		cp.WriteData<uint8_t>(node->visible);
-		cp.WriteData<uint8_t>(node->isStage);
-		cp.WriteData<uint8_t>(node->draggable);
-		cp.WriteData<uint8_t>(RotationStyleFromString(node->rotationStyle));
+		cp.WriteStable<uint8_t>(node->visible);
+		cp.WriteStable<uint8_t>(node->isStage);
+		cp.WriteStable<uint8_t>(node->draggable);
+		cp.WriteStable<uint8_t>(RotationStyleFromString(node->rotationStyle));
 
-		node->costumes->Accept(this);
+		// Reference to initializer
+		cp.CreateReference(Segment_stable, Segment_text, cp._text.size());
+		cp.WriteStable<uint64_t>(0); // placeholder
 
+		// Write initializer to text segment
 		node->variables->Accept(this);
 		node->lists->Accept(this);
+		cp.WriteOpcode(Op_stopself);
 
 		node->scripts->Accept(this);
+
+		node->costumes->Accept(this);
 	}
 
 	CompiledProgram &cp;
@@ -1026,6 +1108,45 @@ void CompiledProgram::WriteText(const void *data, size_t size)
 {
 	_text.resize(_text.size() + size);
 	memcpy(_text.data() + _text.size() - size, data, size);
+}
+
+void CompiledProgram::WriteString(SegmentType seg, const std::string &str)
+{
+	uint64_t off;
+	switch (seg)
+	{
+	default:
+		off = 0;
+		break;
+	case Segment_stable:
+		off = _stable.size();
+		off += sizeof(uint64_t); // placeholder
+		break;
+	case Segment_text:
+		off = _text.size();
+		off += sizeof(uint64_t); // placeholder
+		break;
+	case Segment_data:
+		off = _data.size();
+		off += sizeof(uint64_t); // placeholder
+		break;
+	case Segment_rdata:
+		abort(); // cannot write strings to rdata
+		break;
+	}
+
+	auto it = _strings.find(str);
+	if (it != _strings.end())
+	{
+		_references.emplace_back(DataReference{ seg, off }, it->second);
+		return;
+	}
+
+	uint64_t rdoff = _rdata.size();
+	WriteRdata(str.c_str(), str.size() + 1);
+
+	_strings[str] = DataReference{ Segment_rdata, rdoff };
+	WriteString(seg, str); // recurse
 }
 
 void CompiledProgram::PushString(const std::string &str)
@@ -1080,8 +1201,15 @@ void CompiledProgram::PushValue(const Value &value)
 		WriteOpcode(value.u.boolean ? Op_pushtrue : Op_pushfalse);
 		break;
 	case ValueType_String:
+		PushString(value.u.string->str);
 		break;
 	}
+}
+
+void CompiledProgram::WriteStable(const void *data, size_t size)
+{
+	_stable.resize(_stable.size() + size);
+	memcpy(_stable.data() + _stable.size() - size, data, size);
 }
 
 void CompiledProgram::WriteData(const void *data, size_t size)
@@ -1101,11 +1229,6 @@ void CompiledProgram::WriteRdata(const void *data, size_t size)
 	memcpy(_rdata.data() + _rdata.size() - size, data, size);
 }
 
-void CompiledProgram::WriteBss(size_t size)
-{
-	_bss += size;
-}
-
 void CompiledProgram::CreateReference(SegmentType src, SegmentType dst, uint64_t dstoff)
 {
 	DataReference from;
@@ -1123,9 +1246,6 @@ void CompiledProgram::CreateReference(SegmentType src, SegmentType dst, uint64_t
 		break;
 	case Segment_rdata:
 		from.off = _rdata.size();
-		break;
-	case Segment_bss:
-		from.off = _bss;
 		break;
 	}
 
