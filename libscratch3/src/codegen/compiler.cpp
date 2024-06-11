@@ -667,6 +667,7 @@ public:
 	virtual void Visit(OnEvent *node)
 	{
 		cp.WriteOpcode(Op_onevent);
+		cp.WriteString(Segment_text, node->message);
 	}
 
 	virtual void Visit(Broadcast *node)
@@ -690,13 +691,17 @@ public:
 	virtual void Visit(Repeat *node)
 	{
 		node->e->Accept(this);
+		printf("Warning: Repeat substack will not be executed\n");
+
+		// TODO: Implement
 	}
 
 	virtual void Visit(Forever *node)
 	{
 		int64_t start = cp._text.size();
 
-		node->sl->Accept(this);
+		if (node->sl)
+			node->sl->Accept(this);
 
 		int64_t diff = cp._text.size() - start;
 
@@ -706,6 +711,9 @@ public:
 
 	virtual void Visit(If *node)
 	{
+		if (!node->sl)
+			return; // empty if substack, discard
+
 		int64_t top, jz;
 
 		node->e->Accept(this);
@@ -722,6 +730,9 @@ public:
 
 	virtual void Visit(IfElse *node)
 	{
+		if (!node->sl1 && !node->sl2)
+			return; // both if and else substacks are empty, discard
+
 		int64_t top, jz;
 		int64_t trueJmp;
 		int64_t elseTop;
@@ -734,7 +745,8 @@ public:
 		jz = cp._text.size();
 		cp.WriteText<int64_t>(0); // placeholder
 
-		node->sl1->Accept(this);
+		if (node->sl1)
+			node->sl1->Accept(this);
 
 		// unconditional jump to end
 		cp.WriteOpcode(Op_jmp);
@@ -745,7 +757,8 @@ public:
 		elseTop = cp._text.size();
 		(int64_t &)cp._text[jz] = elseTop - top;
 
-		node->sl2->Accept(this);
+		if (node->sl2)
+			node->sl2->Accept(this);
 
 		// set jump destination for end
 		(int64_t &)cp._text[trueJmp] = cp._text.size() - trueJmp;
@@ -1004,6 +1017,9 @@ public:
 
 	virtual void Visit(VariableDefList *node)
 	{
+		uint64_t count = node->variables.size();
+		cp._text.reserve(cp._text.capacity() + count * 16); // ~16 bytes per initializer instruction 
+
 		for (AutoRelease<VariableDef> &vd : node->variables)
 			vd->Accept(this);
 	}
@@ -1032,6 +1048,9 @@ public:
 
 	virtual void Visit(ListDefList *node)
 	{
+		uint64_t count = node->lists.size();
+		cp._text.reserve(cp._text.capacity() + count * 64); // ~64 bytes per initializer instruction
+
 		for (AutoRelease<ListDef> &ld : node->lists)
 			ld->Accept(this);
 	}
@@ -1085,8 +1104,7 @@ public:
 		cp.WriteStable<uint8_t>(RotationStyleFromString(node->rotationStyle));
 
 		// Reference to initializer
-		cp.CreateReference(Segment_stable, Segment_text, cp._text.size());
-		cp.WriteStable<uint64_t>(0); // placeholder
+		cp.WriteReference(Segment_stable, Segment_text, cp._text.size());
 
 		// Write initializer to text segment
 		node->variables->Accept(this);
@@ -1098,11 +1116,139 @@ public:
 		node->costumes->Accept(this);
 	}
 
+	virtual void Visit(SpriteDefList *node)
+	{
+		uint64_t count = node->sprites.size();
+		cp._stable.reserve(cp._stable.capacity() + count * 512); // ~512 bytes per sprite table entry
+
+		cp.WriteStable<uint64_t>(count);
+		for (AutoRelease<SpriteDef> &sd : node->sprites)
+			sd->Accept(this);
+	}
+
+	virtual void Visit(StageDef *node)
+	{
+
+	}
+
+	virtual void Visit(ValMonitorList *node)
+	{
+
+	}
+
+	virtual void Visit(Program *node)
+	{
+		node->sprites->Accept(this);
+	}
+
 	CompiledProgram &cp;
 	Loader &loader;
 
 	Compiler(CompiledProgram *cp, Loader *loader) : cp(*cp), loader(*loader) {}
 };
+
+uint8_t *CompiledProgram::Export(size_t *outSize) const
+{
+	size_t size = sizeof(ProgramHeader) + _stable.size() + _text.size() + _data.size() + _rdata.size();
+	uint8_t *data = new uint8_t[size];
+
+	// write header
+	ProgramHeader *header = (ProgramHeader *)data;
+	header->magic = PROGRAM_MAGIC;
+	header->version = PROGRAM_VERSION;
+	header->text = sizeof(ProgramHeader);
+	header->text_size = _text.size();
+	header->stable = header->text + header->text_size;
+	header->stable_size = _stable.size();
+	header->data = header->stable + header->stable_size;
+	header->data_size = _data.size();
+	header->rdata = header->data + header->data_size;
+	header->rdata_size = _rdata.size();
+
+	// write text segment
+	memcpy(data + header->text, _text.data(), _text.size());
+
+	// write stable segment
+	memcpy(data + header->stable, _stable.data(), _stable.size());
+
+	// write data segment
+	memcpy(data + header->data, _data.data(), _data.size());
+
+	// write rdata segment
+	memcpy(data + header->rdata, _rdata.data(), _rdata.size());
+
+	// resolve references
+	for (auto &p : _references)
+	{
+		const DataReference &from = p.first;
+		const DataReference &to = p.second;
+
+		uint64_t fromOff, toOff;
+
+		switch (from.seg)
+		{
+		default:
+			continue;
+		case Segment_text:
+			fromOff = header->text + from.off;
+			break;
+		case Segment_stable:
+			fromOff = header->stable + from.off;
+			break;
+		case Segment_data:
+			fromOff = header->data + from.off;
+			break;
+		case Segment_rdata:
+			fromOff = header->rdata + from.off;
+			break;
+		}
+
+		switch (to.seg)
+		{
+		default:
+			continue;
+		case Segment_text:
+			toOff = header->text + to.off;
+			break;
+		case Segment_stable:
+			toOff = header->stable + to.off;
+			break;
+		case Segment_data:
+			toOff = header->data + to.off;
+			break;
+		case Segment_rdata:
+			toOff = header->rdata + to.off;
+			break;
+		}
+
+		// write reference
+		*(uint64_t *)(data + fromOff) = toOff;
+	}
+
+	*outSize = size;
+	return data;
+}
+
+void CompiledProgram::Write(SegmentType seg, const void *data, size_t size)
+{
+	switch (seg)
+	{
+	default:
+		break;
+	case Segment_stable:
+		WriteStable(data, size);
+		break;
+	case Segment_text:
+		WriteText(data, size);
+		break;
+	case Segment_data:
+		WriteData(data, size);
+		break;
+	case Segment_rdata:
+		WriteRdata(data, size);
+		break;
+	}
+}
 
 void CompiledProgram::WriteText(const void *data, size_t size)
 {
@@ -1112,32 +1258,32 @@ void CompiledProgram::WriteText(const void *data, size_t size)
 
 void CompiledProgram::WriteString(SegmentType seg, const std::string &str)
 {
-	uint64_t off;
-	switch (seg)
+	auto it = _plainStrings.find(str);
+	if (it != _plainStrings.end())
 	{
-	default:
-		off = 0;
-		break;
-	case Segment_stable:
-		off = _stable.size();
-		off += sizeof(uint64_t); // placeholder
-		break;
-	case Segment_text:
-		off = _text.size();
-		off += sizeof(uint64_t); // placeholder
-		break;
-	case Segment_data:
-		off = _data.size();
-		off += sizeof(uint64_t); // placeholder
-		break;
-	case Segment_rdata:
-		abort(); // cannot write strings to rdata
-		break;
-	}
+		uint64_t off;
+		switch (seg)
+		{
+		default:
+			off = 0;
+			break;
+		case Segment_stable:
+			off = _stable.size();
+			WriteStable<uint64_t>(0); // placeholder
+			break;
+		case Segment_text:
+			off = _text.size();
+			WriteText<uint64_t>(0); // placeholder
+			break;
+		case Segment_data:
+			off = _data.size();
+			WriteData<uint64_t>(0); // placeholder
+			break;
+		case Segment_rdata:
+			abort(); // cannot write strings to rdata
+			break;
+		}
 
-	auto it = _strings.find(str);
-	if (it != _strings.end())
-	{
 		_references.emplace_back(DataReference{ seg, off }, it->second);
 		return;
 	}
@@ -1145,7 +1291,7 @@ void CompiledProgram::WriteString(SegmentType seg, const std::string &str)
 	uint64_t rdoff = _rdata.size();
 	WriteRdata(str.c_str(), str.size() + 1);
 
-	_strings[str] = DataReference{ Segment_rdata, rdoff };
+	_plainStrings[str] = DataReference{ Segment_rdata, rdoff };
 	WriteString(seg, str); // recurse
 }
 
@@ -1153,13 +1299,11 @@ void CompiledProgram::PushString(const std::string &str)
 {
 	WriteOpcode(Op_pushstring);
 
-	auto it = _strings.find(str);
-	if (it != _strings.end())
+	auto it = _managedStrings.find(str);
+	if (it != _managedStrings.end())
 	{
 		DataReference &dr = it->second;
-		CreateReference(Segment_text, dr.seg, dr.off);
-
-		WriteText<uint64_t>(0); // placeholder
+		WriteReference(Segment_text, dr.seg, dr.off);
 		return;
 	}
 
@@ -1175,10 +1319,9 @@ void CompiledProgram::PushString(const std::string &str)
 	s->hash = HashString(str.c_str());
 	memcpy(s->str, str.c_str(), str.size() + 1);
 
-	CreateReference(Segment_text, Segment_rdata, off);
-	WriteText<uint64_t>(0); // placeholder
+	WriteReference(Segment_text, Segment_rdata, off);
 
-	_strings[str] = DataReference{ Segment_rdata, off };
+	_managedStrings[str] = DataReference{ Segment_rdata, off };
 }
 
 void CompiledProgram::PushValue(const Value &value)
@@ -1191,11 +1334,11 @@ void CompiledProgram::PushValue(const Value &value)
 		break;
 	case ValueType_Integer:
 		WriteOpcode(Op_pushint);
-		WriteData(value.u.integer);
+		WriteText(value.u.integer);
 		break;
 	case ValueType_Real:
 		WriteOpcode(Op_pushreal);
-		WriteData(value.u.real);
+		WriteText(value.u.real);
 		break;
 	case ValueType_Bool:
 		WriteOpcode(value.u.boolean ? Op_pushtrue : Op_pushfalse);
@@ -1229,15 +1372,18 @@ void CompiledProgram::WriteRdata(const void *data, size_t size)
 	memcpy(_rdata.data() + _rdata.size() - size, data, size);
 }
 
-void CompiledProgram::CreateReference(SegmentType src, SegmentType dst, uint64_t dstoff)
+void CompiledProgram::WriteReference(SegmentType seg, const DataReference &dst)
 {
 	DataReference from;
-	from.seg = src;
+	from.seg = seg;
 
-	switch (src)
+	switch (seg)
 	{
 	default:
 		return;
+	case Segment_stable:
+		from.off = _stable.size();
+		break;
 	case Segment_text:
 		from.off = _text.size();
 		break;
@@ -1249,14 +1395,22 @@ void CompiledProgram::CreateReference(SegmentType src, SegmentType dst, uint64_t
 		break;
 	}
 
-	DataReference to;
-	to.seg = dst;
-	to.off = dstoff;
+	_references.emplace_back(from, dst);
 
-	_references.emplace_back(from, to);
+	// write dummy reference
+	const int64_t dummy = 0;
+	Write(seg, &dummy, sizeof(dummy));
 }
 
-CompiledProgram *Compile(Program *p, Loader *loader)
+void CompiledProgram::WriteReference(SegmentType seg, SegmentType dst, uint64_t dstoff)
+{
+	DataReference target;
+	target.seg = dst;
+	target.off = dstoff;
+
+	WriteReference(seg, target);
+}
+CompiledProgram *CompileProgram(Program *p, Loader *loader)
 {
 	CompiledProgram *cp = new CompiledProgram();
 	Compiler compiler(cp, loader);

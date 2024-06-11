@@ -9,12 +9,17 @@
 
 #define EVENT_SYMBOL_PREFIX "event_"
 
+// "CSB3" in ASCII
+#define PROGRAM_MAGIC 0x33425343
+
+#define PROGRAM_VERSION 1
+
 using Segment = std::vector<uint8_t>;
 
 enum SegmentType
 {
-	Segment_stable, // Sprite table
 	Segment_text,
+	Segment_stable, // Sprite table
 	Segment_data,
 	Segment_rdata
 };
@@ -46,15 +51,25 @@ struct ProgramHeader
 {
 	uint32_t magic;
 	uint32_t version;
+
 	uint32_t text; // Offset of text segment
-	uint32_t rdata; // Offset of rdata segment
+	uint32_t text_size; // Size of text segment
+
+	uint32_t stable; // Offset of sprite table
+	uint32_t stable_size; // Size of sprite table
+
 	uint32_t data; // Offset of data segment
-	uint32_t bss; // Size of BSS segment
+	uint32_t data_size; // Size of data segment
+
+	uint32_t rdata; // Offset of rdata segment
+	uint32_t rdata_size; // Size of rdata segment
 };
 
 class CompiledProgram final
 {
 public:
+	uint8_t *Export(size_t *outSize) const;
+
 	CompiledProgram &operator=(const CompiledProgram &) = delete;
 	CompiledProgram &operator=(CompiledProgram &&) = delete;
 
@@ -67,9 +82,12 @@ private:
 	Segment _rdata;
 	Segment _data;
 
-	std::unordered_map<std::string, DataReference> _strings;
+	std::unordered_map<std::string, DataReference> _managedStrings;
+	std::unordered_map<std::string, DataReference> _plainStrings;
 
 	std::vector<std::pair<DataReference, DataReference>> _references; // (from, to)
+
+	void Write(SegmentType seg, const void *data, size_t size);
 
 	void WriteText(const void *data, size_t size);
 
@@ -100,9 +118,10 @@ private:
 	template <typename T>
 	inline void WriteRdata(const T &data) { WriteRdata(&data, sizeof(T)); }
 
-	void CreateReference(SegmentType src, SegmentType dst, uint64_t dstoff);
+	void WriteReference(SegmentType seg, const DataReference &dst);
+	void WriteReference(SegmentType seg, SegmentType dst, uint64_t dstoff);
 
 	friend class Compiler;
 };
 
-CompiledProgram *Compile(Program *p, Loader *loader);
+CompiledProgram *CompileProgram(Program *p, Loader *loader);

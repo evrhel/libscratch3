@@ -9,7 +9,6 @@
 #include <ref.hpp>
 
 #include "visitor.hpp"
-#include "../codegen/syminfo.hpp"
 
 class Visitor;
 class ASTStack;

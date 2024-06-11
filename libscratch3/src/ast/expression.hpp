@@ -8,8 +8,6 @@
 struct Expression : public ASTNode
 {
 	AST_IMPL(Expression, ASTNode);
-
-	SymInfo syminfo;
 };
 
 // expression evaluatable to a constant expression

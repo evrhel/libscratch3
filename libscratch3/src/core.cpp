@@ -7,6 +7,7 @@
 #include "resource.hpp"
 #include "ast/ast.hpp"
 #include "vm/vm.hpp"
+#include "codegen/compiler.hpp"
 
 static void StdoutLogCallback(void *up, Scratch3_Severity severity, const char *message)
 {
@@ -148,6 +149,16 @@ int Scratch3::Run()
 {
 	if (!_program || _vm)
 		return -1;
+
+
+	CompiledProgram *cp = CompileProgram(_program, _loader);
+
+	size_t size;
+	uint8_t *data = cp->Export(&size);
+
+	ls_write_file("out.bin", data, size);
+
+	delete[] data;
 
 	_vm = new VirtualMachine();
 
