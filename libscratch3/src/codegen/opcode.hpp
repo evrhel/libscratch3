@@ -28,6 +28,8 @@ enum Opcode : uint8_t
 	Op_pushfalse,
 	Op_pushstring,
 
+	Op_dup, // Duplicate top of stack
+
 	Op_eq,
 	Op_neq,
 	Op_gt,
@@ -62,6 +64,9 @@ enum Opcode : uint8_t
 	Op_charat,
 	Op_strlen,
 	Op_strstr,
+
+	Op_inc,
+	Op_dec,
 
 	Op_movesteps,
 	Op_turndegrees,
@@ -146,6 +151,7 @@ enum Opcode : uint8_t
 	Op_getloudness,
 	Op_gettimer,
 	Op_resettimer,
+	Op_propertyof,
 	Op_gettime,
 	Op_getdayssince2000,
 	Op_getusername,

@@ -118,9 +118,13 @@ public:
 
 	virtual void Visit(PropertyOf *node)
 	{
-		// TODO: Implement
-		printf("Warning: PropertyOf will not return a value\n");
-		cp.WriteOpcode(Op_pushnone);
+		if (node->target == PropertyTarget_Variable)
+			cp.PushString(node->id);
+
+		node->e->Accept(this);
+
+		cp.WriteOpcode(Op_propertyof);
+		cp.WriteText<uint8_t>(node->target);
 	}
 
 	virtual void Visit(CurrentDate *node)
@@ -318,7 +322,6 @@ public:
 	virtual void Visit(BroadcastExpr *node)
 	{
 		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
 	}
 
 	virtual void Visit(ListExpr *node)
@@ -360,9 +363,20 @@ public:
 
 	virtual void Visit(StatementList *node)
 	{
+		bool oldTopLevel = topLevel;
+		topLevel = false;
+
 		for (AutoRelease<Statement> &stmt : node->sl)
 			stmt->Accept(this);
-		cp.WriteOpcode(Op_stopself); // implicit stop
+
+		topLevel = oldTopLevel;
+
+		if (topLevel)
+		{
+			// implicit stop
+			cp.WriteOpcode(Op_stopself);
+			cp.AlignText();
+		}
 	}
 
 	virtual void Visit(MoveSteps *node)
@@ -574,13 +588,14 @@ public:
 	virtual void Visit(GotoLayer *node)
 	{
 		cp.WriteOpcode(Op_gotolayer);
-		cp.WriteText<int8_t>(node->layer);
+		cp.WriteText<uint8_t>(node->layer);
 	}
 
 	virtual void Visit(MoveLayer *node)
 	{
 		node->e->Accept(this);
 		cp.WriteOpcode(Op_movelayer);
+		cp.WriteText<uint8_t>(node->direction);
 	}
 
 	virtual void Visit(PlaySoundUntilDone *node)
@@ -690,10 +705,40 @@ public:
 
 	virtual void Visit(Repeat *node)
 	{
-		node->e->Accept(this);
-		printf("Warning: Repeat substack will not be executed\n");
+		Value zero;
+		InitializeValue(zero);
+		SetInteger(zero, 0);
 
-		// TODO: Implement
+		// push counter
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_round);
+
+		uint64_t top = cp._text.size();
+		uint64_t jz;
+
+		// check counter
+		cp.WriteOpcode(Op_dup);
+		cp.PushValue(zero);
+		cp.WriteOpcode(Op_gt);
+		cp.WriteOpcode(Op_jz);
+		jz = cp._text.size();
+		cp.WriteText<uint64_t>(0); // placeholder
+
+		if (node->sl)
+			node->sl->Accept(this);
+
+		cp.WriteOpcode(Op_yield);
+
+		// decrement counter
+		cp.WriteOpcode(Op_dec);
+
+		// jump back to top
+		cp.WriteAbsoluteJump(Op_jmp, top);
+
+		// pop counter
+		cp.WriteOpcode(Op_pop);
+
+		ReleaseValue(zero);
 	}
 
 	virtual void Visit(Forever *node)
@@ -703,10 +748,8 @@ public:
 		if (node->sl)
 			node->sl->Accept(this);
 
-		int64_t diff = cp._text.size() - start;
-
-		cp.WriteOpcode(Op_jmp);
-		cp.WriteText<int64_t>(-diff); // jump back to start
+		cp.WriteOpcode(Op_yield);
+		cp.WriteAbsoluteJump(Op_jmp, start);
 	}
 
 	virtual void Visit(If *node)
@@ -714,18 +757,17 @@ public:
 		if (!node->sl)
 			return; // empty if substack, discard
 
-		int64_t top, jz;
+		int64_t jz;
 
 		node->e->Accept(this);
 
-		top = cp._text.size();
 		cp.WriteOpcode(Op_jz);
 		jz = cp._text.size();
-		cp.WriteText<int64_t>(0); // placeholder
+		cp.WriteText<uint64_t>(0); // placeholder
 
 		node->sl->Accept(this);
 
-		(int64_t &)cp._text[jz] = cp._text.size() - top;
+		(uint64_t &)cp._text[jz] = cp._text.size();
 	}
 
 	virtual void Visit(IfElse *node)
@@ -733,20 +775,50 @@ public:
 		if (!node->sl1 && !node->sl2)
 			return; // both if and else substacks are empty, discard
 
-		int64_t top, jz;
+		if (!node->sl1)
+		{
+			// no true substack
+			// functionally equivalent to If with inverted condition
+
+			int64_t jnz;
+
+			node->e->Accept(this);
+
+			cp.WriteOpcode(Op_jnz);
+			jnz = cp._text.size();
+			cp.WriteText<uint64_t>(0); // placeholder
+
+			node->sl2->Accept(this);
+
+			(uint64_t &)cp._text[jnz] = cp._text.size();
+
+			return;
+		}
+		else if (!node->sl2)
+		{
+			// no false substack
+			// functionally equivalent to If
+
+			AutoRelease<If> ifNode = new If();
+			ifNode->e = node->e;
+			ifNode->sl = node->sl1;
+
+			Visit(ifNode.get());
+
+			return;
+		}
+
+		int64_t jz;
 		int64_t trueJmp;
-		int64_t elseTop;
 
 		node->e->Accept(this);
 
 		// conditional jump to else block
-		top = cp._text.size();
 		cp.WriteOpcode(Op_jz);
 		jz = cp._text.size();
-		cp.WriteText<int64_t>(0); // placeholder
+		cp.WriteText<uint64_t>(0); // placeholder
 
-		if (node->sl1)
-			node->sl1->Accept(this);
+		node->sl1->Accept(this);
 
 		// unconditional jump to end
 		cp.WriteOpcode(Op_jmp);
@@ -754,14 +826,12 @@ public:
 		cp.WriteText<int64_t>(0); // placeholder
 
 		// set jump destination for else block
-		elseTop = cp._text.size();
-		(int64_t &)cp._text[jz] = elseTop - top;
+		(uint64_t &)cp._text[jz] = cp._text.size();
 
-		if (node->sl2)
-			node->sl2->Accept(this);
+		node->sl2->Accept(this);
 
 		// set jump destination for end
-		(int64_t &)cp._text[trueJmp] = cp._text.size() - trueJmp;
+		(int64_t &)cp._text[trueJmp] = cp._text.size();
 	}
 
 	virtual void Visit(WaitUntil *node)
@@ -776,12 +846,10 @@ public:
 		cp.WriteText<int64_t>(0); // placeholder
 
 		cp.WriteOpcode(Op_yield);
+		cp.WriteAbsoluteJump(Op_jmp, top);
 
-		// jump back to top
-		cp.WriteOpcode(Op_jmp);
-		cp.WriteText<int64_t>(top - cp._text.size());
-
-		(int64_t &)cp._text[jnz] = cp._text.size() - top;
+		// set jump destination for condition
+		(int64_t &)cp._text[jnz] = cp._text.size();
 	}
 
 	virtual void Visit(RepeatUntil *node)
@@ -794,6 +862,15 @@ public:
 		cp.WriteOpcode(Op_jnz);
 		jnz = cp._text.size();
 		cp.WriteText<int64_t>(0); // placeholder
+
+		if (node->sl)
+			node->sl->Accept(this);
+
+		cp.WriteOpcode(Op_yield);
+		cp.WriteAbsoluteJump(Op_jmp, top);
+
+		// set jump destination for condition
+		(int64_t &)cp._text[jnz] = cp._text.size();
 	}
 
 	virtual void Visit(Stop *node)
@@ -815,12 +892,13 @@ public:
 
 	virtual void Visit(CloneStart *node)
 	{
-		// TODO: Implement
+		cp.WriteOpcode(Op_onclone);
 	}
 
 	virtual void Visit(CreateClone *node)
 	{
-		// TODO: Implement
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_clone);
 	}
 
 	virtual void Visit(DeleteClone *node)
@@ -1060,6 +1138,7 @@ public:
 		cp.WriteStable<int64_t>(node->sll.size());
 		for (AutoRelease<StatementList> &sl : node->sll)
 		{
+			topLevel = true;
 			cp.WriteStable<int64_t>(cp._text.size()); // offset
 			sl->Accept(this);
 		}
@@ -1110,6 +1189,7 @@ public:
 		node->variables->Accept(this);
 		node->lists->Accept(this);
 		cp.WriteOpcode(Op_stopself);
+		cp.AlignText();
 
 		node->scripts->Accept(this);
 
@@ -1143,6 +1223,7 @@ public:
 
 	CompiledProgram &cp;
 	Loader &loader;
+	bool topLevel = false;
 
 	Compiler(CompiledProgram *cp, Loader *loader) : cp(*cp), loader(*loader) {}
 };
@@ -1295,6 +1376,18 @@ void CompiledProgram::WriteString(SegmentType seg, const std::string &str)
 	WriteString(seg, str); // recurse
 }
 
+void CompiledProgram::WriteAbsoluteJump(uint8_t opcode, uint64_t off)
+{
+	WriteOpcode(opcode);
+	WriteText<uint64_t>(off);
+}
+
+void CompiledProgram::WriteRelativeJump(uint8_t opcode, int64_t off)
+{
+	uint64_t target = static_cast<uint64_t>(static_cast<int64_t>(_text.size()) + off);
+	WriteAbsoluteJump(opcode, target);
+}
+
 void CompiledProgram::PushString(const std::string &str)
 {
 	WriteOpcode(Op_pushstring);
@@ -1310,18 +1403,18 @@ void CompiledProgram::PushString(const std::string &str)
 	uint64_t off = _data.size();
 
 	size_t size = offsetof(String, str) + str.size() + 1;
-	AllocRdata(size);
+	AllocData(size);
 
-	String *s = (String *)(_rdata.data() + _rdata.size() - size);
+	String *s = (String *)(_data.data() + off);
 	s->ref.count = 1;
-	s->ref.flags = 0;
+	s->ref.flags = VALUE_STATIC;
 	s->len = str.size();
 	s->hash = HashString(str.c_str());
 	memcpy(s->str, str.c_str(), str.size() + 1);
 
-	WriteReference(Segment_text, Segment_rdata, off);
+	WriteReference(Segment_text, Segment_data, off);
 
-	_managedStrings[str] = DataReference{ Segment_rdata, off };
+	_managedStrings[str] = DataReference{ Segment_data, off };
 }
 
 void CompiledProgram::PushValue(const Value &value)
@@ -1349,10 +1442,27 @@ void CompiledProgram::PushValue(const Value &value)
 	}
 }
 
+void CompiledProgram::AlignText()
+{
+	size_t off = _text.size();
+
+	// round up to nearest multiple of 8
+	off = (off + 7) & ~7;
+
+	// fill with interrupts
+	while (_text.size() < off)
+		WriteOpcode(Op_int);
+}
+
 void CompiledProgram::WriteStable(const void *data, size_t size)
 {
 	_stable.resize(_stable.size() + size);
 	memcpy(_stable.data() + _stable.size() - size, data, size);
+}
+
+void CompiledProgram::AllocData(size_t size)
+{
+	_data.resize(_data.size() + size);
 }
 
 void CompiledProgram::WriteData(const void *data, size_t size)

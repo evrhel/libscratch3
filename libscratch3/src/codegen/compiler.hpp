@@ -98,13 +98,20 @@ private:
 
 	void WriteString(SegmentType seg, const std::string &str);
 
+	void WriteAbsoluteJump(uint8_t opcode, uint64_t off);
+	void WriteRelativeJump(uint8_t opcode, int64_t off);
+
 	void PushString(const std::string &str);
 	void PushValue(const Value &value);
+
+	void AlignText();
 
 	void WriteStable(const void *data, size_t size);
 
 	template <typename T>
 	void WriteStable(const T &data) { WriteStable(&data, sizeof(T)); }
+
+	void AllocData(size_t size);
 
 	void WriteData(const void *data, size_t size);
 
