@@ -1522,7 +1522,7 @@ void CompiledProgram::WriteReference(SegmentType seg, SegmentType dst, uint64_t 
 
 	WriteReference(seg, target);
 }
-CompiledProgram *CompileProgram(Program *p, Loader *loader)
+CompiledProgram *CompileProgram(Program *p, Loader *loader, const Scratch3CompilerOptions *options)
 {
 	CompiledProgram *cp = new CompiledProgram();
 	Compiler compiler(cp, loader);

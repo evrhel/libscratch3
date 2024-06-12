@@ -1227,7 +1227,7 @@ private:
 	}
 };
 
-Program *ParseAST(const char *jsonString, size_t length, Scratch3_LogCallback log, void *up)
+Program *ParseAST(const char *jsonString, size_t length, Scratch3LogFn log, void *up, const Scratch3CompilerOptions *options)
 {
 	Program *p;
 	

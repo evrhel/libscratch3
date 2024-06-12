@@ -27,6 +27,5 @@ private:
     std::unordered_map<std::string, Resource *> _cache;
 };
 
-Loader *CreateArchiveLoader(const char *filename);
-Loader *CreateMemoryLoader(const char *data, size_t size);
-Loader *CreateDirectoryLoader(const char *dirname);
+Loader *CreateArchiveLoader(const void *data, size_t size);
+Loader *CreateBytecodeLoader(const void *data, size_t size);

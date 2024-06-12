@@ -18,4 +18,4 @@
 //! 
 //! \return The AST.
 Program *ParseAST(const char *jsonString, size_t length,
-	Scratch3_LogCallback log, void *up);
+	Scratch3LogFn log, void *up, const Scratch3CompilerOptions *options);

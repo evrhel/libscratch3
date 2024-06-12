@@ -9,226 +9,182 @@
 #include "vm/vm.hpp"
 #include "codegen/compiler.hpp"
 
-static void StdoutLogCallback(void *up, Scratch3_Severity severity, const char *message)
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT const char *Scratch3GetErrorString(int error)
 {
-	if (severity == Scratch3_Error)
-		printf("\033[31;1m[ERRO]\033[0m %s\n", message);
-	else if (severity == Scratch3_Warning)
-		printf("\033[33;1m[WARN]\033[0m %s\n", message);
-	else if (severity == Scratch3_Info)
-		printf("\033[32m[INFO]\033[0m %s\n", message);
-	else
-		printf("%s\n", message);
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-Scratch3_LogCallback Scratch3_GetStdoutLogCallback(void)
-{
-	return &StdoutLogCallback;
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-Scratch3 *Scratch3_Create(const char *path, Scratch3_LogCallback log, void *up)
-{
-	struct ls_stat st;
-	int rc;
-
-	g_type_init();
-	rsvg_init();
-
-	// Get type of input file
-	rc = ls_stat(path, &st);
-	if (rc == -1)
-		return nullptr;
-
-	// Create loader
-	Loader *loader = nullptr;
-	if (st.type = LS_FT_FILE)
-		loader = CreateArchiveLoader(path);
-	else if (st.type == LS_FT_DIR)
-		loader = CreateDirectoryLoader(path);
-
-	if (!loader)
-		return nullptr;
-
-	std::string name;
-	char buf[1024];
-	size_t len;
-
-	len = ls_basename(path, buf, sizeof(buf));
-	if (len == -1)
-		name = path;
-	else
-		name = std::string(buf, len);
-
-	// Create the instance
-	return new Scratch3(name, loader, log, up);
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-void Scratch3_Destroy(Scratch3 *scratch3)
-{
-	delete scratch3;
-
-	rsvg_term();
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-int Scratch3_GetError(Scratch3 *S)
-{
-	return 0;
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-int Scratch3_Compile(Scratch3 *S)
-{
-	return S->Compile();
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-int Scratch3_DumpAST(Scratch3 *S)
-{
-	Program *program = S->GetProgram();
-	if (!program)
-		return -1;
-
-	Visitor *dump = CreateDumpVisitor();
-	program->Accept(dump);
-
-	return 0;
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-int Scratch3_Run(Scratch3 *S)
-{
-	return S->Run();
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-int Scratch3_Suspend(Scratch3 *S)
-{
-	return S->Suspend();
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-int Scratch3_Resume(Scratch3 *S)
-{
-	return S->Resume();
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-int Scratch3_Stop(Scratch3 *S)
-{
-	return S->Stop();
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT
-int Scratch3_Wait(Scratch3 *S, unsigned long ms)
-{
-	return S->Wait(ms);
-}
-
-int Scratch3::Compile()
-{
-	if (_program)
-		return 0;
-
-	Resource *res = _loader->Find("project.json");
-	if (!res)
-		return -1;
-
-	const char *str = reinterpret_cast<const char *>(res->Data());
-	size_t size = res->Size();
-
-	_program = Retain(ParseAST(str, size, _log, _up));
-
-	return _program ? 0 : -1;
-}
-
-int Scratch3::Run()
-{
-	if (!_program || _vm)
-		return -1;
-
-
-	CompiledProgram *cp = CompileProgram(_program, _loader);
-
-	size_t size;
-	uint8_t *data = cp->Export(&size);
-
-	ls_write_file("out.bin", data, size);
-
-	delete[] data;
-
-	_vm = new VirtualMachine();
-
-	int rc = _vm->Load(_program, _programName, _loader);
-	if (rc == -1)
+	switch (error)
 	{
-		delete _vm;
-		_vm = nullptr;
-		return -1;
+	default:
+	case SCRATCH3_ERROR_UNKNOWN:
+		return "Unknown error";
+	case SCRATCH3_ERROR_SUCCESS:
+		return "Success";
+	case SCRATCH3_ERROR_IO:
+		return "I/O error";
+	case SCRATCH3_ERROR_OUT_OF_MEMORY:
+		return "Out of memory";
+	case SCRATCH3_ERROR_NO_PROGRAM:
+		return "No program loaded";
+	case SCRATCH3_ERROR_INVALID_PROGRAM:
+		return "Invalid program";
+	case SCRATCH3_ERROR_ALREADY_COMPILED:
+		return "Program already compiled";
+	case SCRATCH3_ERROR_NOT_COMPILED:
+		return "Program not compiled";
+	case SCRATCH3_ERROR_COMPILATION_FAILED:
+		return "Compilation failed";
+	case SCRATCH3_ERROR_NO_VM:
+		return "No VM initialized";
+	case SCRATCH3_ERROR_ALREADY_RUNNING:
+		return "VM already running";
+	case SCRATCH3_ERROR_TIMEOUT:
+		return "Timeout";
+	}
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT Scratch3 *Scratch3Create(void)
+{
+	Scratch3 *S = new Scratch3;
+	memset(S, 0, sizeof(Scratch3));
+	return S;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3Destroy(Scratch3 *S)
+{
+	if (!S)
+		return;
+
+	if (S->vm)
+		delete S->vm;
+
+	if (S->bytecode)
+		delete[] S->bytecode;
+
+	if (S->loader)
+		delete S->loader;
+
+	delete S;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3SetLog(Scratch3 *S, Scratch3LogFn log, int severity, void *up)
+{
+	S->log = log;
+	S->minSeverity = severity;
+	S->up = up;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Load(Scratch3 *S, const char *name, const void *data, size_t size)
+{
+	if (size < 4)
+		return SCRATCH3_ERROR_INVALID_PROGRAM;
+
+	if (S->bytecode)
+		return SCRATCH3_ERROR_ALREADY_LOADED;
+
+	const ProgramHeader *header = (const ProgramHeader *)data;
+	if (header->magic == PROGRAM_MAGIC)
+	{
+		// Program is compiled bytecode
+		S->bytecode = (uint8_t *)malloc(size);
+		if (!S->bytecode)
+			return SCRATCH3_ERROR_OUT_OF_MEMORY;
+
+		memcpy(S->bytecode, data, size);
+		S->bytecodeSize = size;
+
+		S->loader = CreateBytecodeLoader(S->bytecode, S->bytecodeSize);
+		if (!S->loader)
+		{
+			free(S->bytecode), S->bytecode = nullptr;
+			return SCRATCH3_ERROR_INVALID_PROGRAM;
+		}
+	}
+	else
+	{
+		// Program is an uncompiled archive
+		S->loader = CreateArchiveLoader(data, size);
+		if (!S->loader)
+			return SCRATCH3_ERROR_INVALID_PROGRAM;
 	}
 
-	_vm->VMStart();
-
-	return 0;
+	return SCRATCH3_ERROR_SUCCESS;
 }
 
-int Scratch3::Suspend()
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Compile(Scratch3 *S, const Scratch3CompilerOptions *options)
 {
-	if (!_vm)
-		return -1;
+	if (!S->loader)
+		return SCRATCH3_ERROR_NO_PROGRAM;
 
-	return -1;
-}
+	if (S->bytecode)
+		return SCRATCH3_ERROR_ALREADY_COMPILED;
 
-int Scratch3::Resume()
-{
-	if (!_vm)
-		return -1;
+	Resource *rsrc = S->loader->Find("project.json");
+	if (!rsrc)
+		return SCRATCH3_ERROR_IO;
 
-	return -1;
-}
+	Program *prog = ParseAST((const char *)rsrc->Data(), rsrc->Size(), S->log, S->up, options);
+	if (!prog)
+		return SCRATCH3_ERROR_COMPILATION_FAILED;
+	Retain(prog);
 
-int Scratch3::Stop()
-{
-	if (!_vm)
-		return -1;
-	_vm->VMTerminate();
-	return 0;
-}
-
-int Scratch3::Wait(unsigned long ms)
-{
-	int rc;
-
-	if (!_vm)
-		return 0;
-	
-	rc = _vm->VMWait(ms);
-	if (rc == 0)
+	CompiledProgram *cprog = CompileProgram(prog, S->loader, options);
+	if (!cprog)
 	{
-		delete _vm;
-		_vm = nullptr;
+		Release(prog);
+		return SCRATCH3_ERROR_COMPILATION_FAILED;
 	}
-	
-	return rc;
+
+	Release(prog);
+
+	S->bytecode = cprog->Export(&S->bytecodeSize);
+	delete cprog;
+
+	if (!S->bytecode)
+		return SCRATCH3_ERROR_OUT_OF_MEMORY;
+
+	return SCRATCH3_ERROR_SUCCESS;
 }
 
-Scratch3::Scratch3(const std::string &programName, Loader *loader, Scratch3_LogCallback log, void *up) :
-	_log(log),
-	_up(up),
-	_loader(loader),
-	_program(nullptr),
-	_programName(programName),
-	_vm(nullptr) {}
-
-Scratch3::~Scratch3()
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT const void *Scratch3GetProgram(Scratch3 *S, size_t *size)
 {
-	if (_vm)
-		delete _vm;
+	if (!S->bytecode)
+		return nullptr;
 
-	Release(_program);
-	delete _loader;
+	*size = S->bytecodeSize;
+	return S->bytecode;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMInit(Scratch3 *S, const Scratch3VMOptions *options)
+{
+	if (!S->loader)
+		return SCRATCH3_ERROR_NO_PROGRAM;
+
+	if (!S->bytecode)
+		return SCRATCH3_ERROR_NOT_COMPILED;
+
+	if (S->vm)
+		return SCRATCH3_ERROR_ALREADY_RUNNING;
+
+	return SCRATCH3_ERROR_SUCCESS;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMRun(Scratch3 *S)
+{
+	if (!S->vm)
+		return SCRATCH3_ERROR_NO_VM;
+
+	return SCRATCH3_ERROR_SUCCESS;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMTerminate(Scratch3 *S)
+{
+	if (!S->vm)
+		return SCRATCH3_ERROR_NO_VM;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMWait(Scratch3 *S, unsigned long timeout)
+{
+	if (!S->vm)
+		return SCRATCH3_ERROR_NO_VM;
+
+	return SCRATCH3_ERROR_SUCCESS;
 }

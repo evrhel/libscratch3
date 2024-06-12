@@ -7,28 +7,17 @@ class Loader;
 struct Program;
 class VirtualMachine;
 
-class Scratch3 final
+struct _Scratch3
 {
-public:
-	constexpr Scratch3_LogCallback GetLog() const { return _log; }
-	constexpr void *GetUp() const { return _up; }
-	constexpr Program *GetProgram() const { return _program; }
+	Scratch3LogFn log;
+	int minSeverity;
+	void *up;
 
-	int Compile();
+	char programName[256];
+	Loader *loader;
 
-	int Run();
-	int Suspend();
-	int Resume();
-	int Stop();
-	int Wait(unsigned long ms);
+	uint8_t *bytecode;
+	size_t bytecodeSize;
 
-	Scratch3(const std::string &programName, Loader *loader, Scratch3_LogCallback log, void *up);
-    ~Scratch3();
-private:
-	Scratch3_LogCallback _log;
-    void *_up; // user pointer
-	Loader *_loader;
-	Program *_program;
-	std::string _programName;
-	VirtualMachine *_vm;
+	VirtualMachine *vm;
 };

@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <vector>
 
+#include <scratch3/scratch3.h>
+
 #include "../ast/ast.hpp"
 #include "../resource.hpp"
 #include "../vm/memory.hpp"
@@ -131,4 +133,4 @@ private:
 	friend class Compiler;
 };
 
-CompiledProgram *CompileProgram(Program *p, Loader *loader);
+CompiledProgram *CompileProgram(Program *p, Loader *loader, const Scratch3CompilerOptions *options);
