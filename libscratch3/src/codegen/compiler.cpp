@@ -654,7 +654,6 @@ public:
 	virtual void Visit(OnKeyPressed *node)
 	{
 		uint16_t scancode = SDL_GetScancodeFromName(node->key.c_str());
-		
 		cp.WriteOpcode(Op_onkey);
 		cp.WriteText(scancode);
 	}
@@ -666,17 +665,19 @@ public:
 
 	virtual void Visit(OnStageClicked *node)
 	{
-		// TODO: Implement
+		cp.WriteOpcode(Op_onclick);
 	}
 
 	virtual void Visit(OnBackdropSwitch *node)
 	{
-		// TODO: Implement
+		cp.WriteOpcode(Op_onbackdropswitch);
+		cp.WriteString(Segment_text, node->backdrop);
 	}
 
 	virtual void Visit(OnGreaterThan *node)
 	{
-		// TODO: Implement
+		cp.WriteText<uint8_t>(node->value);
+		node->e->Accept(this); // expression to test
 	}
 
 	virtual void Visit(OnEvent *node)
@@ -1139,7 +1140,7 @@ public:
 		for (AutoRelease<StatementList> &sl : node->sll)
 		{
 			topLevel = true;
-			cp.WriteStable<int64_t>(cp._text.size()); // offset
+			cp.WriteReference(Segment_stable, Segment_text, cp._text.size()); // offset
 			sl->Accept(this);
 		}
 	}
@@ -1152,10 +1153,11 @@ public:
 
 		cp.WriteString(Segment_stable, node->name);
 		cp.WriteString(Segment_stable, node->dataFormat);
-		cp.WriteRdata<int32_t>(node->bitmapResolution);
-		cp.WriteRdata<double>(node->rotationCenterX);
-		cp.WriteRdata<double>(node->rotationCenterY);
-		cp.WriteRdata<int64_t>(size);
+		cp.WriteStable<int32_t>(node->bitmapResolution);
+		cp.WriteStable<double>(node->rotationCenterX);
+		cp.WriteStable<double>(node->rotationCenterY);
+		cp.WriteReference(Segment_stable, Segment_data, cp._data.size());
+		cp.WriteStable<uint64_t>(size);
 
 		cp.WriteRdata(data, size);
 	}

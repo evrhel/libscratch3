@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <unordered_set>
 
 #include <lysys/lysys.hpp>
 
@@ -8,19 +9,70 @@
 
 #include <SDL.h>
 
+struct CostumeInfo
+{
+	char *name;
+	char *format;
+	int32_t bitmapResolution;
+	double rotationCenterX;
+	double rotationCenterY;
+	uint64_t offset;
+	uint64_t size;
+};
+
+struct ScriptInfo
+{
+	uint64_t offset;
+};
+
+struct SpriteTableEntry
+{
+	char *name;
+	double x, y;
+	double size;
+	double direction;
+	uint64_t currentCostume;
+	uint64_t layer;
+	bool visible;
+	bool isStage;
+	bool draggable;
+	const char *rotationStyle;
+	uint64_t initializer;
+	std::vector<ScriptInfo> scripts;
+	std::vector<CostumeInfo> costumes;
+};
+
+struct InstructionInfo
+{
+	const SpriteTableEntry *sprite;
+	uint64_t index;
+	bool isInitializer;
+};
+
+using SpriteTable = std::vector<SpriteTableEntry>;
+
 static void usage()
 {
 	printf("Usage: sdisas3 [options...] <file>\n\n");
 	printf("Options:\n");
 	printf("  -h, --help         Show this message\n");
+	printf("  -s, --summary      Show a summary of the program\n");
 	printf("  -d, --disassemble  Disassemble the program\n");
+	printf("  -t, --table        Show the sprite table\n");
 }
 
-static void disassemble(uint8_t *fileData, size_t fileSize);
+static void ShowSummary(uint8_t *fileData, size_t fileSize, const SpriteTable &st);
+static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTable &st);
+static void ShowTable(const SpriteTable &st);
+
+static void ParseSpriteTable(uint8_t *fileData, size_t fileSize, SpriteTable *table);
+static uint8_t *ParseTableEntry(uint8_t *fileData, size_t fileSize, uint8_t *ptr, SpriteTableEntry *entry);
+static InstructionInfo *GetInstructionInfo(const SpriteTable &st, uint64_t offset);
 
 int main(int argc, char *argv[])
 {
-	bool disas = false;
+	bool summarize = false, disas = false, table = false;
+
 	const char *file = nullptr;
 	for (int i = 1; i < argc; i++)
 	{
@@ -29,9 +81,17 @@ int main(int argc, char *argv[])
 			usage();
 			return 0;
 		}
-		else if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--disassemble"))
+		else if (!strcmp(argv[i], "--summary"))
+		{
+			summarize = true;
+		}
+		else if (!strcmp(argv[i], "--disassemble"))
 		{
 			disas = true;
+		}
+		else if (!strcmp(argv[i], "--table"))
+		{
+			table = true;
 		}
 		else if (argv[i][0] != '-')
 		{
@@ -40,8 +100,20 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			printf("Unknown option `%s`\n", argv[i]);
-			return 1;
+			for (char *c = argv[i] + 1; *c; c++)
+			{
+				if (*c == 'h')
+				{
+					usage();
+					return 0;
+				}
+				else if (*c == 's')
+					summarize = true;
+				else if (*c == 'd')
+					disas = true;
+				else if (*c == 't')
+					table = true;
+			}
 		}
 	}
 	
@@ -59,8 +131,49 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	printf("Dump of file `%s`\n\n", file);
+	printf("Dump of file `%s`\n", file);
 
+	SpriteTable st;
+	ParseSpriteTable(fileData, size, &st);
+
+	if (summarize)
+	{
+		printf("\n");
+		ShowSummary(fileData, size, st);
+	}
+
+	if (disas)
+	{
+		printf("\n");
+		ShowDissasembly(fileData, size, st);
+	}
+
+	if (table)
+	{
+		printf("\n");
+		ShowTable(st);
+	}
+
+	return 0;
+}
+
+static const char *GetRotationStyle(uint8_t style)
+{
+	switch (style)
+	{
+	case RotationStyle_AllAround:
+		return "full";
+	case RotationStyle_LeftRight:
+		return "lr";
+	case RotationStyle_DontRotate:
+		return "none";
+	default:
+		return "?";
+	}
+}
+
+static void ShowSummary(uint8_t *fileData, size_t fileSize, const SpriteTable &st)
+{
 	ProgramHeader *header = (ProgramHeader *)fileData;
 
 	printf("  Summary\n\n");
@@ -69,17 +182,9 @@ int main(int argc, char *argv[])
 	printf("    %8X .stable\n", header->stable);
 	printf("    %8X .data\n", header->data);
 	printf("    %8X .rdata\n", header->rdata);
-
-	if (disas)
-	{
-		printf("\n");
-		disassemble(fileData, size);
-	}
-
-	return 0;
 }
 
-static void disassemble(uint8_t *fileData, size_t fileSize)
+static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTable &st)
 {
 	printf("  Disassembly\n\n");
 
@@ -100,9 +205,20 @@ static void disassemble(uint8_t *fileData, size_t fileSize)
 	uint8_t *ptr = text;
 	while (ptr < textEnd)
 	{
+		const InstructionInfo *info = GetInstructionInfo(st, ptr - fileData);
+		if (info)
+		{
+			if (ptr != text)
+				printf("\n");
+
+			printf("    %8s  ", info->sprite->name);
+			if (info->isInitializer)
+				printf("<init>\n");
+			else
+				printf("script %llu\n", info->index);
+		}
+
 		uint8_t opcode = *ptr;
-		if (opcode == Op_onflag || opcode == Op_onkey || opcode == Op_onclick || opcode == Op_onbackdropswitch || opcode == Op_ongt || opcode == Op_onevent || opcode == Op_onclone)
-			printf("\n");
 
 		printf("    %8X  ", (uint32_t)(ptr - text));
 
@@ -322,23 +438,8 @@ static void disassemble(uint8_t *fileData, size_t fileSize)
 			printf("bounceonedge\n");
 			break;
 		case Op_setrotationstyle:
-			switch (*ptr)
-			{
-			case RotationStyle_AllAround:
-				s = "allaround";
-				break;
-			case RotationStyle_LeftRight:
-				s = "leftright";
-				break;
-			case RotationStyle_DontRotate:
-				s = "dontrotate";
-				break;
-			default:
-				s = "unknown";
-				break;
-			}
+			printf("setrotationstyle %s\n", GetRotationStyle(*ptr));
 			ptr++;
-			printf("setrotationstyle %s\n", s);
 			break;
 		case Op_getx:
 			printf("getx\n");
@@ -691,4 +792,175 @@ static void disassemble(uint8_t *fileData, size_t fileSize)
 			break;
 		}
 	}
+}
+
+static void ShowTable(const SpriteTable &st)
+{
+	printf("  Sprite Table\n\n");
+
+	printf("    %8zu  Sprite Count\n\n", st.size());
+
+	for (size_t i = 0; i < st.size(); i++)
+	{
+		const SpriteTableEntry &entry = st[i];
+
+		printf("    %8s\n", entry.name);
+		printf("    %8lg  X\n", entry.x);
+		printf("    %8lg  Y\n", entry.y);
+		printf("    %8lg  Size\n", entry.size);
+		printf("    %8lg  Direction\n", entry.direction);
+		printf("    %8llu  Current Costume\n", entry.currentCostume);
+		printf("    %8llu  Layer\n", entry.layer);
+		printf("    %8s  Visible\n", entry.visible ? "true" : "false");
+		printf("    %8s  Is Stage\n", entry.isStage ? "true" : "false");
+		printf("    %8s  Draggable\n", entry.draggable ? "true" : "false");
+		printf("    %8s  Rotation Style\n", entry.rotationStyle);
+		printf("    %8llX  Initializer\n", entry.initializer);
+		printf("    %8zu  Scripts\n", entry.scripts.size());
+		// Don't display additional information about scripts
+		printf("    %8zu  Costumes\n", entry.costumes.size());
+		for (size_t j = 0; j < entry.costumes.size(); j++)
+		{
+			const CostumeInfo &costume = entry.costumes[j];
+
+			printf("              %s\n", costume.name);
+			printf("              %8s  Format\n", costume.format);
+			printf("              %8d  Bitmap Resolution\n", costume.bitmapResolution);
+			printf("              %8lg  Rotation Center X\n", costume.rotationCenterX);
+			printf("              %8lg  Rotation Center Y\n", costume.rotationCenterY);
+			printf("              %8llX  Offset\n", costume.offset);
+			printf("              %8llu  Size\n", costume.size);
+		}
+
+		printf("\n");
+	}
+}
+
+static void ParseSpriteTable(uint8_t *fileData, size_t fileSize, SpriteTable *table)
+{
+	ProgramHeader *header = (ProgramHeader *)fileData;
+	uint8_t *ptr = fileData + header->stable;
+
+	table->resize(*(uint64_t *)ptr);
+	ptr += sizeof(uint64_t);
+
+	for (size_t i = 0; i < table->size(); i++)
+	{
+		SpriteTableEntry &entry = (*table)[i];
+		ptr = ParseTableEntry(fileData, fileSize, ptr, &entry);
+	}
+}
+
+static uint8_t *ParseTableEntry(uint8_t *fileData, size_t fileSize, uint8_t *ptr, SpriteTableEntry *entry)
+{
+	entry->name = (char *)(fileData + *(uint64_t *)ptr);
+	ptr += sizeof(uint64_t);
+
+	entry->x = *(double *)ptr;
+	ptr += sizeof(double);
+
+	entry->y = *(double *)ptr;
+	ptr += sizeof(double);
+
+	entry->size = *(double *)ptr;
+	ptr += sizeof(double);
+
+	entry->direction = *(double *)ptr;
+	ptr += sizeof(double);
+
+	entry->currentCostume = *(int64_t *)ptr;
+	ptr += sizeof(int64_t);
+
+	entry->layer = *(int64_t *)ptr;
+	ptr += sizeof(int64_t);
+
+	entry->visible = *ptr;
+	ptr++;
+
+	entry->isStage = *ptr;
+	ptr++;
+
+	entry->draggable = *ptr;
+	ptr++;
+
+	entry->rotationStyle = GetRotationStyle(*ptr);
+	ptr++;
+
+	entry->initializer = *(uint64_t *)ptr;
+	ptr += sizeof(uint64_t);
+
+	entry->scripts.resize(*(uint64_t *)ptr);
+	ptr += sizeof(uint64_t);
+
+	for (size_t j = 0; j < entry->scripts.size(); j++)
+	{
+		ScriptInfo &script = entry->scripts[j];
+		script.offset = *(uint64_t *)ptr;
+		ptr += sizeof(uint64_t);
+	}
+
+	entry->costumes.resize(*(uint64_t *)ptr);
+	ptr += sizeof(uint64_t);
+
+	for (size_t j = 0; j < entry->costumes.size(); j++)
+	{
+		CostumeInfo &costume = entry->costumes[j];
+
+		costume.name = (char *)(fileData + *(uint64_t *)ptr);
+		ptr += sizeof(uint64_t);
+
+		costume.format = (char *)(fileData + *(uint64_t *)ptr);
+		ptr += sizeof(uint64_t);
+
+		costume.bitmapResolution = *(int32_t *)ptr;
+		ptr += sizeof(int32_t);
+
+		costume.rotationCenterX = *(double *)ptr;
+		ptr += sizeof(double);
+
+		costume.rotationCenterY = *(double *)ptr;
+		ptr += sizeof(double);
+
+		costume.offset = *(uint64_t *)ptr;
+		ptr += sizeof(uint64_t);
+
+		costume.size = *(uint64_t *)ptr;
+		ptr += sizeof(uint64_t);
+	}
+
+	return ptr;
+}
+
+static InstructionInfo *GetInstructionInfo(const SpriteTable &st, uint64_t offset)
+{
+	static InstructionInfo info;
+
+	info.sprite = nullptr;
+	info.index = 0;
+	info.isInitializer = false;
+
+	for (const SpriteTableEntry &ste : st)
+	{
+		if (ste.initializer == offset)
+		{
+			info.sprite = &ste;
+			info.index = 0;
+			info.isInitializer = true;
+			return &info;
+		}
+
+		for (size_t i = 0; i < ste.scripts.size(); i++)
+		{
+			const ScriptInfo &si = ste.scripts[i];
+			if (si.offset == offset)
+			{
+				info.sprite = &ste;
+				info.index = i;
+				info.isInitializer = false;
+				return &info;
+			}
+		}
+	}
+
+	return nullptr;
 }
