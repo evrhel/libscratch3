@@ -264,6 +264,8 @@ void LS_NORETURN VirtualMachine::Raise(ExceptionType type, const char *message)
 	_exceptionType = type;
 	_exceptionMessage = message;
 
+	DumpScript(_current);
+
 	Terminate();
 }
 
@@ -666,14 +668,12 @@ void VirtualMachine::Scheduler()
 		if (_exceptionType != Exception_None)
 		{
 			// script raised an exception
-			printf("<EXCEPTION> %s\n", _exceptionMessage);
-			printf("Exception information:\n");
-			DumpScript(_current);
-
-			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", _exceptionMessage, _render->GetWindow());
+			printf("<EXCEPTION> %s: %s\n", ExceptionString(_exceptionType), _exceptionMessage);
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", ExceptionString(_exceptionType), _render->GetWindow());
 			
 			_activeScripts = 0;
 			_waitingScripts = 0;
+			_shouldStop = true;
 			return;
 		}
 
