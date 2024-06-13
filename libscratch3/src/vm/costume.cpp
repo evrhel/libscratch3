@@ -2,46 +2,47 @@
 
 #include <cstdio>
 
-#include "../resource.hpp"
-#include "../ast/ast.hpp"
-
 #include "stb_image.h"
 
-void Costume::Load(Loader *loader, CostumeDef *def)
+void Costume::Init(const CostumeInfo *info)
 {
-	Resource *rsrc = loader->Find(def->md5ext);
-	if (!rsrc)
-	{
-		printf("Costume::Load: Unknown resource %s\n", def->md5ext.c_str());
-		return;
-	}
+	_name = info->name;
+	_dataFormat = info->dataFormat;
+	_bitmapResolution = info->bitmapResolution;
+	_logicalCenter.x = info->rotationCenterX;
+	_logicalCenter.y = info->rotationCenterY;
+	_data = info->data;
+	_dataSize = info->dataSize;
+}
 
-	if (def->dataFormat == "png" || def->dataFormat == "jpg" || def->dataFormat == "jpeg")
+void Costume::Load()
+{
+	if (_dataFormat == "png" || _dataFormat == "jpg" || _dataFormat == "jpeg")
 	{
 		stbi_set_flip_vertically_on_load(true);
 
 		// load image
 		int width, height, channels;
-		unsigned char *data = stbi_load_from_memory(rsrc->Data(), rsrc->Size(),
+		unsigned char *data = stbi_load_from_memory(_data, _dataSize,
 			&width, &height, &channels, 4);
 
 		if (!data)
 		{
-			printf("Costume::Load: Failed to load image %s\n", def->md5ext.c_str());
+			printf("Costume::Load: Failed to load image %s\n", _name.c_str());
 			return;
 		}
 
 		// check for invalid size
 		if (width > MAX_TEXTURE_SIZE || height > MAX_TEXTURE_SIZE)
 		{
-			printf("Costume::Load: Image %s is too large (%dx%d)\n", def->md5ext.c_str(), width, height);
+			printf("Costume::Load: Image %s is too large (%dx%d)\n", _name.c_str(), width, height);
 			return;
 		}
 
 		// generate mask
 		if (!GenMaskForPixels(data, width, height))
 		{
-			printf("Costume::Load: Failed to generate mask for %s\n", def->md5ext.c_str());
+			printf("Costume::Load: Failed to generate mask for %s\n", _name.c_str());
 			stbi_image_free(data);
 			return;
 		}
@@ -61,14 +62,14 @@ void Costume::Load(Loader *loader, CostumeDef *def)
 		_texWidth = width;
 		_texHeight = height;
 
-		_logicalSize = IntVector2(_texWidth, _texHeight) / def->bitmapResolution;
+		_logicalSize = IntVector2(_texWidth, _texHeight) / _bitmapResolution;
 	}
-	else if (def->dataFormat == "svg")
+	else if (_dataFormat == "svg")
 	{
-		_handle = rsvg_handle_new_from_data(rsrc->Data(), rsrc->Size(), NULL);
+		_handle = rsvg_handle_new_from_data(_data, _dataSize, NULL);
 		if (!_handle)
 		{
-			printf("Costume::Load: Failed to load SVG %s\n", def->md5ext.c_str());
+			printf("Costume::Load: Failed to load SVG %s\n", _name.c_str());
 			return;
 		}
 		
@@ -85,8 +86,6 @@ void Costume::Load(Loader *loader, CostumeDef *def)
 		// initial render
 		Render(1.0, 1.0);
 	}
-
-	_name = def->name;
 }
 
 bool Costume::TestCollision(int32_t x, int32_t y) const

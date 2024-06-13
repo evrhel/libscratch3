@@ -9,6 +9,8 @@
 
 #include <mutil/mutil.h>
 
+#include "preload.hpp"
+
 // maximum allowed texture size
 #define MAX_TEXTURE_SIZE 2048
 
@@ -62,11 +64,9 @@ public:
 	//! \return Whether the point is inside the costume
 	bool TestCollision(int32_t x, int32_t y) const;
 
-	//! \brief Load a costume from an AST node
-	//!
-	//! \param loader The loader to use to load resources
-	//! \param def The costume definition
-	void Load(Loader *loader, CostumeDef *def);
+	void Init(const CostumeInfo *info);
+
+	void Load();
 
 	//! \brief Render the costume to a texture of a given size
 	//!
@@ -93,10 +93,17 @@ private:
 	Vector2 _logicalCenter;
 	IntVector2 _logicalSize;
 
+	int32_t _bitmapResolution;
+
 	// svg specific
 	RsvgHandle *_handle;
 	int _svgWidth, _svgHeight;
 	double _svgAspect;
+
+	// data
+	std::string _dataFormat;
+	uint8_t *_data;
+	uint64_t _dataSize;
 
 	void Cleanup();
 

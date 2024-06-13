@@ -32,23 +32,6 @@ struct DataReference
 	uint64_t off;
 };
 
-struct SpriteProto
-{
-	double x;
-	double y;
-	double size;
-	double direction;
-	int64_t costume;
-	int64_t layer;
-
-	uint8_t visible;
-	uint8_t isStage;
-	uint8_t draggable;
-	uint8_t rotationStyle;
-
-	uint64_t initializers; // Offset of initializer in text
-};
-
 struct ProgramHeader
 {
 	uint32_t magic;

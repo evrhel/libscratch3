@@ -8,8 +8,7 @@
 
 #include "costume.hpp"
 #include "script.hpp"
-
-#include "../ast/astdef.hpp"
+#include "preload.hpp"
 
 using namespace mutil;
 
@@ -129,7 +128,8 @@ public:
     // call from render thread
     void Update();
 
-    void Init(SpriteDef *def);
+    // return next sprite data
+    void Init(const SpriteInfo *info);
 
     // call from render thread
     void Load(VirtualMachine *vm);
@@ -138,9 +138,16 @@ public:
 
     constexpr const std::vector<Script *> &GetClickListeners() const { return _clickListeners; }
 
+    constexpr const std::vector<uint64_t> &GetScriptOffsets() const { return _scriptOffsets; }
+
     Sprite();
     ~Sprite();
 private:
+    uint8_t *_bytecode = nullptr;
+    size_t _bytecodeSize = 0;
+
+    uint8_t *_spriteData = nullptr, *_spriteEnd = nullptr;
+
     std::string _name;
     bool _isStage = false;
 
@@ -149,6 +156,10 @@ private:
     double _x = 0.0, _y = 0.0;
     double _size = 100.0;
     double _direction = 90.0;
+
+    int64_t _layer = 0;
+
+    bool _draggable = false;
 
     RotationStyle _rotationStyle = RotationStyle_AllAround;
 
@@ -182,7 +193,6 @@ private:
 
     VirtualMachine *_vm = nullptr;
 
-    SpriteDef *_node = nullptr;
     std::vector<Script *> _clickListeners;
 
     bool CheckSpriteAdv(const Sprite *sprite) const;

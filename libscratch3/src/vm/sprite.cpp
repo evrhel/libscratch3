@@ -3,7 +3,7 @@
 #include <imgui.h>
 
 #include "../render/renderer.hpp"
-#include "../ast/ast.hpp"
+#include "../codegen/compiler.hpp"
 
 #include "vm.hpp"
 
@@ -189,45 +189,9 @@ void Sprite::Update()
     c->Render(uniformScale, render->GetScale());
 }
 
-void Sprite::Init(SpriteDef *def)
+void Sprite::Init(const SpriteInfo *info)
 {
-    if (_node)
-        return; // already initialized
-
-    _isStage = def->isStage;
-
-    _nCostumes = def->costumes->costumes.size();
-    if (_nCostumes)
-    {
-        _costumes = new Costume[_nCostumes];
-        for (int64_t i = 0; i < _nCostumes; i++)
-        {
-            CostumeDef &cdef = *def->costumes->costumes[i];
-            _costumeNames[cdef.name] = i + 1;
-        }
-    }
-
-    _name = def->name;
-    _shown = def->visible;
-    _x = def->x;
-    _y = def->y;
-    _size = def->size;
-    _direction = def->direction;
-    SetCostume(def->currentCostume);
-    _volume = def->volume;
-
-    _colorEffect = 0.0;
-    _brightnessEffect = 0.0;
-    _fisheyeEffect = 0.0;
-    _whirlEffect = 0.0;
-    _pixelateEffect = 0.0;
-    _mosaicEffect = 0.0;
-    _ghostEffect = 0.0;
-
-    _message.clear();
-    _messageState = MESSAGE_STATE_NONE;
-
-    _node = Retain(def);
+   
 }
 
 void Sprite::Load(VirtualMachine *vm)

@@ -14,14 +14,13 @@
 #include <cairo/cairo.h>
 #include <SDL.h>
 
+#include <scratch3/scratch3.h>
+
 #include "memory.hpp"
 #include "costume.hpp"
 #include "script.hpp"
 #include "io.hpp"
 #include "debug.hpp"
-
-// Rate of screen updates
-#define FRAMERATE 30
 
 class Loader;
 class VirtualMachine;
@@ -48,17 +47,7 @@ enum ExceptionType
 class VirtualMachine final
 {
 public:
-
-	//! \brief Load a program into the VM
-	//! 
-	//! Will fail if the VM alreadu has a program loaded.
-	//! 
-	//! \param prog Program to load
-	//! \param name Name of the program
-	//! \param loader Loader for the program
-	//! 
-	//! \return 0 on success, -1 on failure.
-	int Load(Program *prog, const std::string &name, Loader *loader);
+	int Load(const char *name, uint8_t *bytecode, size_t size);
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -96,7 +85,7 @@ public:
 
 	//
 	/////////////////////////////////////////////////////////////////
-	// Script Control (requires lock)
+	// Script Control
 	//
 
 	//! \brief Send the flag clicked event
@@ -171,21 +160,13 @@ public:
 	//! specified index
 	Value &StackAt(size_t i);
 
-	//! \brief Push an execution frame onto the stack.
-	//! 
-	//! Raises a StackOverflow exception if the stack is full.
-	//! 
-	//! \param sl Statement list to execute
-	//! \param count Number of times to execute the statement list
-	//! \param flags Flags to control execution
-	void PushFrame(StatementList *sl, int64_t count, uint32_t flags);
-
 	//
 	/////////////////////////////////////////////////////////////////
 	// Internals
 	//
 
-	constexpr Program *GetProgram() const { return _prog; }
+	constexpr uint8_t *GetBytecode() const { return _bytecode; }
+	constexpr size_t GetBytecodeSize() const { return _bytecodeSize; }
 	constexpr const std::string &GetProgramName() const { return _progName; }
 
 	Value &FindVariable(const std::string &id);
@@ -223,12 +204,15 @@ public:
 	VirtualMachine &operator=(const VirtualMachine &) = delete;
 	VirtualMachine &operator=(VirtualMachine &&) = delete;
 
-	VirtualMachine();
+	VirtualMachine(const Scratch3VMOptions *options);
 	VirtualMachine(const VirtualMachine &) = delete;
 	VirtualMachine(VirtualMachine &&) = delete;
 	~VirtualMachine();
 private:
-	Program *_prog; // Program to run
+	Scratch3VMOptions _options; // VM options
+
+	uint8_t *_bytecode; // Bytecode for the program
+	size_t _bytecodeSize; // Size of the bytecode
 	std::string _progName; // Name of the program
 	Loader *_loader; // Loader for the program
 
@@ -237,8 +221,7 @@ private:
 
 	std::unordered_map<std::string, intptr_t> _spriteNames; // Sprite name lookup
 
-	std::unordered_map<std::string, Value> _variables; // Global variables
-	std::unordered_map<std::string, Value> _lists; // Global lists
+	std::unordered_map<std::string, Value> _variables; // Variables
 
 	std::vector<Script> _scripts; // All scripts
 	size_t _nextScript; // Next script to run
@@ -302,7 +285,6 @@ private:
 	jmp_buf _panicJmp; // Panic jump buffer
 
 	Script *_current; // Currently executing script
-	Script _waitRunner; // Used to handle WaitUntil inside the scheduler
 
 	double _epoch; // VM start time
 

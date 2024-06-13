@@ -26,6 +26,7 @@ set(SOURCES
 	${src}/vm/debug.cpp
 	${src}/vm/io.cpp
 	${src}/vm/memory.cpp
+	${src}/vm/preload.cpp
 	${src}/vm/script.cpp
 	${src}/vm/sprite.cpp
 	${src}/vm/vm.cpp
