@@ -159,7 +159,7 @@ void Debugger::Render()
 				for (auto &p : _vm->_variables)
 				{
 					Value &v = p.second;
-					const char *name = p.first.c_str();
+					const char *name = p.first->str;
 
 					switch (v.type)
 					{

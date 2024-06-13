@@ -241,7 +241,7 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMTerminate(Scratch3 *S)
 	if (!S->vm)
 		return SCRATCH3_ERROR_NO_VM;
 
-	S->vm->Terminate();
+	S->vm->VMTerminate();
 	return SCRATCH3_ERROR_SUCCESS;
 }
 

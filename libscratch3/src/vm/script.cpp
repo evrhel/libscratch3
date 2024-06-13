@@ -1,5 +1,7 @@
 #include "script.hpp"
 
+#include <cstdio>
+
 #include "vm.hpp"
 #include "sprite.hpp"
 #include "../codegen/compiler.hpp"
@@ -25,71 +27,71 @@ const char *GetStateName(int state)
 	}
 }
 
-void ScriptInit(Script &script, const ScriptInfo *info)
+void Script::Init(const ScriptInfo *info)
 {
-	if (script.stack)
+	if (stack)
 		abort();
 
-	script.stack = EMBRYO;
-	script.sprite = nullptr;
-	script.fiber = nullptr;
-	script.sleepUntil = 0.0;
-	script.waitInput = false;
-	script.askInput = false;
-	script.ticks = 0;
-	script.entry = info->loc;
-	script.pc = script.entry;
-	script.stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
+	state = EMBRYO;
+	sprite = nullptr;
+	fiber = nullptr;
+	sleepUntil = 0.0;
+	waitInput = false;
+	askInput = false;
+	ticks = 0;
+	entry = info->loc;
+	pc = entry;
+	stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
 
 	// fill stack with garbage
-	if (script.stack)
+	if (stack)
 	{
-		script.sp = script.stack + STACK_SIZE;
-		memset(script.stack, 0xab, STACK_SIZE * sizeof(Value));
+		sp = stack + STACK_SIZE;
+		memset(stack, 0xab, STACK_SIZE * sizeof(Value));
 	}
 	else
-		script.sp = nullptr; // out of memory
+		sp = nullptr; // out of memory
+
+	except = Exception_None;
+	exceptMessage = nullptr;
 }
 
-void ScriptDestroy(Script &script)
+void Script::Destroy()
 {
-	free(script.stack);
-	memset(&script, 0, sizeof(Script));
+	free(stack);
+	memset(this, 0, sizeof(Script));
 }
 
-void ScriptReset(Script &script)
+void Script::Reset()
 {
-	script.state = EMBRYO;
-	script.sleepUntil = 0.0;
-	script.waitInput = false;
-	script.askInput = false;
-	script.ticks = 0;
-	script.pc = script.entry;
+	state = EMBRYO;
+	sleepUntil = 0.0;
+	waitInput = false;
+	askInput = false;
+	ticks = 0;
+	pc = entry;
 
 	// release stack
-	Value *const stackEnd = script.stack + STACK_SIZE;
-	while (script.sp < stackEnd)
+	Value *const stackEnd = stack + STACK_SIZE;
+	while (sp < stackEnd)
 	{
-		ReleaseValue(*script.sp);
-		memset(script.sp, 0xab, sizeof(Value));
-		script.sp++;
+		ReleaseValue(*sp);
+		memset(sp, 0xab, sizeof(Value));
+		sp++;
 	}
 }
 
-void ScriptStart(Script &script)
+void Script::Start()
 {
-	ScriptReset(script);
-	script.state = RUNNABLE;
+	Reset();
+	state = RUNNABLE;
 }
 
-int ScriptMain(void *scriptPtr)
+void Script::Main()
 {
-	Script &script = *(Script *)scriptPtr;
-	VirtualMachine &vm = *script.vm;
-	Sprite &sprite = *script.sprite;
-
-	ProgramHeader *header = (ProgramHeader *)vm.GetBytecode();
-	uint8_t *textBegin = vm.GetBytecode() + header->text;
+	uint8_t *bytecode = vm->GetBytecode();
+	ProgramHeader *header = (ProgramHeader *)bytecode;
+	uint8_t *textBegin = bytecode + header->text;
 	uint8_t *textEnd = textBegin + header->text_size;
 
 	bool b, b2;
@@ -97,340 +99,328 @@ int ScriptMain(void *scriptPtr)
 	int64_t i64;
 	double real;
 	String *str;
+	Value *lhs, *rhs;
 
 	for (;;)
 	{
-		script.ticks++;
+		ticks++;
 
-		Opcode opcode = (Opcode)*script.pc;
-		script.pc++;
+		Opcode opcode = (Opcode)*pc;
+		pc++;
 
 		switch (opcode)
 		{
 		default:
-			vm.Raise(VMError, "Invalid opcode");
+			Raise(VMError, "Invalid opcode");
 		case Op_noop:
+			// do nothing
 			break;
 		case Op_int:
-			vm.Raise(VMError, "Software interrupt");
+			Raise(VMError, "Software interrupt");
 		case Op_varset:
-			vm.Raise(NotImplemented, "varset");
-		case Op_varadd:
-			vm.Raise(NotImplemented, "varadd");
+			Assign(vm->GetVariableRef(StackAt(0)), StackAt(1));
+			Pop();
+			Pop();
+			break;
+		case Op_varadd: {
+			Value &v = vm->GetVariableRef(StackAt(0));
+			SetReal(v, ToReal(v) + ToReal(StackAt(1)));
+			Pop();
+			Pop();
+			break;
+		}
 		case Op_varget:
-			vm.Raise(NotImplemented, "varget");
+			Assign(StackAt(0), vm->GetVariableRef(StackAt(0)));
+			break;
 		case Op_listcreate:
-			i64 = *(int64_t *)script.pc;
-			script.pc += sizeof(int64_t);
-			AllocList(vm.Push(), i64);
+			i64 = *(int64_t *)pc;
+			pc += sizeof(int64_t);
+			AllocList(Push(), i64);
 			break;
 		case Op_jmp:
-			ui64 = *(uint64_t *)script.pc;
-			script.pc = textBegin + ui64;
+			ui64 = *(uint64_t *)pc;
+			pc = textBegin + ui64;
 			break;
 		case Op_jz:
-			ui64 = *(uint64_t *)script.pc;
-			b = Truth(vm.StackAt(0));
-			vm.Pop();
+			ui64 = *(uint64_t *)pc;
+			b = Truth(StackAt(0));
+			Pop();
 
 			if (!b)
-				script.pc = textBegin + ui64;
+				pc = textBegin + ui64;
 			else
-				script.pc += sizeof(uint64_t);
+				pc += sizeof(uint64_t);
 			break;
 		case Op_jnz:
-			ui64 = *(uint64_t *)script.pc;
-			b = Truth(vm.StackAt(0));
-			vm.Pop();
+			ui64 = *(uint64_t *)pc;
+			b = Truth(StackAt(0));
+			Pop();
 
 			if (b)
-				script.pc = textBegin + ui64;
+				pc = textBegin + ui64;
 			else
-				script.pc += sizeof(uint64_t);
+				pc += sizeof(uint64_t);
 			break;
 		case Op_yield:
-			vm.Sched();
+			Sched();
 			break;
 		case Op_pop:
-			vm.Pop();
+			Pop();
 			break;
 		case Op_pushnone:
-			vm.Push();
+			Push();
 			break;
 		case Op_pushint:
-			i64 = *(int64_t *)script.pc;
-			script.pc += sizeof(int64_t);
-			SetInteger(vm.Push(), i64);
+			i64 = *(int64_t *)pc;
+			pc += sizeof(int64_t);
+			SetInteger(Push(), i64);
 			break;
 		case Op_pushreal:
-			real = *(double *)script.pc;
-			script.pc += sizeof(double);
-			SetReal(vm.Push(), real);
+			real = *(double *)pc;
+			pc += sizeof(double);
+			SetReal(Push(), real);
 			break;
 		case Op_pushtrue:
-			SetBool(vm.Push(), true);
+			SetBool(Push(), true);
 			break;
 		case Op_pushfalse:
-			SetBool(vm.Push(), false);
+			SetBool(Push(), false);
 			break;
 		case Op_pushstring:
-			ui64 = *(uint64_t *)script.pc;
-			str = (String *)(vm.GetBytecode() + ui64);
-			script.pc += sizeof(uint64_t);
-			SetStaticString(vm.Push(), str);
+			ui64 = *(uint64_t *)pc;
+			str = (String *)(bytecode + ui64);
+			pc += sizeof(uint64_t);
+			SetStaticString(Push(), str);
 			break;
 		case Op_dup:
-			vm.Push();
-			Assign(vm.StackAt(0), vm.StackAt(1));
+			Push();
+			Assign(StackAt(0), StackAt(1));
 			break;
 		case Op_eq:
-			SetBool(vm.StackAt(1), Equals(vm.StackAt(0), vm.StackAt(1)));
-			vm.Pop();
+			SetBool(StackAt(1), Equals(StackAt(0), StackAt(1)));
+			Pop();
 			break;
 		case Op_neq:
-			SetBool(vm.StackAt(1), !Equals(vm.StackAt(0), vm.StackAt(1)));
-			vm.Pop();
+			SetBool(StackAt(1), !Equals(StackAt(0), StackAt(1)));
+			Pop();
 			break;
 		case Op_gt:
-			SetBool(vm.StackAt(1), ToReal(vm.StackAt(0)) > ToReal(vm.StackAt(1)));
-			vm.Pop();
+			SetBool(StackAt(1), ToReal(StackAt(0)) > ToReal(StackAt(1)));
+			Pop();
 			break;
 		case Op_ge:
-			SetBool(vm.StackAt(1), ToReal(vm.StackAt(0)) >= ToReal(vm.StackAt(1)));
-			vm.Pop();
+			SetBool(StackAt(1), ToReal(StackAt(0)) >= ToReal(StackAt(1)));
+			Pop();
 			break;
 		case Op_lt:
-			SetBool(vm.StackAt(1), ToReal(vm.StackAt(0)) < ToReal(vm.StackAt(1)));
-			vm.Pop();
+			SetBool(StackAt(1), ToReal(StackAt(0)) < ToReal(StackAt(1)));
+			Pop();
 			break;
 		case Op_le:
-			SetBool(vm.StackAt(1), ToReal(vm.StackAt(0)) <= ToReal(vm.StackAt(1)));
-			vm.Pop();
+			SetBool(StackAt(1), ToReal(StackAt(0)) <= ToReal(StackAt(1)));
+			Pop();
 			break;
 		case Op_land:
-			SetBool(vm.StackAt(1), Truth(vm.StackAt(0)) && Truth(vm.StackAt(1)));
-			vm.Pop();
+			SetBool(StackAt(1), Truth(StackAt(0)) && Truth(StackAt(1)));
+			Pop();
 			break;
 		case Op_lor:
-			SetBool(vm.StackAt(1), Truth(vm.StackAt(0)) || Truth(vm.StackAt(1)));
-			vm.Pop();
+			SetBool(StackAt(1), Truth(StackAt(0)) || Truth(StackAt(1)));
+			Pop();
 			break;
 		case Op_lnot:
-			SetBool(vm.StackAt(0), !Truth(vm.StackAt(0)));
+			SetBool(StackAt(0), !Truth(StackAt(0)));
 			break;
 		case Op_add:
-			SetReal(vm.StackAt(0), ToReal(vm.StackAt(0)) + ToReal(vm.StackAt(1)));
+			lhs = &StackAt(1);
+			rhs = &StackAt(0);
+			real = ToReal(*lhs) + ToReal(*rhs);
+			Pop();
+			SetReal(*lhs, real);
 			break;
 		case Op_sub:
-			SetReal(vm.StackAt(0), ToReal(vm.StackAt(0)) - ToReal(vm.StackAt(1)));
 			break;
 		case Op_mul:
-			SetReal(vm.StackAt(0), ToReal(vm.StackAt(0)) * ToReal(vm.StackAt(1)));
 			break;
 		case Op_div:
-			vm.Raise(NotImplemented, "div");
+			break;
 		case Op_mod:
-			SetReal(vm.StackAt(0), fmod(ToReal(vm.StackAt(0)), ToReal(vm.StackAt(1))));
 			break;
 		case Op_neg:
-			SetReal(vm.StackAt(0), -ToReal(vm.StackAt(0)));
 			break;
 		case Op_round:
-			SetReal(vm.StackAt(0), round(ToReal(vm.StackAt(0))));
 			break;
 		case Op_abs:
-			SetReal(vm.StackAt(0), fabs(ToReal(vm.StackAt(0))));
 			break;
 		case Op_floor:
-			SetReal(vm.StackAt(0), floor(ToReal(vm.StackAt(0))));
 			break;
 		case Op_ceil:
-			SetReal(vm.StackAt(0), ceil(ToReal(vm.StackAt(0))));
 			break;
 		case Op_sqrt:
-			SetReal(vm.StackAt(0), sqrt(ToReal(vm.StackAt(0))));
 			break;
 		case Op_sin:
-			SetReal(vm.StackAt(0), sin(ToReal(vm.StackAt(0))));
 			break;
 		case Op_cos:
-			SetReal(vm.StackAt(0), cos(ToReal(vm.StackAt(0))));
 			break;
 		case Op_tan:
-			SetReal(vm.StackAt(0), tan(ToReal(vm.StackAt(0))));
 			break;
 		case Op_asin:
-			SetReal(vm.StackAt(0), asin(ToReal(vm.StackAt(0))));
 			break;
 		case Op_acos:
-			SetReal(vm.StackAt(0), acos(ToReal(vm.StackAt(0))));
 			break;
 		case Op_atan:
-			SetReal(vm.StackAt(0), atan(ToReal(vm.StackAt(0))));
 			break;
 		case Op_ln:
-			SetReal(vm.StackAt(0), log(ToReal(vm.StackAt(0))));
 			break;
 		case Op_log10:
-			SetReal(vm.StackAt(0), log10(ToReal(vm.StackAt(0))));
 			break;
 		case Op_exp:
-			SetReal(vm.StackAt(0), exp(ToReal(vm.StackAt(0))));
 			break;
 		case Op_exp10:
-			SetReal(vm.StackAt(0), pow(10.0, ToReal(vm.StackAt(0))));
 			break;
 		case Op_strcat:
-			ConcatValue(vm.StackAt(1), vm.StackAt(0));
-			vm.Pop();
-			break;
+			Raise(NotImplemented, "strcat");
 		case Op_charat:
-			SetChar(vm.StackAt(1), ValueCharAt(vm.StackAt(0), ToInteger(vm.StackAt(1))));
-			vm.Pop();
-			break;
+			Raise(NotImplemented, "charat");
 		case Op_strlen:
-			SetInteger(vm.StackAt(0), ValueLength(vm.StackAt(0)));
 			break;
 		case Op_strstr:
 			break;
 		case Op_inc:
-			vm.Raise(NotImplemented, "inc");
+			Raise(NotImplemented, "inc");
 		case Op_dec:
-			vm.Raise(NotImplemented, "dec");
+			Raise(NotImplemented, "dec");
 		case Op_movesteps:
 			break;
 		case Op_turndegrees:
-			sprite.SetDirection(ToReal(vm.StackAt(0)) + sprite.GetDirection());
-			vm.Pop();
+			sprite->SetDirection(ToReal(StackAt(0)) + sprite->GetDirection());
+			Pop();
 			break;
 		case Op_goto:
-			vm.Raise(NotImplemented, "goto");
+			Raise(NotImplemented, "goto");
 		case Op_gotoxy:
-			sprite.SetXY(ToReal(vm.StackAt(1)), ToReal(vm.StackAt(0)));
-			vm.Pop();
-			vm.Pop();
+			sprite->SetXY(ToReal(StackAt(1)), ToReal(StackAt(0)));
+			Pop();
+			Pop();
 			break;
 		case Op_glide:
-			vm.Raise(NotImplemented, "glide");
+			Raise(NotImplemented, "glide");
 		case Op_glidexy:
-			vm.Raise(NotImplemented, "glidexy");
+			Raise(NotImplemented, "glidexy");
 		case Op_setdir:
-			sprite.SetDirection(ToReal(vm.StackAt(0)));
-			vm.Pop();
+			sprite->SetDirection(ToReal(StackAt(0)));
+			Pop();
 			break;
 		case Op_lookat:
-			vm.Raise(NotImplemented, "lookat");
+			Raise(NotImplemented, "lookat");
 		case Op_addx:
-			sprite.SetX(ToReal(vm.StackAt(0)) + sprite.GetX());
-			vm.Pop();
+			sprite->SetX(ToReal(StackAt(0)) + sprite->GetX());
+			Pop();
 			break;
 		case Op_setx:
-			sprite.SetX(ToReal(vm.StackAt(0)));
-			vm.Pop();
+			sprite->SetX(ToReal(StackAt(0)));
+			Pop();
 			break;
 		case Op_addy:
-			sprite.SetY(ToReal(vm.StackAt(0)) + sprite.GetY());
-			vm.Pop();
+			sprite->SetY(ToReal(StackAt(0)) + sprite->GetY());
+			Pop();
 			break;
 		case Op_sety:
-			sprite.SetY(ToReal(vm.StackAt(0)));
-			vm.Pop();
+			sprite->SetY(ToReal(StackAt(0)));
+			Pop();
 			break;
 		case Op_bounceonedge:
-			vm.Raise(NotImplemented, "bounceonedge");
+			Raise(NotImplemented, "bounceonedge");
 		case Op_setrotationstyle:
-			sprite.SetRotationStyle((RotationStyle)*(uint8_t *)script.pc);
-			script.pc++;
+			sprite->SetRotationStyle((RotationStyle)*(uint8_t *)pc);
+			pc++;
 			break;
 		case Op_getx:
-			SetReal(vm.Push(), sprite.GetX());
+			SetReal(Push(), sprite->GetX());
 			break;
 		case Op_gety:
-			SetReal(vm.Push(), sprite.GetY());
+			SetReal(Push(), sprite->GetY());
 			break;
 		case Op_getdir:
-			SetReal(vm.Push(), sprite.GetDirection());
+			SetReal(Push(), sprite->GetDirection());
 			break;
 		case Op_say:
-			vm.Raise(NotImplemented, "say");
+			Raise(NotImplemented, "say");
 		case Op_think:
-			vm.Raise(NotImplemented, "think");
+			Raise(NotImplemented, "think");
 		case Op_setcostume:
-			vm.Raise(NotImplemented, "setcostume");
-		case Op_findcostume:
-			vm.Raise(NotImplemented, "findcostume");
+			Raise(NotImplemented, "setcostume");
 		case Op_nextcostume:
-			vm.Raise(NotImplemented, "nextcostume");
+			Raise(NotImplemented, "nextcostume");
 		case Op_setbackdrop:
-			vm.Raise(NotImplemented, "setbackdrop");
-		case Op_findbackdrop:
-			vm.Raise(NotImplemented, "findbackdrop");
+			Raise(NotImplemented, "setbackdrop");
 		case Op_nextbackdrop:
-			vm.Raise(NotImplemented, "nextbackdrop");
+			Raise(NotImplemented, "nextbackdrop");
 		case Op_addsize:
-			sprite.SetSize(sprite.GetSize() + ToReal(vm.StackAt(0)));
-			vm.Pop();
+			sprite->SetSize(sprite->GetSize() + ToReal(StackAt(0)));
+			Pop();
 			break;
 		case Op_setsize:
-			sprite.SetSize(ToReal(vm.StackAt(0)));
-			vm.Pop();
+			sprite->SetSize(ToReal(StackAt(0)));
+			Pop();
 			break;
 		case Op_addgraphiceffect:
-			vm.Raise(NotImplemented, "addgraphiceffect");
+			Raise(NotImplemented, "addgraphiceffect");
 		case Op_setgraphiceffect:
-			vm.Raise(NotImplemented, "setgraphiceffect");
+			Raise(NotImplemented, "setgraphiceffect");
 		case Op_cleargraphiceffects:
-			vm.Raise(NotImplemented, "cleargraphiceffects");
+			Raise(NotImplemented, "cleargraphiceffects");
 		case Op_show:
-			sprite.SetShown(true);
+			sprite->SetShown(true);
 			break;
 		case Op_hide:
-			sprite.SetShown(false);
+			sprite->SetShown(false);
 			break;
 		case Op_gotolayer:
-			vm.Raise(NotImplemented, "gotolayer");
+			Raise(NotImplemented, "gotolayer");
 		case Op_movelayer:
-			vm.Raise(NotImplemented, "movelayer");
+			Raise(NotImplemented, "movelayer");
 		case Op_getcostume:
-			SetInteger(vm.Push(), sprite.GetCostume());
+			SetInteger(Push(), sprite->GetCostume());
 			break;
 		case Op_getcostumename:
-			SetString(vm.Push(), sprite.GetCostumeName());
+			SetString(Push(), sprite->GetCostumeName());
 			break;
 		case Op_getbackdrop:
-			vm.Raise(NotImplemented, "getbackdrop");
+			Raise(NotImplemented, "getbackdrop");
 		case Op_getsize:
-			SetReal(vm.Push(), sprite.GetSize());
+			SetReal(Push(), sprite->GetSize());
 			break;
 		case Op_playsoundandwait:
-			vm.Raise(NotImplemented, "playsoundandwait");
+			Raise(NotImplemented, "playsoundandwait");
 		case Op_playsound:
-			vm.Raise(NotImplemented, "playsound");
+			Raise(NotImplemented, "playsound");
 		case Op_findsound:
-			vm.Raise(NotImplemented, "findsound");
+			Raise(NotImplemented, "findsound");
 		case Op_stopsound:
-			vm.Raise(NotImplemented, "stopsound");
+			Raise(NotImplemented, "stopsound");
 		case Op_addsoundeffect:
-			vm.Raise(NotImplemented, "addsoundeffect");
+			Raise(NotImplemented, "addsoundeffect");
 		case Op_setsoundeffect:
-			vm.Raise(NotImplemented, "setsoundeffect");
+			Raise(NotImplemented, "setsoundeffect");
 		case Op_clearsoundeffects:
-			vm.Raise(NotImplemented, "clearsoundeffects");
+			Raise(NotImplemented, "clearsoundeffects");
 		case Op_addvolume:
-			sprite.SetVolume(sprite.GetVolume() + ToReal(vm.StackAt(0)));
+			sprite->SetVolume(sprite->GetVolume() + ToReal(StackAt(0)));
+			Pop();
 			break;
 		case Op_setvolume:
-			sprite.SetVolume(ToReal(vm.StackAt(0)));
-			vm.Pop();
+			sprite->SetVolume(ToReal(StackAt(0)));
+			Pop();
 			break;
 		case Op_getvolume:
-			SetReal(vm.Push(), sprite.GetVolume());
+			SetReal(Push(), sprite->GetVolume());
 			break;
 		case Op_onflag:
 			// do nothing
 			break;
 		case Op_onkey:
-			script.pc += sizeof(uint16_t); // skip key
+			pc += sizeof(uint16_t); // skip key
 			break;
 		case Op_onclick:
 			// do nothing
@@ -439,115 +429,233 @@ int ScriptMain(void *scriptPtr)
 			// do nothing
 			break;
 		case Op_ongt:
-			vm.Raise(NotImplemented, "ongt");
+			Raise(NotImplemented, "ongt");
 		case Op_onevent:
-			script.pc += sizeof(uint64_t); // skip event
+			pc += sizeof(uint64_t); // skip event
 			break;
 		case Op_send:
-			vm.Raise(NotImplemented, "send");
+			Raise(NotImplemented, "send");
 		case Op_sendandwait:
-			vm.Raise(NotImplemented, "sendandwait");
+			Raise(NotImplemented, "sendandwait");
 		case Op_findevent:
-			vm.Raise(NotImplemented, "findevent");
+			Raise(NotImplemented, "findevent");
 		case Op_waitsecs:
-			vm.Sleep(ToReal(vm.StackAt(0)));
-			vm.Pop();
+			Sleep(ToReal(StackAt(0)));
+			Pop();
 			break;
 		case Op_stopall:
-			vm.VMTerminate();
-			break;
+			Raise(NotImplemented, "stopall");
 		case Op_stopself:
-			vm.Terminate();
+			Terminate();
 			break;
 		case Op_stopother:
-			vm.Raise(NotImplemented, "stopother");
+			Raise(NotImplemented, "stopother");
 		case Op_onclone:
 			// do nothing
 			break;
 		case Op_clone:
-			vm.Raise(NotImplemented, "clone");
+			Raise(NotImplemented, "clone");
 		case Op_deleteclone:
-			vm.Raise(NotImplemented, "deleteclone");
+			Raise(NotImplemented, "deleteclone");
 		case Op_touching:
-			vm.Raise(NotImplemented, "touching");
+			Raise(NotImplemented, "touching");
 		case Op_touchingcolor:
-			vm.Raise(NotImplemented, "touchingcolor");
+			Raise(NotImplemented, "touchingcolor");
 		case Op_colortouching:
-			vm.Raise(NotImplemented, "colortouching");
+			Raise(NotImplemented, "colortouching");
 		case Op_distanceto:
-			vm.Raise(NotImplemented, "distanceto");
+			Raise(NotImplemented, "distanceto");
 		case Op_ask:
-			vm.Raise(NotImplemented, "ask");
+			Raise(NotImplemented, "ask");
 		case Op_getanswer:
-			Assign(vm.Push(), vm.GetIO().GetAnswer());
+			Assign(Push(), vm->GetIO().GetAnswer());
 			break;
 		case Op_keypressed:
-			vm.Raise(NotImplemented, "keypressed");
+			Raise(NotImplemented, "keypressed");
 		case Op_mousedown:
-			SetBool(vm.Push(), vm.GetIO().IsMouseDown());
+			SetBool(Push(), vm->GetIO().IsMouseDown());
 			break;
 		case Op_mousex:
-			SetReal(vm.Push(), vm.GetIO().GetMouseX());
+			SetReal(Push(), vm->GetIO().GetMouseX());
 			break;
 		case Op_mousey:
-			SetReal(vm.Push(), vm.GetIO().GetMouseY());
+			SetReal(Push(), vm->GetIO().GetMouseY());
 			break;
 		case Op_setdragmode:
-			vm.Raise(NotImplemented, "setdragmode");
+			Raise(NotImplemented, "setdragmode");
 		case Op_getloudness:
-			vm.Raise(NotImplemented, "getloudness");
+			Raise(NotImplemented, "getloudness");
 		case Op_gettimer:
-			SetReal(vm.Push(), vm.GetTimer());
+			SetReal(Push(), vm->GetTimer());
 			break;
 		case Op_resettimer:
-			vm.ResetTimer();
+			vm->ResetTimer();
 			break;
 		case Op_propertyof:
-			vm.Raise(NotImplemented, "propertyof");
+			Raise(NotImplemented, "propertyof");
 		case Op_gettime:
-			vm.Raise(NotImplemented, "gettime");
+			Raise(NotImplemented, "gettime");
 		case Op_getdayssince2000:
-			vm.Raise(NotImplemented, "getdayssince2000");
+			Raise(NotImplemented, "getdayssince2000");
 		case Op_getusername:
-			Assign(vm.Push(), vm.GetIO().GetUsername());
+			Assign(Push(), vm->GetIO().GetUsername());
 			break;
 		case Op_rand:
-			vm.Raise(NotImplemented, "rand");
+			Raise(NotImplemented, "rand");
 		case Op_varshow:
-			vm.Raise(NotImplemented, "varshow");
+			Raise(NotImplemented, "varshow");
 		case Op_varhide:
-			vm.Raise(NotImplemented, "varhide");
+			Raise(NotImplemented, "varhide");
 		case Op_listadd:
-			ListAppend(vm.StackAt(0), vm.StackAt(1));
-			vm.Pop();
-			vm.Pop();
+			ListAppend(StackAt(0), StackAt(1));
+			Pop();
+			Pop();
 			break;
 		case Op_listremove:
-			vm.Raise(NotImplemented, "listremove");
+			ListDelete(StackAt(0), StackAt(1));
+			Pop();
+			Pop();
+			break;
 		case Op_listclear:
-			ListClear(vm.StackAt(0));
-			vm.Pop();
+			ListClear(StackAt(0));
+			Pop();
 			break;
 		case Op_listinsert:
-			vm.Raise(NotImplemented, "listinsert");
+			ListInsert(StackAt(0), ToInteger(StackAt(1)), StackAt(2));
+			Pop();
+			Pop();
+			Pop();
+			break;
 		case Op_listreplace:
-			vm.Raise(NotImplemented, "listreplace");
+			ListSet(StackAt(0), ToInteger(StackAt(1)), StackAt(2));
+			Pop();
+			Pop();
+			Pop();
+			break;
 		case Op_listat:
-			ListGet(vm.StackAt(1), vm.StackAt(0), ToInteger(vm.StackAt(1)));
+			ListGet(StackAt(1), StackAt(0), ToInteger(StackAt(1)));
+			Pop();
 			break;
 		case Op_listfind:
-			vm.Raise(NotImplemented, "listfind");
+			SetInteger(StackAt(1), ListIndexOf(StackAt(0), StackAt(1)));
+			Pop();
+			break;
 		case Op_listlen:
-			SetInteger(vm.StackAt(0), ListGetLength(vm.StackAt(0)));
+			SetInteger(StackAt(0), ListGetLength(StackAt(0)));
 			break;
 		case Op_listcontains:
-			vm.Raise(NotImplemented, "listcontains");
+			SetBool(StackAt(1), ListContainsValue(StackAt(0), StackAt(1)));
+			Pop();
+			break;
 		case Op_invoke:
-			vm.Raise(NotImplemented, "invoke");
+			Raise(NotImplemented, "invoke");
 		case Op_ext:
-			vm.Raise(VMError, "Extensions are not supported");
+			Raise(VMError, "Extensions are not supported");
 		}
 	}
+}
 
-	return 0;
+Value &Script::Push()
+{
+	if (sp <= stack)
+		Raise(StackOverflow, "Stack overflow");
+	sp--;
+	InitializeValue(*sp);
+	return *sp;
+}
+
+void Script::Pop()
+{
+	if (sp > stack + STACK_SIZE)
+		Raise(StackUnderflow, "Stack underflow");
+	ReleaseValue(*sp);
+	sp++;
+}
+
+Value &Script::StackAt(size_t i)
+{
+	if (sp + i >= stack + STACK_SIZE)
+		Raise(StackUnderflow, "Stack underflow");
+	return sp[i];
+}
+
+void Script::Sched()
+{
+	ticks = 0;
+	ls_fiber_sched();
+}
+
+void Script::Terminate()
+{
+	state = TERMINATED;
+	Sched();
+
+	if (state != RUNNABLE)
+		vm->Panic("Terminated script was rescheduled");
+
+	// Script was restarted, jump back to the beginning
+	longjmp(scriptMain, 1);
+}
+
+void LS_NORETURN Script::Raise(ExceptionType type, const char *message)
+{
+	except = type;
+	exceptMessage = message;
+	Terminate();
+}
+
+void Script::Sleep(double seconds)
+{
+	sleepUntil = vm->GetTime() + seconds;
+	state = WAITING;
+	Sched();
+}
+
+void Script::Glide(double x, double y, double t)
+{
+	if (t <= 0.0)
+	{
+		sprite->SetXY(x, y);
+		Sched();
+		return;
+	}
+
+	GlideInfo &glide = *sprite->GetGlide();
+
+	glide.x0 = sprite->GetX();
+	glide.y0 = sprite->GetY();
+	glide.x1 = x;
+	glide.y1 = y;
+	glide.start = vm->GetTime();
+	glide.end = glide.start + t;
+
+	state = WAITING;
+
+	Sched();
+}
+
+void Script::AskAndWait(const std::string &question)
+{
+	askInput = true;
+	state = WAITING;
+	vm->EnqueueAsk(this, question);
+	Sched();
+}
+
+void Script::Dump()
+{
+	printf("Script %p\n", this);
+
+	if (state >= EMBRYO && state <= TERMINATED)
+		printf("    state = %s\n", GetStateName(state));
+	else
+		printf("    state = Unknown\n");
+
+	printf("    sprite = %s\n", sprite ? sprite->GetName().c_str() : "(null)");
+
+	printf("    sleepUntil = %g\n", sleepUntil);
+	printf("    waitInput = %s\n", waitInput ? "true" : "false");
+	printf("    stack = %p\n", stack);
+	printf("    sp = %p\n", sp);
+	printf("    pc = %p\n", pc); // TODO: display disassembly
 }

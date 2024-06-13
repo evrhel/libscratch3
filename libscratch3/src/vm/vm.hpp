@@ -27,23 +27,6 @@ class VirtualMachine;
 class Sprite;
 class GLRenderer;
 
-enum ExceptionType
-{
-	Exception_None,
-
-	OutOfMemory,
-	StackOverflow,
-	StackUnderflow,
-	VariableNotFound,
-	IllegalOperation,
-	InvalidArgument,
-	UnsupportedOperation,
-
-	NotImplemented,
-
-	VMError // Internal error
-};
-
 class VirtualMachine final
 {
 public:
@@ -101,56 +84,11 @@ public:
 
 	void SendKeyPressed(int scancode);
 
-	//! \brief Sleep for a specified number of seconds
-	//! 
-	//! Causes the script to not be scheduled for execution for the
-	//! specified number of seconds.
-	//! 
-	//! \param seconds Number of seconds to sleep
-	void Sleep(double seconds);
-
-	//! \brief Ask the user for input and wait for a response
-	//! 
-	//! The script will not be scheduled for execution until the
-	//! user has provided input.
-	//! 
-	//! \param question Question to ask the user
-	void AskAndWait(const std::string &question);
-
-	//! \brief Terminate the current script
-	//! 
-	//! The script will be scheduled for termination. Does not
-	//! return.
-	void LS_NORETURN Terminate();
-
-	//! \brief Raise an exception, does not return.
-	//! 
-	//! \param type Type of exception to raise
-	//! \param message Message to associate with the exception
-	void LS_NORETURN Raise(ExceptionType type, const char *message = nullptr);
+	void EnqueueAsk(Script *script, const std::string &question);
 
 	void LS_NORETURN Panic(const char *message = nullptr);
 
-	//! \brief Push a value onto the stack
-	//! 
-	//! Raises a StackOverflow exception if the stack is full.
-	Value &Push();
-
-	//! \brief Pop a value from the stack
-	//! 
-	//! Raises a StackUnderflow exception if the stack is empty.
-	void Pop();
-
-	//! \brief Retrieve a value from the stack
-	//! 
-	//! Raises a StackUnderflow exception if the index indexes
-	//! outside the stack.
-	//! 
-	//! \param i Index of the value to retrieve
-	//! 
-	//! \return A reference to the value at the
-	//! specified index
-	Value &StackAt(size_t i);
+	Value &GetVariableRef(const Value &name);
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -161,9 +99,6 @@ public:
 	constexpr size_t GetBytecodeSize() const { return _bytecodeSize; }
 	constexpr const std::string &GetProgramName() const { return _progName; }
 
-	Value &FindVariable(const std::string &id);
-	Value &FindList(const std::string &id);
-
 	inline double GetTime() const { return ls_time64() - _epoch; }
 
 	inline double GetTimer() const { return GetTime() - _timerStart; }
@@ -173,13 +108,6 @@ public:
 	Sprite *FindSprite(intptr_t id);
 
 	void ResetTimer();
-
-	void Glide(Sprite *sprite, double x, double y, double s);
-
-	//! \brief Yeild control to the scheduler
-	//! 
-	//! The script yeilds for at least until the next screen update.
-	void Sched();
 
 	constexpr Loader *GetLoader() const { return _loader; }
 	constexpr GLRenderer *GetRenderer() const { return _render; }
@@ -216,7 +144,7 @@ private:
 
 	std::unordered_map<std::string, intptr_t> _spriteNames; // Sprite name lookup
 
-	std::unordered_map<std::string, Value> _variables; // Variables
+	std::unordered_map<String *, Value, _StringHasher, _StringEqual> _variables; // Variables
 
 	std::vector<Script> _scripts; // All scripts
 	size_t _nextScript; // Next script to run
@@ -270,10 +198,7 @@ private:
 
 	bool _running; // VM is running
 	int _activeScripts; // Number of active scripts
-	int _waitingScripts; // Number of waiting scripts
-
-	ExceptionType _exceptionType; // Exception type
-	const char *_exceptionMessage; // Exception message
+	int _waitingScripts; // Number of waiting scripts	
 
 	bool _panicing; // Panic flag
 	const char *_panicMessage; // Panic message

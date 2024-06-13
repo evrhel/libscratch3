@@ -17,38 +17,10 @@
 #include "io.hpp"
 #include "debug.hpp"
 #include "preload.hpp"
+#include "exception.hpp"
 
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
-
-static const char *ExceptionString(ExceptionType type)
-{
-	switch (type)
-	{
-	default:
-		return "Unknown exception";
-	case Exception_None:
-		return "No exception";
-	case OutOfMemory:
-		return "Out of memory";
-	case StackOverflow:
-		return "Stack overflow";
-	case StackUnderflow:
-		return "Stack underflow";
-	case VariableNotFound:
-		return "Variable not found";
-	case IllegalOperation:
-		return "Illegal operation";
-	case InvalidArgument:
-		return "Invalid argument";
-	case UnsupportedOperation:
-		return "Unsupported operation";
-	case NotImplemented:
-		return "Not implemented";
-	case VMError:
-		return "VM error";
-	}
-}
 
 static std::string trim(const std::string &str, const std::string &ws = " \t\n\r")
 {
@@ -100,7 +72,7 @@ int VirtualMachine::Load(const char *name, uint8_t *bytecode, size_t size)
 		{
 			_scripts.emplace_back();
 			Script &s = _scripts.back();
-			ScriptInit(s, &ri);
+			s.Init(&ri);
 
 			s.sprite = &sprite;
 			s.vm = this;
@@ -190,89 +162,21 @@ void VirtualMachine::Send(const std::string &message)
 
 void VirtualMachine::SendAndWait(const std::string &message)
 {
-	Sched();
+	Panic("SendAndWait");
 }
 
 void VirtualMachine::SendKeyPressed(int scancode)
 {
-
+	Panic("SendKeyPressed");
 }
 
-void VirtualMachine::Sleep(double seconds)
+void VirtualMachine::EnqueueAsk(Script *script, const std::string &question)
 {
-	if (_current == nullptr)
-		Panic("No script");
-
-	_current->sleepUntil = GetTime() + seconds;
-	_current->state = WAITING;
-	Sched();
+	_askQueue.push(std::make_pair(script, question));
 }
 
-void VirtualMachine::AskAndWait(const std::string &question)
+void VirtualMachine::Panic(const char *message)
 {
-	if (_current == nullptr)
-		Panic("No script");
-
-	_current->askInput = true;
-	_current->state = WAITING;
-	_askQueue.push(std::make_pair(_current, question));
-	Sched();
-}
-
-void VirtualMachine::Terminate()
-{
-	if (_current == nullptr)
-		Panic("No script");
-
-	_current->state = TERMINATED;
-	Sched();
-
-	assert(_current != nullptr);
-
-	if (_current->state != RUNNABLE)
-		Panic("Terminated script was rescheduled");
-
-	// The script has been restarted
-	longjmp(_current->scriptMain, 1);
-}
-
-static void DumpScript(Script *script)
-{
-	printf("Script %p\n", script);
-
-	if (script->state >= EMBRYO && script->state <= TERMINATED)
-		printf("    state = %s\n", GetStateName(script->state));
-	else
-		printf("    state = Unknown\n");
-
-	printf("    sprite = %s\n", script->sprite ? script->sprite->GetName().c_str() : "(null)");
-
-	printf("    sleepUntil = %g\n", script->sleepUntil);
-	printf("    waitInput = %d\n", (int)script->waitInput);
-	printf("    stack = %p\n", script->stack);
-	printf("    sp = %p\n", script->sp);
-	printf("    pc = %p\n", script->pc); // TODO: display disassembly
-}
-
-void LS_NORETURN VirtualMachine::Raise(ExceptionType type, const char *message)
-{
-	if (_current == nullptr)
-		Panic("No script");
-
-	printf("<EXCEPTION> %s: %s\n", ExceptionString(type), message);
-
-	_exceptionType = type;
-	_exceptionMessage = message;
-
-	DumpScript(_current);
-
-	Terminate();
-}
-
-void LS_NORETURN VirtualMachine::Panic(const char *message)
-{
-	printf("<PANIC> %s\n", message);
-
 	_panicing = true;
 	_panicMessage = message;
 
@@ -285,45 +189,23 @@ void LS_NORETURN VirtualMachine::Panic(const char *message)
 	longjmp(_panicJmp, 1);
 }
 
-Value &VirtualMachine::Push()
+Value &VirtualMachine::GetVariableRef(const Value &name)
 {
 	assert(_current != nullptr);
 
-	if (_current->sp < _current->sp)		
-		Raise(StackOverflow);
-	_current->sp--;
-	*_current->sp = { 0 }; // zero out the value
-	return *_current->sp;
-}
+	if (name.type != ValueType_String)
+		Panic("Variable name must be a string");
 
-void VirtualMachine::Pop()
-{
-	assert(_current != nullptr);
-
-	if (_current->sp >= _current->stack + STACK_SIZE)
-		Raise(StackUnderflow);
-
-	ReleaseValue(*_current->sp);
-
-	// fill with garbage
-	memset(_current->sp, 0xab, sizeof(Value));
-
-	_current->sp++;
-}
-
-Value &VirtualMachine::StackAt(size_t i)
-{
-	if (_current->sp + i >= _current->stack + STACK_SIZE)
-		Raise(StackUnderflow);
-
-	return _current->sp[i];
-}
-
-Value &VirtualMachine::FindVariable(const std::string &id)
-{
-	auto it = _variables.find(id);
+	auto it = _variables.find(name.u.string);
 	if (it == _variables.end())
-		Raise(VariableNotFound);
+	{
+		// create a new variable
+		// TODO: throw an exception if the variable is not found
+		Value &v = _variables[name.u.string];
+		InitializeValue(v);
+		return v;
+	}
+
 	return it->second;
 }
 
@@ -344,44 +226,6 @@ Sprite *VirtualMachine::FindSprite(intptr_t id)
 void VirtualMachine::ResetTimer()
 {
 	_timerStart = GetTime();
-}
-
-void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
-{
-	if (s <= 0.0)
-	{
-		sprite->SetXY(x, y);
-		Sched();
-		return;
-	}
-
-	GlideInfo &glide = *sprite->GetGlide();
-
-	glide.x0 = sprite->GetX();
-	glide.y0 = sprite->GetY();
-	glide.x1 = x;
-	glide.y1 = y;
-	glide.start = GetTime();
-	glide.end = glide.start + s;
-
-	_current->state = WAITING;
-
-	Sched();
-}
-
-void VirtualMachine::Sched()
-{
-	if (_current == nullptr)
-		Panic("No script");
-
-	_current->ticks = 0;
-	_current = nullptr;
-	ls_fiber_sched();
-
-	assert(_current != nullptr);
-
-	if (_current->restart)
-		longjmp(_current->scriptMain, 1);
 }
 
 void VirtualMachine::OnClick(int64_t x, int64_t y)
@@ -437,8 +281,6 @@ VirtualMachine::VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options) :
 	_running = false;
 	_activeScripts = 0;
 	_waitingScripts = 0;
-	_exceptionType = Exception_None;
-	_exceptionMessage = nullptr;
 
 	_panicing = false;
 	_panicMessage = nullptr;
@@ -521,7 +363,7 @@ void VirtualMachine::Cleanup()
 	_variables.clear();
 
 	for (Script &script : _scripts)
-		ScriptDestroy(script);
+		script.Destroy();
 	_scripts.clear();
 
 	_io.Release();
@@ -557,7 +399,7 @@ void VirtualMachine::DispatchEvents()
 	if (_flagClicked)
 	{
 		for (Script *script : _flagListeners)
-			ScriptStart(*script);
+			script->Start();
 		_flagClicked = false;
 	}
 
@@ -571,7 +413,7 @@ void VirtualMachine::DispatchEvents()
 				continue;
 
 			for (Script *script : it->second)
-				ScriptStart(*script);
+				script->Start();
 		}
 
 		_toSend.clear();
@@ -581,7 +423,7 @@ void VirtualMachine::DispatchEvents()
 	while (!_clickQueue.empty())
 	{
 		Script *s = _clickQueue.front();
-		ScriptStart(*s);
+		s->Start();
 		_clickQueue.pop();
 	}
 
@@ -663,13 +505,12 @@ void VirtualMachine::Scheduler()
 		if (_panicing)
 			longjmp(_panicJmp, 1);
 
-		assert(_current == nullptr);
-
-		if (_exceptionType != Exception_None)
+		if (_current->except != Exception_None)
 		{
 			// script raised an exception
-			printf("<EXCEPTION> %s: %s\n", ExceptionString(_exceptionType), _exceptionMessage);
-			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", ExceptionString(_exceptionType), _render->GetWindow());
+			printf("<EXCEPTION> %s: %s\n", ExceptionString(_current->except), _current->exceptMessage);
+			_current->Dump();
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", ExceptionString(_current->except), _render->GetWindow());
 			
 			_activeScripts = 0;
 			_waitingScripts = 0;
@@ -678,11 +519,20 @@ void VirtualMachine::Scheduler()
 		}
 
 		if (script.state == TERMINATED)
-			ScriptReset(script);
+			script.Reset();
+
+		_current = nullptr;
 	}
 
 	_activeScripts = activeScripts;
 	_waitingScripts = waitingScripts;
+}
+
+static int ScriptEntryThunk(void *scriptPtr)
+{
+	Script *script = (Script *)scriptPtr;
+	script->Main();
+	return 0;
 }
 
 void VirtualMachine::Main()
@@ -707,7 +557,7 @@ void VirtualMachine::Main()
 
 	for (Script &script : _scripts)
 	{
-		script.fiber = ls_fiber_create(ScriptMain, &script);
+		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
 		if (!script.fiber)
 			Panic("Failed to create fiber");
 	}
@@ -794,7 +644,7 @@ void VirtualMachine::Main()
 
 		DispatchEvents();
 
-		if (!_suspend && _exceptionType == Exception_None)
+		if (!_suspend)
 		{
 			double start = GetTime();
 

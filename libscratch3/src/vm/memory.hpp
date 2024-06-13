@@ -150,3 +150,28 @@ constexpr Value &InitializeValue(Value &v)
 Value &RetainValue(Value &v);
 void ReleaseValue(Value &v);
 void FreeValue(Value &v);
+
+struct _StringHasher
+{
+	constexpr size_t operator()(const String *str) const
+	{
+		return static_cast<size_t>(str->hash);
+	}
+};
+
+struct _StringEqual
+{
+	constexpr bool operator()(const String *lhs, const String *rhs) const
+	{
+		if (lhs->hash != rhs->hash || lhs->len != rhs->len)
+			return false;
+
+		for (int64_t i = 0; i < lhs->len; i++)
+		{
+			if (lhs->str[i] != rhs->str[i])
+				return false;
+		}
+
+		return true;
+	}
+};

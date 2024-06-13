@@ -7,6 +7,7 @@
 #include "../codegen/opcode.hpp"
 
 #include "preload.hpp"
+#include "exception.hpp"
 
 // Script has been created but not yet started
 #define EMBRYO 0
@@ -55,18 +56,31 @@ struct Script
 	Value *sp;  // Stack pointer (highest address, grows downwards) sp - 1 is the next free slot
 
 	jmp_buf scriptMain; // Jump buffer for script main loop
-	bool restart; // Whether this script should restart itself
+
+	ExceptionType except; // Exception type
+	const char *exceptMessage; // Exception message
 
 	VirtualMachine *vm;  // Virtual machine
+
+	void Init(const ScriptInfo *info);
+	void Destroy();
+	void Reset();
+	void Start();
+	void Main();
+
+	Value &Push();
+	void Pop();
+	Value &StackAt(size_t i);
+
+	void Sched();
+	void LS_NORETURN Terminate();
+	void LS_NORETURN Raise(ExceptionType type, const char *message = nullptr);
+	void Sleep(double seconds);
+
+	void Glide(double x, double y, double t);
+	void AskAndWait(const std::string &question);
+
+	void Dump();
 };
 
 const char *GetStateName(int state);
-
-void ScriptInit(Script &script, const ScriptInfo *info);
-void ScriptDestroy(Script &script);
-
-void ScriptReset(Script &script);
-void ScriptStart(Script &script);
-
-// entry point
-int ScriptMain(void *scriptPtr);

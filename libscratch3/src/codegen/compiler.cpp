@@ -983,8 +983,9 @@ public:
 
 	virtual void Visit(ReplaceInList *node)
 	{
-		node->e1->Accept(this);
+		// flip to be more consistent with other list operations
 		node->e2->Accept(this);
+		node->e1->Accept(this);
 		cp.PushString(node->id);
 		cp.WriteOpcode(Op_varget);
 		cp.WriteOpcode(Op_listreplace);

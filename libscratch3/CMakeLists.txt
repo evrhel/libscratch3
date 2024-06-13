@@ -24,6 +24,7 @@ set(SOURCES
 	${src}/render/stb.cpp
 	${src}/vm/costume.cpp
 	${src}/vm/debug.cpp
+	${src}/vm/exception.cpp
 	${src}/vm/io.cpp
 	${src}/vm/memory.cpp
 	${src}/vm/preload.cpp
