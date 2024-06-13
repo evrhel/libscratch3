@@ -7,6 +7,8 @@
 
 #include <imgui_impl_sdl2.h>
 
+#include <scratch3/scratch3.h>
+
 #include "../resource.hpp"
 #include "../render/renderer.hpp"
 #include "../codegen/compiler.hpp"
@@ -14,6 +16,7 @@
 #include "sprite.hpp"
 #include "io.hpp"
 #include "debug.hpp"
+#include "preload.hpp"
 
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
@@ -61,12 +64,59 @@ int VirtualMachine::Load(const char *name, uint8_t *bytecode, size_t size)
 {
 	assert(_bytecode == nullptr);
 
-	ProgramHeader *header = (ProgramHeader *)bytecode;
-
 	_bytecode = bytecode;
 	_bytecodeSize = size;
 	_progName = name;
-	return 0;
+
+	ParsedSprites sprites;
+	ParseSprites(bytecode, size, &sprites);
+
+	_sprites = new Sprite[sprites.size()];
+	_spritesEnd = _sprites + sprites.size();
+
+	// load sprites
+	bool foundStage = false;
+	size_t i = 0;
+	for (SpriteInfo &si : sprites)
+	{
+		if (si.isStage)
+		{
+			if (foundStage)
+			{
+				Scratch3Logf(S, SCRATCH3_SEVERITY_ERROR, "Multiple stages found");
+				Cleanup();
+				return SCRATCH3_ERROR_INVALID_PROGRAM;
+			}
+
+			foundStage = true;
+		}
+
+		// create sprite
+		Sprite &sprite = _sprites[i];
+		sprite.Init(&si);
+
+		// load scripts
+		for (ScriptInfo &ri : si.scripts)
+		{
+			_scripts.emplace_back();
+			Script &s = _scripts.back();
+			ScriptInit(s, &ri);
+
+			s.sprite = &sprite;
+			s.vm = this;
+		}
+
+		i++;
+	}
+
+	if (!foundStage)
+	{
+		Scratch3Logf(S, SCRATCH3_SEVERITY_ERROR, "No stage found");
+		Cleanup();
+		return SCRATCH3_ERROR_INVALID_PROGRAM;
+	}
+
+	return SCRATCH3_ERROR_SUCCESS;
 }
 
 int VirtualMachine::VMStart()
@@ -91,8 +141,13 @@ void VirtualMachine::VMTerminate()
 int VirtualMachine::VMWait(unsigned long ms)
 {
 	if (!_thread)
-		return 0;
-	return ls_timedwait(_thread, ms);
+		return SCRATCH3_ERROR_SUCCESS;
+
+	int rc = ls_timedwait(_thread, ms);
+	if (rc == -1)
+		return SCRATCH3_ERROR_UNKNOWN;
+
+	return rc == 1 ? SCRATCH3_ERROR_TIMEOUT : SCRATCH3_ERROR_SUCCESS;
 }
 
 void VirtualMachine::VMSuspend()
@@ -145,9 +200,6 @@ void VirtualMachine::SendKeyPressed(int scancode)
 
 void VirtualMachine::Sleep(double seconds)
 {
-	if (_current == &_waitRunner)
-		Panic("Cannot sleep");
-
 	if (_current == nullptr)
 		Panic("No script");
 
@@ -156,24 +208,8 @@ void VirtualMachine::Sleep(double seconds)
 	Sched();
 }
 
-void VirtualMachine::WaitUntil(Expression *expr)
-{
-	if (_current == &_waitRunner)
-		Panic("Cannot wait");
-
-	if (_current == nullptr)
-		Panic("No script");
-
-	_current->waitExpr = expr;
-	_current->state = WAITING;
-	Sched();
-}
-
 void VirtualMachine::AskAndWait(const std::string &question)
 {
-	if (_current == &_waitRunner)
-		Panic("Cannot ask");
-
 	if (_current == nullptr)
 		Panic("No script");
 
@@ -185,9 +221,6 @@ void VirtualMachine::AskAndWait(const std::string &question)
 
 void VirtualMachine::Terminate()
 {
-	if (_current == &_waitRunner)
-		Panic("Cannot terminate");
-
 	if (_current == nullptr)
 		Panic("No script");
 
@@ -215,7 +248,6 @@ static void DumpScript(Script *script)
 	printf("    sprite = %s\n", script->sprite ? script->sprite->GetName().c_str() : "(null)");
 
 	printf("    sleepUntil = %g\n", script->sleepUntil);
-	printf("    waitExpr = %p (%s)\n", script->waitExpr, script->waitExpr ? AstTypeString(script->waitExpr->GetType()) : "null");
 	printf("    waitInput = %d\n", (int)script->waitInput);
 	printf("    stack = %p\n", script->stack);
 	printf("    sp = %p\n", script->sp);
@@ -260,15 +292,6 @@ Value &VirtualMachine::Push()
 	_current->sp--;
 	*_current->sp = { 0 }; // zero out the value
 	return *_current->sp;
-}
-
-static void PopUnsafe(VirtualMachine *vm, Script *script)
-{
-	if (script->sp >= script->stack + STACK_SIZE)
-		abort();
-	ReleaseValue(*script->sp);
-	memset(script->sp, 0xab, sizeof(Value));
-	script->sp++;
 }
 
 void VirtualMachine::Pop()
@@ -346,9 +369,6 @@ void VirtualMachine::Glide(Sprite *sprite, double x, double y, double s)
 
 void VirtualMachine::Sched()
 {
-	if (_current == &_waitRunner)
-		Panic("Cannot schedule");
-
 	if (_current == nullptr)
 		Panic("No script");
 
@@ -383,10 +403,12 @@ void VirtualMachine::OnKeyDown(int scancode)
 {
 }
 
-VirtualMachine::VirtualMachine(const Scratch3VMOptions *options) :
-	_io(this), _debug(this)
+VirtualMachine::VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options) :
+	S(S), _io(this), _debug(this)
 {
 	_options = *options;
+	if (_options.framerate <= 0)
+		_options.framerate = SCRATCH3_FRAMERATE;
 
 	_bytecode = nullptr;
 	_bytecodeSize = 0;
@@ -427,8 +449,6 @@ VirtualMachine::VirtualMachine(const Scratch3VMOptions *options) :
 	_deltaExecution = 0;
 
 	_thread = nullptr;
-
-	memset(&_waitRunner, 0, sizeof(_waitRunner));
 }
 
 VirtualMachine::~VirtualMachine()
@@ -499,17 +519,8 @@ void VirtualMachine::Cleanup()
 	_variables.clear();
 
 	for (Script &script : _scripts)
-	{
-		assert(script.fiber == nullptr);
-		free(script.stack);
-	}
+		ScriptDestroy(script);
 	_scripts.clear();
-
-	if (_waitRunner.stack)
-	{
-		free(_waitRunner.stack);
-		memset(&_waitRunner, 0, sizeof(_waitRunner));
-	}
 
 	_io.Release();
 
@@ -519,7 +530,6 @@ void VirtualMachine::Cleanup()
 	_loader = nullptr;
 	_bytecode = nullptr;
 	_bytecodeSize = 0;
-	_progName = nullptr;
 }
 
 void VirtualMachine::ShutdownThread()
@@ -539,36 +549,13 @@ void VirtualMachine::ShutdownThread()
 	ls_convert_to_thread();
 }
 
-void VirtualMachine::ResetScript(Script &script)
-{
-	script.sleepUntil = 0.0;
-	script.waitInput = false;
-	script.askInput = false;
-
-	script.ticks = 0;
-
-	// clean up the stack
-	while (script.sp < script.stack + STACK_SIZE)
-		PopUnsafe(this, &script);
-	
-	script.pc = script.entry;
-
-	script.state = EMBRYO;
-}
-
-void VirtualMachine::StartScript(Script &script)
-{
-	ResetScript(script);
-	script.state = RUNNABLE;
-}
-
 void VirtualMachine::DispatchEvents()
 {
 	// Flag clicked
 	if (_flagClicked)
 	{
 		for (Script *script : _flagListeners)
-			StartScript(*script);
+			ScriptStart(*script);
 		_flagClicked = false;
 	}
 
@@ -582,7 +569,7 @@ void VirtualMachine::DispatchEvents()
 				continue;
 
 			for (Script *script : it->second)
-				StartScript(*script);
+				ScriptStart(*script);
 		}
 
 		_toSend.clear();
@@ -592,7 +579,7 @@ void VirtualMachine::DispatchEvents()
 	while (!_clickQueue.empty())
 	{
 		Script *s = _clickQueue.front();
-		StartScript(*s);
+		ScriptStart(*s);
 		_clickQueue.pop();
 	}
 
@@ -691,7 +678,7 @@ void VirtualMachine::Scheduler()
 		}
 
 		if (script.state == TERMINATED)
-			ResetScript(script);
+			ScriptReset(script);
 	}
 
 	_activeScripts = activeScripts;
@@ -700,8 +687,6 @@ void VirtualMachine::Scheduler()
 
 void VirtualMachine::Main()
 {
-	assert(_waitRunner.stack != nullptr);
-
 	_nextScript = 0;
 	_enableScreenUpdates = true;
 

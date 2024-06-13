@@ -191,7 +191,25 @@ void Sprite::Update()
 
 void Sprite::Init(const SpriteInfo *info)
 {
-   
+    _name = info->name;
+    _x = info->x;
+    _y = info->y;
+    _size = info->size;
+    _direction = info->direction;
+    _costume = info->currentCostume;
+    _layer = info->layer;
+    _shown = info->visible;
+    _isStage = info->isStage;
+    _draggable = info->draggable;
+    _rotationStyle = info->rotationStyle;
+
+    _nCostumes = info->costumes.size();
+    _costumes = new Costume[_nCostumes];
+    for (int64_t i = 0; i < _nCostumes; i++)
+    {
+        _costumes[i].Init(&info->costumes[i]);
+		_costumeNames[_costumes[i].GetName()] = i + 1;
+    }
 }
 
 void Sprite::Load(VirtualMachine *vm)
@@ -201,13 +219,14 @@ void Sprite::Load(VirtualMachine *vm)
 
     _vm = vm;
     
-    // find all listeners
+    // find all click listeners
     for (const Script &script : vm->GetScripts())
     {
-        AutoRelease<Statement> &s = script.entry->sl[0];
-        OnSpriteClicked *sc = s->As<OnSpriteClicked>();
-        if (sc && script.sprite == this)
-            _clickListeners.push_back((Script *)&script);
+        if (script.sprite != this)
+            continue;
+
+        if (*script.entry == Op_onclick)
+			_clickListeners.push_back((Script *)&script);
     }
 
     Loader *loader = vm->GetLoader();
@@ -216,17 +235,13 @@ void Sprite::Load(VirtualMachine *vm)
     if (!_isStage)
     {
         _drawable = render->CreateSprite();
-        SetLayer(_node->layer);
+        SetLayer(_layer);
     }
     else
         _drawable = SPRITE_STAGE;
 
-    if (_node->costumes)
-    {
-        size_t i = 0;
-        for (AutoRelease<CostumeDef> &cd : _node->costumes->costumes)
-            _costumes[i++].Load(loader, cd.get());
-    }
+    for (int64_t i = 0; i < _nCostumes; i++)
+        _costumes[i].Load();
 
     SpriteRenderInfo *ri = render->GetRenderInfo(_drawable);
     ri->userData = this;
@@ -361,6 +376,4 @@ void Sprite::Cleanup()
     _message.clear();
 
     _name.clear();
-
-    Release(_node), _node = nullptr;
 }

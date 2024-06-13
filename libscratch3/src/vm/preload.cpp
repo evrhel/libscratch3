@@ -104,6 +104,6 @@ void ParseSprites(uint8_t *bytecode, size_t bytecodeSize, ParsedSprites *sprites
 	for (size_t i = 0; i < sprites->size(); i++)
 	{
 		SpriteInfo &info = sprites->at(i);
-		ParseSprite(bytecode, bytecodeSize, ptr, &info);
+		ptr = ParseSprite(bytecode, bytecodeSize, ptr, &info);
 	}
 }

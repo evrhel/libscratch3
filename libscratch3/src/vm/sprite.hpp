@@ -138,8 +138,6 @@ public:
 
     constexpr const std::vector<Script *> &GetClickListeners() const { return _clickListeners; }
 
-    constexpr const std::vector<uint64_t> &GetScriptOffsets() const { return _scriptOffsets; }
-
     Sprite();
     ~Sprite();
 private:

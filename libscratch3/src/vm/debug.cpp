@@ -137,14 +137,16 @@ void Debugger::Render()
 
 			if (ImGui::BeginTabItem("Virtual Machine"))
 			{
+				int framerate = _vm->GetOptions().framerate;
+
 				ImGui::SeparatorText("Information");
 				ImGui::LabelText("Program Name", "%s", _vm->GetProgramName().c_str());
-				ImGui::LabelText("Framerate", "%d Hz", (int)FRAMERATE);
+				ImGui::LabelText("Framerate", "%d Hz", framerate);
 
 				ImGui::SeparatorText("Performance");
 				ImGui::LabelText("Interpreter Time", "%.2f ms", (_vm->_interpreterTime * 1000));
 				ImGui::LabelText("Delta Execution", "%.2f ms", (_vm->_deltaExecution * 1000));
-				ImGui::LabelText("Utilization", "%.2f%%", _vm->_interpreterTime * FRAMERATE * 100.0);
+				ImGui::LabelText("Utilization", "%.2f%%", _vm->_interpreterTime * framerate * 100.0);
 
 				ImGui::SeparatorText("Scheduler");
 				ImGui::LabelText("Suspended", "%s", _vm->IsSuspended() ? "true" : "false");
@@ -179,51 +181,9 @@ void Debugger::Render()
 					case ValueType_String:
 						ImGui::LabelText(name, "\"%s\"", v.u.string->str);
 						break;
-					}
-				}
-
-				ImGui::SeparatorText("Global Lists");
-				for (auto &p : _vm->_lists)
-				{
-					Value &v = p.second;
-					const char *name = p.first.c_str();
-
-					if (v.type != ValueType_List)
-					{
-						ImGui::LabelText(name, "<unknown>");
-						continue;
-					}
-
-					ImGui::Text("%s (length: %lld)", name, v.u.list->len);
-					if (v.u.list->len && ImGui::BeginItemTooltip())
-					{
-						for (int64_t i = 0; i < v.u.list->len; i++)
-						{
-							Value &item = v.u.list->values[i];
-							switch (item.type)
-							{
-							default:
-								ImGui::Text("[%lld] <unknown>", i + 1);
-								break;
-							case ValueType_None:
-								ImGui::Text("[%lld] None", i + 1);
-								break;
-							case ValueType_Integer:
-								ImGui::Text("[%lld] %lld", i + 1, item.u.integer);
-								break;
-							case ValueType_Real:
-								ImGui::Text("[%lld] %g", i + 1, item.u.real);
-								break;
-							case ValueType_Bool:
-								ImGui::Text("[%lld] %s", i + 1, item.u.boolean ? "true" : "false");
-								break;
-							case ValueType_String:
-								ImGui::Text("[%lld] \"%s\"", i + 1, item.u.string->str);
-								break;
-							}
-						}
-
-						ImGui::EndTooltip();
+					case ValueType_List:
+						ImGui::LabelText(name, "<list> (length: %lld)", v.u.list->len);
+						break;
 					}
 				}
 
@@ -325,32 +285,9 @@ void Debugger::Render()
 					{
 						ImGui::LabelText("State", GetStateName(script.state));
 						ImGui::LabelText("Sprite", "%s", script.sprite->GetName().c_str());
-						ImGui::LabelText("Root", "%s", script.entry->sl[0]->ToString().c_str());
-						ImGui::LabelText("Wakeup", "%.2f", script.sleepUntil);
-
-						if (script.waitExpr)
-							ImGui::LabelText("Wait", "%s", script.waitExpr->ToString().c_str());
-						else
-							ImGui::LabelText("Wait", "(none)");
-
+						ImGui::LabelText("Wakeup", "%.2g", script.sleepUntil);
 						ImGui::LabelText("Wait Input", script.waitInput ? "true" : "false");
-
-						ImGui::LabelText("Frame", "%d", (int)script.fp);
-
-						for (uintptr_t fp = 0; fp <= script.fp; fp++)
-						{
-							Frame &f = script.frames[fp];
-							if (!f.sl)
-								continue;
-
-							if (f.pc == 0)
-								ImGui::Text("[%d] (start)", (int)fp);
-							else
-							{
-								Statement &stmt = *f.sl->sl[f.pc - 1];
-								ImGui::Text("[%d] %s", (int)fp, stmt.ToString().c_str());
-							}
-						}
+						ImGui::LabelText("Ask Input", script.askInput ? "true" : "false");
 					}
 				}
 

@@ -2,6 +2,7 @@
 #define _SCRATCH3_H_
 
 #include <stddef.h>
+#include <stdarg.h>
 
 #ifdef __cplusplus
 #define SCRATCH3_EXTERN_C extern "C"
@@ -16,6 +17,9 @@ typedef struct _Scratch3 Scratch3;
 #else
 #define SCRATCH3_EXPORT
 #endif // _WIN32
+
+// default framerate
+#define SCRATCH3_FRAMERATE 30
 
 enum
 {
@@ -67,7 +71,7 @@ typedef struct _Scratch3VMOptions
 	int resizable;
 } Scratch3VMOptions;
 
-typedef void (*Scratch3LogFn)(const char *message, size_t len, int severity, void *up);
+typedef void (*Scratch3LogFn)(Scratch3 *S, const char *message, size_t len, int severity, void *up);
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT const char *Scratch3GetErrorString(int error);
 
@@ -75,7 +79,15 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT Scratch3 *Scratch3Create(void);
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3Destroy(Scratch3 *S);
 
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT Scratch3LogFn Scratch3GetStdoutLog(void);
+
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3SetLog(Scratch3 *S, Scratch3LogFn log, int severity, void *up);
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT Scratch3LogFn Scratch3GetLog(Scratch3 *S);
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3VLogf(Scratch3 *S, int severity, const char *format, va_list args);
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3Logf(Scratch3 *S, int severity, const char *format, ...);
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Load(Scratch3 *S, const char *name, const void *data, size_t size);
 

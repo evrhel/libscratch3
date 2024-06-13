@@ -59,7 +59,7 @@ public:
 	//! Sets up the VM and clicks the green flag. If the VM is already
 	//! running, the function will return immediately with failure.
 	//! 
-	//! \return 0 on success, -1 on failure.
+	//! \return An error code
 	int VMStart();
 
 	//! \brief Terminate the VM
@@ -76,7 +76,7 @@ public:
 	//! 
 	//! \param ms Number of milliseconds to wait
 	//! 
-	//! \return 0 on success, -1 on failure, 1 on timeout.
+	//! \return An error code
 	int VMWait(unsigned long ms);
 
 	void VMSuspend();
@@ -108,14 +108,6 @@ public:
 	//! 
 	//! \param seconds Number of seconds to sleep
 	void Sleep(double seconds);
-	
-	//! \brief Wait until an expression is true
-	//! 
-	//! The script will not be scheduled for execution until the
-	//! expression evaluates to true.
-	//! 
-	//! \param expr Expression to evaluate
-	void WaitUntil(Expression *expr);
 
 	//! \brief Ask the user for input and wait for a response
 	//! 
@@ -198,17 +190,20 @@ public:
 
 	constexpr const std::vector<Script> &GetScripts() const { return _scripts; }
 
+	constexpr const Scratch3VMOptions &GetOptions() const { return _options; }
+
 	void OnClick(int64_t x, int64_t y);
 	void OnKeyDown(int scancode);
 
 	VirtualMachine &operator=(const VirtualMachine &) = delete;
 	VirtualMachine &operator=(VirtualMachine &&) = delete;
 
-	VirtualMachine(const Scratch3VMOptions *options);
+	VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options);
 	VirtualMachine(const VirtualMachine &) = delete;
 	VirtualMachine(VirtualMachine &&) = delete;
 	~VirtualMachine();
 private:
+	Scratch3 *S;
 	Scratch3VMOptions _options; // VM options
 
 	uint8_t *_bytecode; // Bytecode for the program
@@ -315,10 +310,6 @@ private:
 	void Cleanup();
 
 	void ShutdownThread();
-
-	void ResetScript(Script &script);
-
-	void StartScript(Script &script);
 
 	void DispatchEvents();
 	 

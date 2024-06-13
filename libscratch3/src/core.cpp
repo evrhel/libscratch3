@@ -9,6 +9,31 @@
 #include "vm/vm.hpp"
 #include "codegen/compiler.hpp"
 
+static void StdOutLogger(Scratch3 *S, const char *msg, size_t len, int severity, void *up)
+{
+	if (severity < S->minSeverity)
+		return;
+
+	switch (severity)
+	{
+	case SCRATCH3_SEVERITY_INFO:
+		printf("INFO: ");
+		break;
+	case SCRATCH3_SEVERITY_WARNING:
+		printf("WARN: ");
+		break;
+	case SCRATCH3_SEVERITY_ERROR:
+		printf("ERRO: ");
+		break;
+	case SCRATCH3_SEVERITY_FATAL:
+		printf("FATAL: ");
+		break;
+	}
+
+	fwrite(msg, 1, len, stdout);
+	putchar('\n');
+}
+
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT const char *Scratch3GetErrorString(int error)
 {
 	switch (error)
@@ -65,11 +90,41 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3Destroy(Scratch3 *S)
 	delete S;
 }
 
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT Scratch3LogFn Scratch3GetStdoutLog(void)
+{
+	return StdOutLogger;
+}
+
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3SetLog(Scratch3 *S, Scratch3LogFn log, int severity, void *up)
 {
 	S->log = log;
 	S->minSeverity = severity;
 	S->up = up;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT Scratch3LogFn Scratch3GetLog(Scratch3 *S)
+{
+	return S->log;
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3VLogf(Scratch3 *S, int severity, const char *format, va_list args)
+{
+	if (!S->log || severity < S->minSeverity)
+		return;
+
+	char buf[4096];
+	int len = vsnprintf(buf, sizeof(buf), format, args);
+	if (len < 0)
+		return;
+	S->log(S, buf, len, severity, S->up);
+}
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT void Scratch3Logf(Scratch3 *S, int severity, const char *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	Scratch3VLogf(S, severity, format, args);
+	va_end(args);
 }
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Load(Scratch3 *S, const char *name, const void *data, size_t size)
@@ -121,7 +176,7 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Compile(Scratch3 *S, const Scratch
 	if (!rsrc)
 		return SCRATCH3_ERROR_IO;
 
-	Program *prog = ParseAST((const char *)rsrc->Data(), rsrc->Size(), S->log, S->up, options);
+	Program *prog = ParseAST(S, (const char *)rsrc->Data(), rsrc->Size(), options);
 	if (!prog)
 		return SCRATCH3_ERROR_COMPILATION_FAILED;
 	Retain(prog);
@@ -164,27 +219,35 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMInit(Scratch3 *S, const Scratch3
 	if (S->vm)
 		return SCRATCH3_ERROR_ALREADY_RUNNING;
 
-	return SCRATCH3_ERROR_SUCCESS;
+	S->vm = new VirtualMachine(S, options);
+
+	int rc = S->vm->Load(S->programName, S->bytecode, S->bytecodeSize);
+	if (rc == SCRATCH3_ERROR_SUCCESS)
+		return SCRATCH3_ERROR_SUCCESS;
+
+	delete S->vm, S->vm = nullptr;
+	return rc;
 }
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMRun(Scratch3 *S)
 {
 	if (!S->vm)
 		return SCRATCH3_ERROR_NO_VM;
-
-	return SCRATCH3_ERROR_SUCCESS;
+	return S->vm->VMStart();
 }
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMTerminate(Scratch3 *S)
 {
 	if (!S->vm)
 		return SCRATCH3_ERROR_NO_VM;
+
+	S->vm->Terminate();
+	return SCRATCH3_ERROR_SUCCESS;
 }
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMWait(Scratch3 *S, unsigned long timeout)
 {
 	if (!S->vm)
 		return SCRATCH3_ERROR_NO_VM;
-
-	return SCRATCH3_ERROR_SUCCESS;
+	return S->vm->VMWait(timeout);
 }

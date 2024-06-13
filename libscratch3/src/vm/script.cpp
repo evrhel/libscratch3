@@ -38,7 +38,15 @@ void ScriptInit(Script &script, const ScriptInfo *info)
 	script.entry = info->loc;
 	script.pc = script.entry;
 	script.stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
-	script.sp = script.stack ? script.stack + STACK_SIZE : 0;
+
+	// fill stack with garbage
+	if (script.stack)
+	{
+		script.sp = script.stack + STACK_SIZE;
+		memset(script.stack, 0xab, STACK_SIZE * sizeof(Value));
+	}
+	else
+		script.sp = nullptr; // out of memory
 }
 
 void ScriptDestroy(Script &script)
@@ -61,6 +69,7 @@ void ScriptReset(Script &script)
 	while (script.sp < stackEnd)
 	{
 		ReleaseValue(*script.sp);
+		memset(script.sp, 0xab, sizeof(Value));
 		script.sp++;
 	}
 }
@@ -80,7 +89,7 @@ int ScriptMain(void *scriptPtr)
 	{
 		script.ticks++;
 
-		uint8_t opcode = *script.pc;
+		Opcode opcode = (Opcode)*script.pc;
 		script.pc++;
 
 		switch (opcode)

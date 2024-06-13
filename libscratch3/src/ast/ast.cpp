@@ -132,63 +132,39 @@ public:
 		return nullptr;
 	}
 
-	Parser(Scratch3_LogCallback log, void *up) :
-		_log(log), _up(up) {}
+	Parser(Scratch3 *S) : S(S) {}
 private:
 	std::unordered_map<std::string, ASTNode *> _defs;
 
-	Scratch3_LogCallback _log;
-	void *_up;
+	Scratch3 *S;
 	bool are_errors = false;
 
 	// Write an error message
 	void Error(const char *format, ...)
 	{
-		char error[512];
-
+		va_list args;
+		va_start(args, format);
 		are_errors = true;
-
-		if (_log)
-		{
-			va_list args;
-			va_start(args, format);
-			vsprintf_s(error, format, args);
-			va_end(args);
-
-			_log(_up, Scratch3_Error, error);
-		}
+		Scratch3VLogf(S, SCRATCH3_SEVERITY_ERROR, format, args);
+		va_end(args);
 	}
 
 	// Write a warning message
 	void Warn(const char *format, ...)
 	{
-		char error[512];
-
-		if (_log)
-		{
-			va_list args;
-			va_start(args, format);
-			vsprintf_s(error, format, args);
-			va_end(args);
-
-			_log(_up, Scratch3_Warning, error);
-		}
+		va_list args;
+		va_start(args, format);
+		Scratch3VLogf(S, SCRATCH3_SEVERITY_WARNING, format, args);
+		va_end(args);
 	}
 
 	// Write an informational message
 	void Info(const char *format, ...)
 	{
-		char error[512];
-
-		if (_log)
-		{
-			va_list args;
-			va_start(args, format);
-			vsprintf_s(error, format, args);
-			va_end(args);
-
-			_log(_up, Scratch3_Info, error);
-		}
+		va_list args;
+		va_start(args, format);
+		Scratch3VLogf(S, SCRATCH3_SEVERITY_INFO, format, args);
+		va_end(args);
 	}
 	
 	//! \brief Parse the "targets" member
@@ -1227,26 +1203,19 @@ private:
 	}
 };
 
-Program *ParseAST(const char *jsonString, size_t length, Scratch3LogFn log, void *up, const Scratch3CompilerOptions *options)
+Program *ParseAST(Scratch3 *S, const char *jsonString, size_t length, const Scratch3CompilerOptions *options)
 {
 	Program *p;
 	
 	double start = ls_time64();
 
 	// parse the AST
-	Parser parser(log, up);
+	Parser parser(S);
 	p = parser.Parse(jsonString, length);
 
 	// log the time taken to parse
-	if (log)
-	{
-		double elapsed = ls_time64() - start;
-
-		char message[64];
-		sprintf_s(message, "Finished in %g sec", round(elapsed * 1000.0) / 1000.0);
-
-		log(up, Scratch3_Info, message);
-	}
+	double elapsed = ls_time64() - start;
+	Scratch3Logf(S, SCRATCH3_SEVERITY_INFO, "Finished in %g sec", round(elapsed * 1000.0) / 1000.0);
 
 	return p;
 }

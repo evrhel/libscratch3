@@ -1,6 +1,43 @@
 #include <cstdio>
+#include <cstdlib>
+#include <memory>
 
 #include <scratch3/scratch3.h>
+
+static void *ReadFile(const char *file, size_t *size)
+{
+	FILE *fp;
+	void *data;
+	size_t len;
+
+	fp = fopen(file, "rb");
+	if (!fp)
+		return nullptr;
+
+	fseek(fp, 0, SEEK_END);
+	len = ftell(fp);
+
+	fseek(fp, 0, SEEK_SET);
+
+	data = malloc(len);
+	if (!data)
+	{
+		fclose(fp);
+		return nullptr;
+	}
+
+	if (fread(data, 1, len, fp) != len)
+	{
+		fclose(fp);
+		free(data);
+		return nullptr;
+	}
+
+	fclose(fp);
+
+	*size = len;
+	return data;
+}
 
 int main(int argc, char *argv[])
 {
@@ -17,44 +54,67 @@ int main(int argc, char *argv[])
 
 	printf("Loading project `%s`\n", file);
 
-	S = Scratch3_Create(file, Scratch3_GetStdoutLogCallback(), NULL);
+	S = Scratch3Create();
 	if (!S)
 	{
 		fprintf(stderr, "Failed to create instance\n");
-		return 1;
+		exit(1);
+	}
+
+	Scratch3SetLog(S, Scratch3GetStdoutLog(), SCRATCH3_SEVERITY_INFO, nullptr);
+
+	size_t size;
+	void *data = ReadFile(file, &size);
+	if (!data)
+	{
+		fprintf(stderr, "Failed to read project\n");
+		exit(1);
+	}
+
+	rc = Scratch3Load(S, file, data, size);
+	if (rc != SCRATCH3_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "Failed to load project: %s\n", Scratch3GetErrorString(rc));
+		exit(1);
 	}
 
 	printf("Compiling project\n");
 
-	rc = Scratch3_Compile(S);
-	if (rc == -1)
-	{
-		fprintf(stderr, "Failed to compile project\n");
+	Scratch3CompilerOptions compileOptions;
+	memset(&compileOptions, 0, sizeof(compileOptions));
 
-		Scratch3_Destroy(S);
-		return 1;
+	rc = Scratch3Compile(S, &compileOptions);
+	if (rc != SCRATCH3_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "Failed to compile project: %s\n", Scratch3GetErrorString(rc));
+		exit(1);
 	}
 
-	// Scratch3_DumpAST(S);
+	Scratch3VMOptions vmOptions;
+	memset(&vmOptions, 0, sizeof(vmOptions));
 
-	rc = Scratch3_Run(S);
-	if (rc == -1)
+	rc = Scratch3VMInit(S, &vmOptions);
+	if (rc != SCRATCH3_ERROR_SUCCESS)
 	{
-		fprintf(stderr, "Failed to run project\n");
-
-		Scratch3_Destroy(S);
-		return 1;
+		fprintf(stderr, "Failed to initialize VM: %s\n", Scratch3GetErrorString(rc));
+		exit(1);
 	}
 
-	rc = Scratch3_Wait(S, -1);
-	if (rc == -1)
+	rc = Scratch3VMRun(S);
+	if (rc != SCRATCH3_ERROR_SUCCESS)
 	{
-		fprintf(stderr, "Failed to wait for project to finish\n");
-		Scratch3_Destroy(S);
-		return 1;
+		fprintf(stderr, "Failed to run project: %s\n", Scratch3GetErrorString(rc));
+		exit(1);
 	}
 
-	Scratch3_Destroy(S);
+	rc = Scratch3VMWait(S, -1);
+	if (rc != SCRATCH3_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "Failed to wait for project to finish: %s\n", Scratch3GetErrorString(rc));
+		exit(1);
+	}
+
+	Scratch3Destroy(S);
 
 	return 0;
 }

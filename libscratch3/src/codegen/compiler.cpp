@@ -1156,7 +1156,7 @@ public:
 		cp.WriteStable<int32_t>(node->bitmapResolution);
 		cp.WriteStable<double>(node->rotationCenterX);
 		cp.WriteStable<double>(node->rotationCenterY);
-		cp.WriteReference(Segment_stable, Segment_data, cp._data.size());
+		cp.WriteReference(Segment_stable, Segment_rdata, cp._rdata.size());
 		cp.WriteStable<uint64_t>(size);
 
 		cp.WriteRdata(data, size);
