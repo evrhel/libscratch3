@@ -9,23 +9,26 @@
 #include "preload.hpp"
 #include "exception.hpp"
 
-// Script has been created but not yet started
-#define EMBRYO 0
+enum
+{
+	// Script has been created but not yet started
+	EMBRYO = 0,
 
-// Script can be scheduled to run
-#define RUNNABLE 1
+	// can be scheduled to run
+	RUNNABLE = 1,
 
-// Script is running
-#define RUNNING 2
+	// Script is running
+	RUNNING = 2,
 
-// Script is waiting for a condition to be met
-#define WAITING 3
+	// Script is waiting for a condition to be met
+	WAITING = 3,
 
-// Script is suspended
-#define SUSPENDED 4
+	// Script is suspended
+	SUSPENDED = 4,
 
-// Script has terminated
-#define TERMINATED 5
+	// Script has terminated
+	TERMINATED = 5
+};
 
 // Stack size for each script
 #define STACK_SIZE 512

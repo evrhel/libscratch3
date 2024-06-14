@@ -36,6 +36,10 @@ set(SOURCES
 	${src}/resource.cpp
 	${GLAD_DIR}/src/glad.c)
 
+if (WIN32)
+	list(APPEND SOURCES ${src}/libscratch3.natvis)
+endif()
+
 add_library(libscratch3 SHARED ${SOURCES})
 
 target_include_directories(libscratch3 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
