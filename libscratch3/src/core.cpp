@@ -172,6 +172,8 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Compile(Scratch3 *S, const Scratch
 	if (S->bytecode)
 		return SCRATCH3_ERROR_ALREADY_COMPILED;
 
+	double start = ls_time64();
+
 	Resource *rsrc = S->loader->Find("project.json");
 	if (!rsrc)
 		return SCRATCH3_ERROR_IO;
@@ -195,6 +197,10 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Compile(Scratch3 *S, const Scratch
 
 	if (!S->bytecode)
 		return SCRATCH3_ERROR_OUT_OF_MEMORY;
+
+	// log the time taken to parse
+	double elapsed = ls_time64() - start;
+	Scratch3Logf(S, SCRATCH3_SEVERITY_INFO, "Finished in %g sec", round(elapsed * 1000.0) / 1000.0);
 
 	return SCRATCH3_ERROR_SUCCESS;
 }

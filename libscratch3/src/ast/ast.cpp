@@ -289,10 +289,7 @@ private:
 				std::string id = it->name.GetString();
 
 				if (target.IsArray())
-				{
-					Info("Discarding dangling block `%s`", id.c_str());
 					continue;
-				}
 
 				if (!target.IsObject())
 				{
@@ -326,10 +323,7 @@ private:
 
 				// check if the opcode is an event handler
 				if (!IsEventHandler(opcode.GetString()))
-				{
-					Info("Discarding dangling block `%s` (%s)", id.c_str(), opcode.GetString());
 					continue;
-				}
 
 				// traverse the script starting from this block
 				StatementList *sl = new StatementList();
@@ -1207,15 +1201,9 @@ Program *ParseAST(Scratch3 *S, const char *jsonString, size_t length, const Scra
 {
 	Program *p;
 	
-	double start = ls_time64();
-
 	// parse the AST
 	Parser parser(S);
 	p = parser.Parse(jsonString, length);
-
-	// log the time taken to parse
-	double elapsed = ls_time64() - start;
-	Scratch3Logf(S, SCRATCH3_SEVERITY_INFO, "Finished in %g sec", round(elapsed * 1000.0) / 1000.0);
 
 	return p;
 }
