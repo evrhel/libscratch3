@@ -6,7 +6,7 @@
 
 void Costume::Init(const CostumeInfo *info)
 {
-	_name = info->name;
+	SetString(_name, info->name);
 	_dataFormat = info->dataFormat;
 	_bitmapResolution = info->bitmapResolution;
 	_logicalCenter.x = info->rotationCenterX;
@@ -28,21 +28,21 @@ void Costume::Load()
 
 		if (!data)
 		{
-			printf("Costume::Load: Failed to load image %s\n", _name.c_str());
+			printf("Costume::Load: Failed to load image %s\n", GetNameString());
 			return;
 		}
 
 		// check for invalid size
 		if (width > MAX_TEXTURE_SIZE || height > MAX_TEXTURE_SIZE)
 		{
-			printf("Costume::Load: Image %s is too large (%dx%d)\n", _name.c_str(), width, height);
+			printf("Costume::Load: Image %s is too large (%dx%d)\n", GetNameString(), width, height);
 			return;
 		}
 
 		// generate mask
 		if (!GenMaskForPixels(data, width, height))
 		{
-			printf("Costume::Load: Failed to generate mask for %s\n", _name.c_str());
+			printf("Costume::Load: Failed to generate mask for %s\n", GetNameString());
 			stbi_image_free(data);
 			return;
 		}
@@ -69,7 +69,7 @@ void Costume::Load()
 		_handle = rsvg_handle_new_from_data(_data, _dataSize, NULL);
 		if (!_handle)
 		{
-			printf("Costume::Load: Failed to load SVG %s\n", _name.c_str());
+			printf("Costume::Load: Failed to load SVG %s\n", GetNameString());
 			return;
 		}
 		
@@ -136,6 +136,8 @@ Costume::Costume() :
 	_handle = nullptr;
 	_svgWidth = _svgHeight = 0;
 	_svgAspect = 1.0;
+
+	InitializeValue(_name);
 }
 
 Costume::~Costume()
@@ -156,6 +158,8 @@ void Costume::Cleanup()
 
 	_texWidth = _texHeight = 0;
 	_svgWidth = _svgHeight = 0;
+
+	ReleaseValue(_name);
 }
 
 void Costume::RenderSVG(uint32_t width, uint32_t height)

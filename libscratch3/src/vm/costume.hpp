@@ -10,6 +10,7 @@
 #include <mutil/mutil.h>
 
 #include "preload.hpp"
+#include "memory.hpp"
 
 // maximum allowed texture size
 #define MAX_TEXTURE_SIZE 2048
@@ -25,7 +26,9 @@ class CostumeDef;
 class Costume
 {
 public:
-	constexpr const std::string &GetName() const { return _name; }
+	constexpr const Value &GetNameValue() const { return _name; }
+	constexpr const String *GetName() const { return _name.u.string; }
+	constexpr const char *GetNameString() const { return _name.u.string->str; }
 
 	//! \brief Returns the texture of the costume
 	//!
@@ -84,7 +87,7 @@ public:
 	Costume(Costume &&) = delete;
 	~Costume();
 private:
-	std::string _name;
+	Value _name;
 
 	GLuint _texture;
 	GLuint _texWidth, _texHeight;

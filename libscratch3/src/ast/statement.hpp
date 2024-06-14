@@ -1003,7 +1003,7 @@ struct OnEvent : public Statement
 	{
 		if (key == "BROADCAST_OPTION")
 		{
-			message = value;
+			message = id;
 			return true;
 		}
 

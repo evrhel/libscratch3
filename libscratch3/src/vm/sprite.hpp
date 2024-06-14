@@ -9,6 +9,7 @@
 #include "costume.hpp"
 #include "script.hpp"
 #include "preload.hpp"
+#include "memory.hpp"
 
 using namespace mutil;
 
@@ -36,7 +37,9 @@ struct GlideInfo
 class Sprite
 {
 public:
-    constexpr const std::string &GetName() const { return _name; }
+    constexpr const String *GetName() const { return _name.u.string; }
+    constexpr const char *GetNameString() const { return _name.u.string->str; }
+
     constexpr bool IsStage() const { return _isStage; }
     
     constexpr const std::string &GetMessage() const { return _message; }
@@ -73,7 +76,7 @@ public:
     constexpr void SetRotationStyle(RotationStyle rotationStyle) { _rotationStyle = rotationStyle, _transDirty = true; }
 
     constexpr int64_t GetCostume() const { return _costume; }
-    constexpr const std::string &GetCostumeName() const { return _costumes[_costume - 1].GetName(); }
+    constexpr const Value &GetCostumeName() const { return _costumes[_costume - 1].GetNameValue(); }
     constexpr void SetCostume(int64_t costume)
     {
         if (!_nCostumes)
@@ -89,7 +92,7 @@ public:
         }
     }
 
-    void SetCostume(const std::string &name);
+    void SetCostume(const String *name);
 
     constexpr int64_t CostumeCount() const { return _nCostumes; }
 
@@ -146,7 +149,7 @@ private:
 
     uint8_t *_spriteData = nullptr, *_spriteEnd = nullptr;
 
-    std::string _name;
+    Value _name;
     bool _isStage = false;
 
     bool _shown = true;
@@ -170,7 +173,7 @@ private:
     Costume *_costumes = nullptr;
     int64_t _nCostumes = 0;
 
-    std::unordered_map<std::string, int64_t> _costumeNames;
+    std::unordered_map<const String *, int64_t, _StringHasher, _StringEqual> _costumeNameMap;
 
     bool _transDirty = true;
     intptr_t _drawable = -1; // drawable sprite

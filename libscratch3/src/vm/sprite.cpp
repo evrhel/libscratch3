@@ -76,10 +76,10 @@ void Sprite::MoveLayer(int64_t amount)
     _vm->GetRenderer()->MoveLayer(_drawable, amount);
 }
 
-void Sprite::SetCostume(const std::string &name)
+void Sprite::SetCostume(const String *name)
 {
-    auto it = _costumeNames.find(name);
-    if (it != _costumeNames.end())
+    auto it = _costumeNameMap.find(name);
+    if (it != _costumeNameMap.end())
         SetCostume(it->second);
 }
 
@@ -191,7 +191,7 @@ void Sprite::Update()
 
 void Sprite::Init(const SpriteInfo *info)
 {
-    _name = info->name;
+    SetString(_name, info->name);
     _x = info->x;
     _y = info->y;
     _size = info->size;
@@ -208,7 +208,7 @@ void Sprite::Init(const SpriteInfo *info)
     for (int64_t i = 0; i < _nCostumes; i++)
     {
         _costumes[i].Init(&info->costumes[i]);
-		_costumeNames[_costumes[i].GetName()] = i + 1;
+        _costumeNameMap[_costumes[i].GetName()] = i + 1;
     }
 }
 
@@ -265,7 +265,7 @@ void Sprite::DebugUI() const
 
     ImGui::SeparatorText("Graphics");
     ImGui::LabelText("Visible", "%s", _shown ? "true" : "false");
-    ImGui::LabelText("Costume", "%d/%d (%s)", (int)_costume, (int)_nCostumes, _costumes[_costume - 1].GetName().c_str());
+    ImGui::LabelText("Costume", "%d/%d (%s)", (int)_costume, (int)_nCostumes, _costumes[_costume - 1].GetNameString());
     ImGui::LabelText("Color", "%.0f", _colorEffect);
     ImGui::LabelText("Brightness", "%.0f", _brightnessEffect);
     ImGui::LabelText("Fisheye", "%.0f", _fisheyeEffect);
@@ -284,7 +284,7 @@ void Sprite::DebugUI() const
         Costume *c = _costumes + id - 1;
         ImGui::Text("[%d]: '%s' (%s), origin: (%.2f, %.2f), size: %dx%d, rendered: %dx%d",
             (int)id,
-            c->GetName().c_str(),
+            c->GetNameString(),
             c->IsBitmap() ? "bitmap" : "vector",
             (double)c->GetLogicalCenter().x,
             (double)c->GetLogicalCenter().y,
@@ -314,7 +314,10 @@ void Sprite::DebugUI() const
     }
 }
 
-Sprite::Sprite() { }
+Sprite::Sprite()
+{
+    InitializeValue(_name);
+}
 
 Sprite::~Sprite()
 {
@@ -375,5 +378,5 @@ void Sprite::Cleanup()
     _messageState = MESSAGE_STATE_NONE;
     _message.clear();
 
-    _name.clear();
+    ReleaseValue(_name);
 }

@@ -67,6 +67,15 @@ int VirtualMachine::Load(const char *name, uint8_t *bytecode, size_t size)
 		Sprite &sprite = _sprites[i];
 		sprite.Init(&si);
 
+		_spriteNames[sprite.GetName()] = i + 1;
+
+		// create initializer
+		_initScripts.emplace_back();
+		Script &init = _initScripts.back();
+		init.Init(&si.init);
+		init.sprite = &sprite;
+		init.vm = this;
+
 		// load scripts
 		for (ScriptInfo &ri : si.scripts)
 		{
@@ -209,9 +218,12 @@ Value &VirtualMachine::GetVariableRef(const Value &name)
 	return it->second;
 }
 
-Sprite *VirtualMachine::FindSprite(const std::string &name)
+Sprite *VirtualMachine::FindSprite(const Value &name)
 {
-	auto it = _spriteNames.find(name);
+	if (name.type != ValueType_String)
+		return nullptr;
+
+	auto it = _spriteNames.find(name.u.string);
 	return it != _spriteNames.end() ? FindSprite(it->second) : nullptr;
 }
 
@@ -237,7 +249,7 @@ void VirtualMachine::OnClick(int64_t x, int64_t y)
 		if (sprite->TouchingPoint(point))
 		{
 			// sprite was clicked
-			printf("Clicked %s\n", sprite->GetName().c_str());
+			printf("Clicked %s\n", sprite->GetNameString());
 			for (Script *script : sprite->GetClickListeners())
 				_clickQueue.push(script);
 			break;
@@ -324,14 +336,14 @@ void VirtualMachine::Render()
 
 		ImVec2 position(x, y);
 
-		const char *text = s->GetName().c_str();
+		const char *text = s->GetNameString();
 		ImVec2 textSize = ImGui::CalcTextSize(text);
 		
 		ImVec2 topLeft(position.x - padding.x, position.y - padding.y);
 		ImVec2 botRight(position.x + textSize.x + padding.x, position.y + textSize.y + padding.y);
 
 		drawList->AddRectFilled(topLeft, botRight, backColor);
-		drawList->AddText(position, s->IsShown() ? textColor : hiddenColor, s->GetName().c_str());
+		drawList->AddText(position, s->IsShown() ? textColor : hiddenColor, s->GetNameString());
 	}
 
 	_debug.Render();
@@ -366,6 +378,9 @@ void VirtualMachine::Cleanup()
 		script.Destroy();
 	_scripts.clear();
 
+	if (_sprites)
+		delete[] _sprites, _sprites = nullptr;
+
 	_io.Release();
 
 	if (_render)
@@ -374,6 +389,8 @@ void VirtualMachine::Cleanup()
 	_loader = nullptr;
 	_bytecode = nullptr;
 	_bytecodeSize = 0;
+
+	_spriteNames.clear();
 }
 
 void VirtualMachine::ShutdownThread()
@@ -381,6 +398,9 @@ void VirtualMachine::ShutdownThread()
 	_activeScripts = 0;
 	_waitingScripts = 0;
 	_running = false;
+
+	if (_sprites)
+		delete[] _sprites, _sprites = nullptr;
 
 	_io.Release();
 
@@ -501,16 +521,17 @@ void VirtualMachine::Scheduler()
 
 		// schedule the script
 		ls_fiber_switch(script.fiber);
+		_current = nullptr;
 
 		if (_panicing)
 			longjmp(_panicJmp, 1);
 
-		if (_current->except != Exception_None)
+		if (script.except != Exception_None)
 		{
 			// script raised an exception
-			printf("<EXCEPTION> %s: %s\n", ExceptionString(_current->except), _current->exceptMessage);
-			_current->Dump();
-			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", ExceptionString(_current->except), _render->GetWindow());
+			printf("<EXCEPTION> %s: %s\n", ExceptionString(script.except), script.exceptMessage);
+			script.Dump();
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", ExceptionString(script.except), _render->GetWindow());
 			
 			_activeScripts = 0;
 			_waitingScripts = 0;
@@ -521,7 +542,6 @@ void VirtualMachine::Scheduler()
 		if (script.state == TERMINATED)
 			script.Reset();
 
-		_current = nullptr;
 	}
 
 	_activeScripts = activeScripts;
@@ -554,6 +574,13 @@ void VirtualMachine::Main()
 
 	if (ls_convert_to_fiber(NULL) != 0)
 		Panic("Failed to convert to fiber");
+
+	for (Script &script : _initScripts)
+	{
+		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
+		if (!script.fiber)
+			Panic("Failed to create fiber");
+	}
 
 	for (Script &script : _scripts)
 	{
@@ -630,6 +657,25 @@ void VirtualMachine::Main()
 	_running = true;
 
 	_epoch = ls_time64();
+
+	// run initialization scripts
+	for (Script &script : _initScripts)
+	{
+		script.Start();
+		_current = &script;
+		ls_fiber_switch(script.fiber);
+
+		_current = nullptr;
+
+		if (_panicing)
+			longjmp(_panicJmp, 1);
+	
+		if (script.except != Exception_None)
+			Panic("Initialization script raised an exception");
+
+		if (script.state != TERMINATED)
+			Panic("Initialization script did not terminate");
+	}
 	
 	SendFlagClicked();
 

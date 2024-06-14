@@ -423,7 +423,7 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 		node->e3->Accept(this);
-		cp.WriteOpcode(Op_glide);
+		cp.WriteOpcode(Op_glidexy);
 	}
 
 	virtual void Visit(PointDir *node)

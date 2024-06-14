@@ -103,8 +103,7 @@ public:
 
 	inline double GetTimer() const { return GetTime() - _timerStart; }
 
-	Sprite *FindSprite(const std::string &name);
-
+	Sprite *FindSprite(const Value &name);
 	Sprite *FindSprite(intptr_t id);
 
 	void ResetTimer();
@@ -142,10 +141,11 @@ private:
 	Sprite *_sprites; // All sprites
 	Sprite *_spritesEnd; // End of the sprite list
 
-	std::unordered_map<std::string, intptr_t> _spriteNames; // Sprite name lookup
+	std::unordered_map<const String *, intptr_t, _StringHasher, _StringEqual> _spriteNames; // Sprite name lookup
 
 	std::unordered_map<String *, Value, _StringHasher, _StringEqual> _variables; // Variables
 
+	std::vector<Script> _initScripts; // Initialization scripts
 	std::vector<Script> _scripts; // All scripts
 	size_t _nextScript; // Next script to run
 

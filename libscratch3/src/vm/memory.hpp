@@ -106,7 +106,7 @@ void ListDelete(const Value &list, const Value &index);
 void ListClear(const Value &list);
 void ListInsert(const Value &list, int64_t index, const Value &v);
 
-void CvtString(Value &v);
+Value &CvtString(Value &v);
 int64_t ValueLength(const Value &v);
 Value &ConcatValue(Value &lhs, const Value &rhs);
 char ValueCharAt(const Value &v, int64_t index);
@@ -163,6 +163,9 @@ struct _StringEqual
 {
 	constexpr bool operator()(const String *lhs, const String *rhs) const
 	{
+		if (lhs == rhs)
+			return true;
+
 		if (lhs->hash != rhs->hash || lhs->len != rhs->len)
 			return false;
 

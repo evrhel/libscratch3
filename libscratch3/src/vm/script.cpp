@@ -89,6 +89,8 @@ void Script::Start()
 
 void Script::Main()
 {
+	(void)setjmp(scriptMain); // don't care about return value
+
 	uint8_t *bytecode = vm->GetBytecode();
 	ProgramHeader *header = (ProgramHeader *)bytecode;
 	uint8_t *textBegin = bytecode + header->text;
@@ -306,7 +308,8 @@ void Script::Main()
 		case Op_glide:
 			Raise(NotImplemented, "glide");
 		case Op_glidexy:
-			Raise(NotImplemented, "glidexy");
+			Glide(ToReal(StackAt(1)), ToReal(StackAt(0)), ToReal(StackAt(2)));
+			break;
 		case Op_setdir:
 			sprite->SetDirection(ToReal(StackAt(0)));
 			Pop();
@@ -344,14 +347,50 @@ void Script::Main()
 		case Op_getdir:
 			SetReal(Push(), sprite->GetDirection());
 			break;
-		case Op_say:
-			Raise(NotImplemented, "say");
-		case Op_think:
-			Raise(NotImplemented, "think");
-		case Op_setcostume:
-			Raise(NotImplemented, "setcostume");
+		case Op_say: {
+			Value &v = StackAt(0);
+			CvtString(v);
+
+			if (v.type == ValueType_String)
+				printf("%s is saying: %s\n", sprite->GetNameString(), v.u.string->str);
+
+			Pop();
+			break;
+		}
+		case Op_think: {
+			Value &v = StackAt(0);
+			CvtString(v);
+
+			if (v.type == ValueType_String)
+				printf("%s is thinking: %s\n", sprite->GetNameString(), v.u.string->str);
+
+			Pop();
+			break;
+		}
+		case Op_setcostume: {
+			Value &v = StackAt(0);
+
+			switch (v.type)
+			{
+			case ValueType_Integer:
+				sprite->SetCostume(v.u.integer);
+				break;
+			case ValueType_Real:
+				sprite->SetCostume(static_cast<int64_t>(round(v.u.real)));
+				break;
+			case ValueType_String:
+				sprite->SetCostume(v.u.string);
+				break;
+			default:
+				break; // do nothing
+			}
+
+			Pop();
+			break;
+		}
 		case Op_nextcostume:
-			Raise(NotImplemented, "nextcostume");
+			sprite->SetCostume(sprite->GetCostume() + 1);
+			break;
 		case Op_setbackdrop:
 			Raise(NotImplemented, "setbackdrop");
 		case Op_nextbackdrop:
@@ -384,7 +423,7 @@ void Script::Main()
 			SetInteger(Push(), sprite->GetCostume());
 			break;
 		case Op_getcostumename:
-			SetString(Push(), sprite->GetCostumeName());
+			Assign(Push(), sprite->GetCostumeName());
 			break;
 		case Op_getbackdrop:
 			Raise(NotImplemented, "getbackdrop");
@@ -433,10 +472,20 @@ void Script::Main()
 		case Op_onevent:
 			pc += sizeof(uint64_t); // skip event
 			break;
-		case Op_send:
-			Raise(NotImplemented, "send");
-		case Op_sendandwait:
-			Raise(NotImplemented, "sendandwait");
+		case Op_send: {
+			int64_t len;
+			const char *message = ToString(StackAt(0), &len);
+			vm->Send(std::string(message, len));
+			Pop();
+			break;
+		}
+		case Op_sendandwait: {
+			int64_t len;
+			const char *message = ToString(StackAt(0), &len);
+			vm->SendAndWait(std::string(message, len));
+			Pop();
+			break;
+		}
 		case Op_findevent:
 			Raise(NotImplemented, "findevent");
 		case Op_waitsecs:
@@ -491,8 +540,58 @@ void Script::Main()
 		case Op_resettimer:
 			vm->ResetTimer();
 			break;
-		case Op_propertyof:
-			Raise(NotImplemented, "propertyof");
+		case Op_propertyof: {
+			PropertyTarget target = (PropertyTarget)*(uint8_t *)pc;
+			pc++;
+
+			Sprite *s = vm->FindSprite(CvtString(StackAt(0)));
+			Pop(); // pop name
+
+			if (!s)
+			{
+				if (target == PropertyTarget_Variable)
+					Pop(); // variable name
+				Push(); // none
+				break;
+			}
+
+			switch (target)
+			{
+			default:
+				Push(); // none
+				break;
+			case PropertyTarget_BackdropNumber:
+				SetInteger(Push(), 1); // TODO: backdrop number
+				break;
+			case PropertyTarget_BackdropName:
+				SetString(Push(), "backdrop1"); // TODO: backdrop name
+				break;
+			case PropertyTarget_XPosition:
+				SetReal(Push(), s->GetX());
+				break;
+			case PropertyTarget_YPosition:
+				SetReal(Push(), s->GetY());
+				break;
+			case PropertyTarget_CostumeNumber:
+				SetInteger(Push(), s->GetCostume());
+				break;
+			case PropertyTarget_CostumeName:
+				Assign(Push(), s->GetCostumeName());
+				break;
+			case PropertyTarget_Size:
+				SetReal(Push(), s->GetSize());
+				break;
+			case PropertyTarget_Volume:
+				SetReal(Push(), s->GetVolume());
+				break;
+			case PropertyTarget_Variable:
+				Pop();
+				Push(); // TODO: get variable value
+				break;
+			}
+
+			break;
+		}
 		case Op_gettime:
 			Raise(NotImplemented, "gettime");
 		case Op_getdayssince2000:
@@ -651,7 +750,7 @@ void Script::Dump()
 	else
 		printf("    state = Unknown\n");
 
-	printf("    sprite = %s\n", sprite ? sprite->GetName().c_str() : "(null)");
+	printf("    sprite = %s\n", sprite ? sprite->GetNameString() : "(null)");
 
 	printf("    sleepUntil = %g\n", sleepUntil);
 	printf("    waitInput = %s\n", waitInput ? "true" : "false");

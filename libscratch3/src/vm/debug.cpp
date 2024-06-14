@@ -217,7 +217,7 @@ void Debugger::Render()
 				ImGui::SeparatorText("Sprites");
 				for (Sprite *s = _vm->_sprites; s < _vm->_spritesEnd; s++)
 				{
-					if (ImGui::CollapsingHeader(s->GetName().c_str()))
+					if (ImGui::CollapsingHeader(s->GetNameString()))
 						s->DebugUI();
 				}
 
@@ -279,12 +279,12 @@ void Debugger::Render()
 
 
 					char name[128];
-					snprintf(name, sizeof(name), "%p (%s)", &script, script.sprite->GetName().c_str());
+					snprintf(name, sizeof(name), "%p (%s)", &script, script.sprite->GetNameString());
 
 					if (ImGui::CollapsingHeader(name))
 					{
 						ImGui::LabelText("State", GetStateName(script.state));
-						ImGui::LabelText("Sprite", "%s", script.sprite->GetName().c_str());
+						ImGui::LabelText("Sprite", "%s", script.sprite->GetNameString());
 						ImGui::LabelText("Wakeup", "%.2g", script.sleepUntil);
 						ImGui::LabelText("Wait Input", script.waitInput ? "true" : "false");
 						ImGui::LabelText("Ask Input", script.askInput ? "true" : "false");

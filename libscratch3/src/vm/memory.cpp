@@ -440,7 +440,7 @@ void ListInsert(const Value &list, int64_t index, const Value &v)
 	Assign(l->values[target], v);
 }
 
-void CvtString(Value &v)
+Value &CvtString(Value &v)
 {
 	char buf[64];
 	int cch;
@@ -483,6 +483,8 @@ void CvtString(Value &v)
 		SetString(v, "<list>");
 		break;
 	}
+
+	return v;
 }
 
 int64_t ValueLength(const Value &v)
