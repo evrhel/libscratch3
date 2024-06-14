@@ -56,6 +56,7 @@ struct Script
 	Value *sp;  // Stack pointer (highest address, grows downwards) sp - 1 is the next free slot
 
 	jmp_buf scriptMain; // Jump buffer for script main loop
+	bool isReset;  // Reset flag
 
 	ExceptionType except; // Exception type
 	const char *exceptMessage; // Exception message

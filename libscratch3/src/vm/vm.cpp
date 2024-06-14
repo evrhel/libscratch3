@@ -259,6 +259,12 @@ void VirtualMachine::OnClick(int64_t x, int64_t y)
 
 void VirtualMachine::OnKeyDown(int scancode)
 {
+	auto it = _keyListeners.find((SDL_Scancode)scancode);
+	if (it == _keyListeners.end())
+		return;
+
+	for (Script *script : it->second)
+		script->Start();
 }
 
 VirtualMachine::VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options) :

@@ -9,8 +9,8 @@ void Costume::Init(const CostumeInfo *info)
 	SetString(_name, info->name);
 	_dataFormat = info->dataFormat;
 	_bitmapResolution = info->bitmapResolution;
-	_logicalCenter.x = info->rotationCenterX;
-	_logicalCenter.y = info->rotationCenterY;
+	//_logicalCenter.x = info->rotationCenterX;
+	//_logicalCenter.y = info->rotationCenterY;
 	_data = info->data;
 	_dataSize = info->dataSize;
 }

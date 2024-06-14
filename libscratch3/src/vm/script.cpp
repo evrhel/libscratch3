@@ -1,6 +1,7 @@
 #include "script.hpp"
 
 #include <cstdio>
+#include <cassert>
 
 #include "vm.hpp"
 #include "sprite.hpp"
@@ -41,6 +42,7 @@ void Script::Init(const ScriptInfo *info)
 	ticks = 0;
 	entry = info->loc;
 	pc = entry;
+	isReset = false;
 	stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
 
 	// fill stack with garbage
@@ -70,6 +72,9 @@ void Script::Reset()
 	askInput = false;
 	ticks = 0;
 	pc = entry;
+	isReset = true;
+	except = Exception_None;
+	exceptMessage = nullptr;
 
 	// release stack
 	Value *const stackEnd = stack + STACK_SIZE;
@@ -79,6 +84,8 @@ void Script::Reset()
 		memset(sp, 0xab, sizeof(Value));
 		sp++;
 	}
+
+	assert(sp == stackEnd);
 }
 
 void Script::Start()
@@ -90,6 +97,9 @@ void Script::Start()
 void Script::Main()
 {
 	(void)setjmp(scriptMain); // don't care about return value
+
+	isReset = false;
+	assert(sp == stack + STACK_SIZE);
 
 	uint8_t *bytecode = vm->GetBytecode();
 	ProgramHeader *header = (ProgramHeader *)bytecode;
@@ -496,7 +506,6 @@ void Script::Main()
 			Raise(NotImplemented, "stopall");
 		case Op_stopself:
 			Terminate();
-			break;
 		case Op_stopother:
 			Raise(NotImplemented, "stopother");
 		case Op_onclone:
@@ -665,9 +674,10 @@ Value &Script::Push()
 
 void Script::Pop()
 {
-	if (sp > stack + STACK_SIZE)
+	if (sp >= stack + STACK_SIZE)
 		Raise(StackUnderflow, "Stack underflow");
 	ReleaseValue(*sp);
+	memset(sp, 0xab, sizeof(Value)); // fill with garbage
 	sp++;
 }
 
@@ -682,6 +692,9 @@ void Script::Sched()
 {
 	ticks = 0;
 	ls_fiber_sched();
+
+	if (isReset)
+		longjmp(scriptMain, 1);
 }
 
 void Script::Terminate()
@@ -692,7 +705,6 @@ void Script::Terminate()
 	if (state != RUNNABLE)
 		vm->Panic("Terminated script was rescheduled");
 
-	// Script was restarted, jump back to the beginning
 	longjmp(scriptMain, 1);
 }
 
@@ -705,9 +717,13 @@ void LS_NORETURN Script::Raise(ExceptionType type, const char *message)
 
 void Script::Sleep(double seconds)
 {
+	Value *spOld = sp;
+
 	sleepUntil = vm->GetTime() + seconds;
 	state = WAITING;
 	Sched();
+
+	assert(sp == spOld);
 }
 
 void Script::Glide(double x, double y, double t)
