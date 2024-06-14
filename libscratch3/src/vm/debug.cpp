@@ -144,7 +144,7 @@ void Debugger::Render()
 				ImGui::LabelText("Framerate", "%d Hz", framerate);
 
 				ImGui::SeparatorText("Performance");
-				ImGui::LabelText("Interpreter Time", "%.2f ms", (_vm->_interpreterTime * 1000));
+				ImGui::LabelText("Interpreter Time", "%.0f ms", (_vm->_interpreterTime * 1000));
 				ImGui::LabelText("Delta Execution", "%.2f ms", (_vm->_deltaExecution * 1000));
 				ImGui::LabelText("Utilization", "%.2f%%", _vm->_interpreterTime * framerate * 100.0);
 

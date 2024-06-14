@@ -106,6 +106,8 @@ public:
 	Sprite *FindSprite(const Value &name);
 	Sprite *FindSprite(intptr_t id);
 
+	constexpr Sprite *GetStage() const { return _stage; }
+
 	void ResetTimer();
 
 	constexpr Loader *GetLoader() const { return _loader; }
@@ -140,6 +142,8 @@ private:
 
 	Sprite *_sprites; // All sprites
 	Sprite *_spritesEnd; // End of the sprite list
+
+	Sprite *_stage; // Stage sprite
 
 	std::unordered_map<const String *, intptr_t, _StringHasher, _StringEqual> _spriteNames; // Sprite name lookup
 

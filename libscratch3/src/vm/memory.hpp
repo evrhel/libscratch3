@@ -78,6 +78,7 @@ constexpr uint32_t HashString(const char *s)
 	return hash;
 }
 
+bool StringEqualsRaw(const char *lstr, const char *rstr);
 bool StringEquals(const char *lstr, const char *rstr);
 
 bool Truth(const Value &val);

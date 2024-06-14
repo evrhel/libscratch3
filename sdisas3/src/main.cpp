@@ -459,17 +459,11 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTabl
 		case Op_setcostume:
 			printf("setcostume\n");
 			break;
-		case Op_findcostume:
-			printf("findcostume\n");
-			break;
 		case Op_nextcostume:
 			printf("nextcostume\n");
 			break;
 		case Op_setbackdrop:
 			printf("setbackdrop\n");
-			break;
-		case Op_findbackdrop:
-			printf("findbackdrop\n");
 			break;
 		case Op_nextbackdrop:
 			printf("nextbackdrop\n");

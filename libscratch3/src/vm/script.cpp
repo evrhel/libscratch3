@@ -7,6 +7,9 @@
 #include "sprite.hpp"
 #include "../codegen/compiler.hpp"
 
+#define DEG2RAD (0.017453292519943295769236907684886)
+#define RAD2DEG (57.295779513082320876798154814105)
+
 const char *GetStateName(int state)
 {
 	switch (state)
@@ -251,59 +254,116 @@ void Script::Main()
 			SetReal(*lhs, real);
 			break;
 		case Op_sub:
+			lhs = &StackAt(1);
+			rhs = &StackAt(0);
+			real = ToReal(*lhs) - ToReal(*rhs);
+			Pop();
+			SetReal(*lhs, real);
 			break;
 		case Op_mul:
+			lhs = &StackAt(1);
+			rhs = &StackAt(0);
+			real = ToReal(*lhs) * ToReal(*rhs);
+			Pop();
+			SetReal(*lhs, real);
 			break;
 		case Op_div:
+			lhs = &StackAt(1);
+			rhs = &StackAt(0);
+			real = ToReal(*lhs) / ToReal(*rhs);
+			Pop();
+			SetReal(*lhs, real);
 			break;
 		case Op_mod:
+			lhs = &StackAt(1);
+			rhs = &StackAt(0);
+			real = fmod(ToReal(*lhs), ToReal(*rhs));
+			Pop();
+			SetReal(*lhs, real);
 			break;
 		case Op_neg:
+			SetReal(StackAt(0), -ToReal(StackAt(0)));
 			break;
 		case Op_round:
+			SetReal(StackAt(0), round(ToReal(StackAt(0))));
 			break;
 		case Op_abs:
+			SetReal(StackAt(0), fabs(ToReal(StackAt(0))));
 			break;
 		case Op_floor:
+			SetReal(StackAt(0), floor(ToReal(StackAt(0))));
 			break;
 		case Op_ceil:
+			SetReal(StackAt(0), ceil(ToReal(StackAt(0))));
 			break;
 		case Op_sqrt:
+			SetReal(StackAt(0), sqrt(ToReal(StackAt(0))));
 			break;
 		case Op_sin:
+			SetReal(StackAt(0), sin(ToReal(StackAt(0))));
 			break;
 		case Op_cos:
+			SetReal(StackAt(0), cos(ToReal(StackAt(0))));
 			break;
 		case Op_tan:
+			SetReal(StackAt(0), tan(ToReal(StackAt(0))));
 			break;
 		case Op_asin:
+			SetReal(StackAt(0), asin(ToReal(StackAt(0))));
 			break;
 		case Op_acos:
+			SetReal(StackAt(0), acos(ToReal(StackAt(0))));
 			break;
 		case Op_atan:
+			SetReal(StackAt(0), atan(ToReal(StackAt(0))));
 			break;
 		case Op_ln:
+			SetReal(StackAt(0), log(ToReal(StackAt(0))));
 			break;
 		case Op_log10:
+			SetReal(StackAt(0), log10(ToReal(StackAt(0))));
 			break;
 		case Op_exp:
+			SetReal(StackAt(0), exp(ToReal(StackAt(0))));
 			break;
 		case Op_exp10:
+			SetReal(StackAt(0), pow(10.0, ToReal(StackAt(0))));
 			break;
 		case Op_strcat:
-			Raise(NotImplemented, "strcat");
+			lhs = &StackAt(1);
+			rhs = &StackAt(0);
+			ConcatValue(*lhs, *rhs);
+			Pop();
+			break;
 		case Op_charat:
-			Raise(NotImplemented, "charat");
+			lhs = &StackAt(1);
+			i64 = ToInteger(StackAt(0));
+			Pop();
+			SetChar(*lhs, ValueCharAt(*lhs, i64));
+			break;
 		case Op_strlen:
+			SetInteger(StackAt(0), ValueLength(StackAt(0)));
 			break;
 		case Op_strstr:
+			SetBool(StackAt(1), ValueContains(StackAt(0), StackAt(1)));
+			Pop();
 			break;
 		case Op_inc:
 			Raise(NotImplemented, "inc");
 		case Op_dec:
 			Raise(NotImplemented, "dec");
-		case Op_movesteps:
+		case Op_movesteps: {
+			double steps = ToReal(StackAt(0));
+			Pop();
+
+			double dir = (sprite->GetDirection() - 90.0) * DEG2RAD;
+			double dx = steps * cos(dir);
+			double dy = -steps * sin(dir); // y-axis is inverted
+
+			sprite->SetXY(sprite->GetX() + dx, sprite->GetY() + dy);
+
 			break;
+		}
 		case Op_turndegrees:
 			sprite->SetDirection(ToReal(StackAt(0)) + sprite->GetDirection());
 			Pop();
@@ -401,10 +461,33 @@ void Script::Main()
 		case Op_nextcostume:
 			sprite->SetCostume(sprite->GetCostume() + 1);
 			break;
-		case Op_setbackdrop:
-			Raise(NotImplemented, "setbackdrop");
-		case Op_nextbackdrop:
-			Raise(NotImplemented, "nextbackdrop");
+		case Op_setbackdrop: {
+			Value &v = StackAt(0);
+			Sprite *stage = vm->GetStage();
+
+			switch (v.type)
+			{
+			default:
+				break;
+			case ValueType_Integer:
+				stage->SetCostume(v.u.integer);
+				break;
+			case ValueType_Real:
+				stage->SetCostume(static_cast<int64_t>(round(v.u.real)));
+				break;
+			case ValueType_String:
+				stage->SetCostume(v.u.string);
+				break;
+			}
+
+			Pop();
+			break;
+		}
+		case Op_nextbackdrop: {
+			Sprite *stage = vm->GetStage();
+			stage->SetCostume(stage->GetCostume() + 1);
+			break;
+		}
 		case Op_addsize:
 			sprite->SetSize(sprite->GetSize() + ToReal(StackAt(0)));
 			Pop();
@@ -413,12 +496,87 @@ void Script::Main()
 			sprite->SetSize(ToReal(StackAt(0)));
 			Pop();
 			break;
-		case Op_addgraphiceffect:
-			Raise(NotImplemented, "addgraphiceffect");
-		case Op_setgraphiceffect:
-			Raise(NotImplemented, "setgraphiceffect");
+		case Op_addgraphiceffect: {
+			GraphicEffect effect = (GraphicEffect) * (uint8_t *)pc;
+			pc++;
+
+			double val = ToReal(StackAt(0));
+			Pop();
+
+			switch (effect)
+			{
+			default:
+				Raise(InvalidArgument, "Invalid graphic effect");
+			case GraphicEffect_Color:
+				sprite->SetColorEffect(val + sprite->GetColorEffect());
+				break;
+			case GraphicEffect_Fisheye:
+				sprite->SetFisheyeEffect(val + sprite->GetFisheyeEffect());
+				break;
+			case GraphicEffect_Whirl:
+				sprite->SetWhirlEffect(val + sprite->GetWhirlEffect());
+				break;
+			case GraphicEffect_Pixelate:
+				sprite->SetPixelateEffect(val + sprite->GetPixelateEffect());
+				break;
+			case GraphicEffect_Mosaic:
+				sprite->SetMosaicEffect(val + sprite->GetMosaicEffect());
+				break;
+			case GraphicEffect_Brightness:
+				sprite->SetBrightnessEffect(val + sprite->GetBrightnessEffect());
+				break;
+			case GraphicEffect_Ghost:
+				sprite->SetGhostEffect(val + sprite->GetGhostEffect());
+				break;
+			}
+
+			break;
+		}
+		case Op_setgraphiceffect: {
+			GraphicEffect effect = (GraphicEffect)*(uint8_t *)pc;
+			pc++;
+
+			double val = ToReal(StackAt(0));
+			Pop();
+
+			switch (effect)
+			{
+			default:
+				Raise(InvalidArgument, "Invalid graphic effect");
+			case GraphicEffect_Color:
+				sprite->SetColorEffect(val);
+				break;
+			case GraphicEffect_Fisheye:
+				sprite->SetFisheyeEffect(val);
+				break;
+			case GraphicEffect_Whirl:
+				sprite->SetWhirlEffect(val);
+				break;
+			case GraphicEffect_Pixelate:
+				sprite->SetPixelateEffect(val);
+				break;
+			case GraphicEffect_Mosaic:
+				sprite->SetMosaicEffect(val);
+				break;
+			case GraphicEffect_Brightness:
+				sprite->SetBrightnessEffect(val);
+				break;
+			case GraphicEffect_Ghost:
+				sprite->SetGhostEffect(val);
+				break;
+			}
+
+			break;
+		}
 		case Op_cleargraphiceffects:
-			Raise(NotImplemented, "cleargraphiceffects");
+			sprite->SetColorEffect(0);
+			sprite->SetFisheyeEffect(0);
+			sprite->SetWhirlEffect(0);
+			sprite->SetPixelateEffect(0);
+			sprite->SetMosaicEffect(0);
+			sprite->SetBrightnessEffect(0);
+			sprite->SetGhostEffect(0);
+			break;
 		case Op_show:
 			sprite->SetShown(true);
 			break;
@@ -426,9 +584,37 @@ void Script::Main()
 			sprite->SetShown(false);
 			break;
 		case Op_gotolayer:
-			Raise(NotImplemented, "gotolayer");
-		case Op_movelayer:
-			Raise(NotImplemented, "movelayer");
+			switch (*(uint8_t *)pc)
+			{
+			default:
+				Raise(InvalidArgument, "Invalid layer");
+			case LayerType_Front:
+				sprite->SetLayer(1);
+				break;
+			case LayerType_Back:
+				sprite->SetLayer(-1);
+				break;
+			}
+
+			pc++;
+		case Op_movelayer: {
+			int64_t amount = ToInteger(StackAt(0));
+			Pop();
+
+			switch (*(uint8_t *)pc)
+			{
+			default:
+				Raise(InvalidArgument, "Invalid direction");
+			case LayerDir_Forward:
+				sprite->MoveLayer(amount);
+				break;
+			case LayerDir_Backward:
+				sprite->MoveLayer(-amount);
+				break;
+			}
+
+			pc++;
+		}
 		case Op_getcostume:
 			SetInteger(Push(), sprite->GetCostume());
 			break;
@@ -441,7 +627,9 @@ void Script::Main()
 			SetReal(Push(), sprite->GetSize());
 			break;
 		case Op_playsoundandwait:
-			Raise(NotImplemented, "playsoundandwait");
+			// TODO: implement playsoundandwait
+			Pop();
+			break;
 		case Op_playsound:
 			Raise(NotImplemented, "playsound");
 		case Op_findsound:
@@ -515,8 +703,31 @@ void Script::Main()
 			Raise(NotImplemented, "clone");
 		case Op_deleteclone:
 			Raise(NotImplemented, "deleteclone");
-		case Op_touching:
-			Raise(NotImplemented, "touching");
+		case Op_touching: {
+			Value &v = CvtString(StackAt(0)); // same as stack[0] = CvtString(stack[0]);
+			if (v.type != ValueType_String)
+			{
+				SetBool(v, false);
+				break;
+			}
+
+			if (!strcmp(v.u.string->str, "_mouse_"))
+			{
+				auto &io = vm->GetIO();
+				SetBool(v, sprite->TouchingPoint(Vector2(io.GetMouseX(), io.GetMouseY())));
+				break;
+			}
+
+			Sprite *s = vm->FindSprite(v);
+			if (!s)
+			{
+				SetBool(v, false);
+				break;
+			}
+
+			SetBool(v, sprite->TouchingSprite(s));
+			break;
+		}
 		case Op_touchingcolor:
 			Raise(NotImplemented, "touchingcolor");
 		case Op_colortouching:
@@ -528,8 +739,50 @@ void Script::Main()
 		case Op_getanswer:
 			Assign(Push(), vm->GetIO().GetAnswer());
 			break;
-		case Op_keypressed:
-			Raise(NotImplemented, "keypressed");
+		case Op_keypressed: {
+			Value &v = CvtString(StackAt(0));
+			if (v.type != ValueType_String)
+			{
+				SetBool(v, false);
+				break;
+			}
+
+			String *s = v.u.string;
+			int scancode;
+			if (s->len == 1)
+			{
+				char c = tolower(s->str[0]);
+				if (c >= 'a' && c <= 'z')
+					scancode = SDL_SCANCODE_A + (c - 'a');
+				else if (c >= '0' && c <= '9')
+					scancode = SDL_SCANCODE_0 + (c - '0');
+				else
+				{
+					SetBool(v, false);
+					break;
+				}
+			}
+			else if (StringEqualsRaw(s->str, "space"))
+				scancode = SDL_SCANCODE_SPACE;
+			else if (StringEqualsRaw(s->str, "up arrow"))
+				scancode = SDL_SCANCODE_UP;
+			else if (StringEqualsRaw(s->str, "down arrow"))
+				scancode = SDL_SCANCODE_DOWN;
+			else if (StringEqualsRaw(s->str, "right arrow"))
+				scancode = SDL_SCANCODE_RIGHT;
+			else if (StringEqualsRaw(s->str, "left arrow"))
+				scancode = SDL_SCANCODE_LEFT;
+			else if (StringEqualsRaw(s->str, "any"))
+				scancode = -1;
+			else
+			{
+				SetBool(v, false);
+				break;
+			}
+
+			SetBool(v, vm->GetIO().GetKey(scancode));
+			break;
+		}
 		case Op_mousedown:
 			SetBool(Push(), vm->GetIO().IsMouseDown());
 			break;
@@ -570,10 +823,10 @@ void Script::Main()
 				Push(); // none
 				break;
 			case PropertyTarget_BackdropNumber:
-				SetInteger(Push(), 1); // TODO: backdrop number
+				SetInteger(Push(), vm->GetStage()->GetCostume());
 				break;
 			case PropertyTarget_BackdropName:
-				SetString(Push(), "backdrop1"); // TODO: backdrop name
+				Assign(Push(), vm->GetStage()->GetCostumeName());
 				break;
 			case PropertyTarget_XPosition:
 				SetReal(Push(), s->GetX());

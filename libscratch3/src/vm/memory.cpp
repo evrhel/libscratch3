@@ -10,6 +10,20 @@
 #define TRUE_SIZE (sizeof(TRUE_STRING) - 1)
 #define FALSE_SIZE (sizeof(FALSE_STRING) - 1)
 
+bool StringEqualsRaw(const char *lstr, const char *rstr)
+{
+	while (*lstr && *rstr)
+	{
+		if (tolower(*lstr) != tolower(*rstr))
+			return false;
+
+		lstr++;
+		rstr++;
+	}
+
+	return *lstr == *rstr;
+}
+
 bool StringEquals(const char *lstr, const char *rstr)
 {
 	if (lstr == rstr)

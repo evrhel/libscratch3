@@ -19,9 +19,6 @@
 #include "preload.hpp"
 #include "exception.hpp"
 
-#define DEG2RAD (0.017453292519943295769236907684886)
-#define RAD2DEG (57.295779513082320876798154814105)
-
 static std::string trim(const std::string &str, const std::string &ws = " \t\n\r")
 {
 	size_t start = str.find_first_not_of(ws);
@@ -86,6 +83,9 @@ int VirtualMachine::Load(const char *name, uint8_t *bytecode, size_t size)
 			s.sprite = &sprite;
 			s.vm = this;
 		}
+
+		if (si.isStage)
+			_stage = &sprite;
 
 		i++;
 	}
@@ -159,13 +159,11 @@ void VirtualMachine::VMResume()
 
 void VirtualMachine::SendFlagClicked()
 {
-	printf("Flag clicked\n");
 	_flagClicked = true;
 }
 
 void VirtualMachine::Send(const std::string &message)
 {
-	printf("Send: %s\n", message.c_str());
 	_toSend.insert(message);
 }
 
@@ -249,7 +247,6 @@ void VirtualMachine::OnClick(int64_t x, int64_t y)
 		if (sprite->TouchingPoint(point))
 		{
 			// sprite was clicked
-			printf("Clicked %s\n", sprite->GetNameString());
 			for (Script *script : sprite->GetClickListeners())
 				_clickQueue.push(script);
 			break;
