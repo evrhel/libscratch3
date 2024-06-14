@@ -55,3 +55,37 @@ target_link_libraries(libscratch3 PRIVATE
 )
 target_link_libraries(libscratch3 PRIVATE imgui::imgui)
 target_link_libraries(libscratch3 PRIVATE PkgConfig::LIBRSVG)
+
+# pack shaders into header files
+set(SHADER_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
+set(SHADER_OUT_DIR src/shaders)
+
+set(SPRITE_VERT_FILE ${SHADER_SRC_DIR}/sprite.vert)
+set(SPRITE_VERT_HEADER ${SHADER_OUT_DIR}/sprite.vert.h)
+set(SPRITE_VERT_NAME sprite_vert_source)
+
+set(SPRITE_FRAG_FILE ${SHADER_SRC_DIR}/sprite.frag)
+set(SPRITE_FRAG_HEADER ${SHADER_OUT_DIR}/sprite.frag.h)
+set(SPRITE_FRAG_NAME sprite_frag_source)
+
+add_custom_command(
+	OUTPUT ${SPRITE_VERT_HEADER}
+	COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${SPRITE_VERT_FILE} -DOUTPUT_FILE=${SPRITE_VERT_HEADER} -DVARIABLE_NAME=${SPRITE_VERT_NAME} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/shader_to_header.cmake
+	DEPENDS ${SPRITE_VERT_FILE}
+	COMMENT "Generating ${SPRITE_VERT_HEADER}"
+)
+
+add_custom_command(
+	OUTPUT ${SPRITE_FRAG_HEADER}
+	COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${SPRITE_FRAG_FILE} -DOUTPUT_FILE=${SPRITE_FRAG_HEADER} -DVARIABLE_NAME=${SPRITE_FRAG_NAME} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/shader_to_header.cmake
+	DEPENDS ${SPRITE_FRAG_FILE}
+	COMMENT "Generating ${SPRITE_FRAG_HEADER}"
+)
+
+add_custom_target(generate_shaders
+	DEPENDS ${SPRITE_VERT_HEADER} ${SPRITE_FRAG_HEADER}
+)
+
+add_dependencies(libscratch3 generate_shaders)
+
+target_include_directories(libscratch3 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/src)

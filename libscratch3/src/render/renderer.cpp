@@ -8,38 +8,20 @@
 
 #include "shader.hpp"
 
-static char *ReadFile(const char *path, size_t *size)
+namespace // shaders
 {
-    ls_handle fh;
-    struct ls_stat st;
-
-    fh = ls_open(path, LS_FILE_READ, LS_SHARE_READ, LS_OPEN_EXISTING);
-    if (!fh)
-        return nullptr;
-
-    ls_fstat(fh, &st);
-    
-    char *buf = new char[st.size];
-    *size = ls_read(fh, buf, st.size);
-
-    ls_close(fh);
-
-    return buf;
+#include <shaders/sprite.vert.h>
+#include <shaders/sprite.frag.h>
 }
 
 static SpriteShader *CreateSpriteShader()
 {
-    size_t vertexLength;
-    char *vertexSource = ReadFile("../../libscratch3/shaders/sprite.vert", &vertexLength);
-
-    size_t fragmentLength;
-    char *fragmentSource = ReadFile("../../libscratch3/shaders/sprite.frag", &fragmentLength);
-
     SpriteShader *ss = new SpriteShader();
-    ss->Load(vertexSource, vertexLength, fragmentSource, fragmentLength);
-
-    delete[] fragmentSource;
-    delete[] vertexSource;
+    ss->Load(
+        sprite_vert_source,
+        sizeof(sprite_vert_source) - 1,
+        sprite_frag_source,
+        sizeof(sprite_frag_source) - 1);
 
     return ss;
 }

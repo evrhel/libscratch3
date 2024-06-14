@@ -232,6 +232,13 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	size_t len;
+	const void *prog = Scratch3GetProgram(S, &len);
+
+	FILE *fp = fopen("output.bin", "wb");
+	fwrite(prog, 1, len, fp);
+	fclose(fp);
+
 	Scratch3VMOptions vmOptions;
 	memset(&vmOptions, 0, sizeof(vmOptions));
 	vmOptions.debug = liveDebug ? 1 : 0;
