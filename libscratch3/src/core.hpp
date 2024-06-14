@@ -13,7 +13,7 @@ struct _Scratch3
 	int minSeverity;
 	void *up;
 
-	char programName[256];
+	std::string programName;
 	Loader *loader;
 
 	uint8_t *bytecode;

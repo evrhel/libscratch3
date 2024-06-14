@@ -30,7 +30,7 @@ class GLRenderer;
 class VirtualMachine final
 {
 public:
-	int Load(const char *name, uint8_t *bytecode, size_t size);
+	int Load(const std::string &name, uint8_t *bytecode, size_t size);
 
 	//
 	/////////////////////////////////////////////////////////////////

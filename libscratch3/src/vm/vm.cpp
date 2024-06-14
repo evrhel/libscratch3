@@ -29,7 +29,7 @@ static std::string trim(const std::string &str, const std::string &ws = " \t\n\r
 	return str.substr(start, end - start + 1);
 }
 
-int VirtualMachine::Load(const char *name, uint8_t *bytecode, size_t size)
+int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size)
 {
 	assert(_bytecode == nullptr);
 
