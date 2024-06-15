@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(sdisas3)
 
+set(CMAKE_CXX_STANDARD 14)
+
 find_package(SDL2 CONFIG REQUIRED)
 
 set(src "src")

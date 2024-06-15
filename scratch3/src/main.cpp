@@ -16,12 +16,16 @@ static void *ReadFile(const char *file, size_t *size)
 
 	fh = ls_open(file, LS_FILE_READ, 0, LS_OPEN_EXISTING);
 	if (!fh)
+	{
+		ls_perror("ls_open");
 		return nullptr;
+	}
 
 	struct ls_stat st;
 	rc = ls_stat(file, &st);
 	if (rc == -1)
 	{
+		ls_perror("ls_stat");
 		ls_close(fh);
 		return nullptr;
 	}
@@ -29,18 +33,22 @@ static void *ReadFile(const char *file, size_t *size)
 	data = malloc(st.size);
 	if (!data)
 	{
+		printf("Failed to allocate memory\n");
 		ls_close(fh);
 		return nullptr;
 	}
 
 	len = ls_read(fh, data, st.size);
-	ls_close(fh);
 
 	if (len == -1)
 	{
+		ls_perror("ls_read");
+		ls_close(fh);
 		free(data);
 		return nullptr;
 	}
+
+	ls_close(fh);
 
 	*size = len;
 	return data;

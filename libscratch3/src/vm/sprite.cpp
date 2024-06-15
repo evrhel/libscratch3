@@ -258,7 +258,7 @@ void Sprite::DebugUI() const
     ImGui::LabelText("Position", "%.0f, %.0f", _x, _y);
     ImGui::LabelText("Direction", "%.0f", _direction);
     ImGui::LabelText("Size", "%.0f%%", _size);
-    ImGui::LabelText("Draw Order", "%d", render->GetRenderInfo(_drawable)->GetLayer());
+    ImGui::LabelText("Draw Order", "%lld", render->GetRenderInfo(_drawable)->GetLayer());
     ImGui::LabelText("Bounding Box", "(%.0f, %.0f) (%.0f, %.0f), size: %.0fx%.0f",
         		(double)_bbox.lo.x, (double)_bbox.lo.y, (double)_bbox.hi.x, (double)_bbox.hi.y,
                 (double)(_bbox.hi.x - _bbox.lo.x), (double)(_bbox.hi.y - _bbox.lo.y));

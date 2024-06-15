@@ -1,5 +1,5 @@
 {
-    "version": 8,
+    "version": 3,
     "cmakeMinimumRequired": {
         "major": 3,
         "minor": 20,
@@ -7,11 +7,19 @@
     },
     "configurePresets": [
         {
-            "name": "windows-vcpkg",
-            "displayName": "Default Config",
+            "name": "x64-windows-vcpkg",
+            "displayName": "x64 Windows",
             "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
             "cacheVariables": {
                 "VCPKG_TARGET_TRIPLET": "x64-windows"
+            }
+        },
+        {
+            "name": "arm64-macos-vcpkg",
+            "displayName": "ARM64 macOS",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "arm64-osx"
             }
         }
     ]

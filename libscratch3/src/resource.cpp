@@ -28,7 +28,7 @@ class ArchiveResource : public Resource
 {
 public:
 	virtual const uint8_t *Data() const override { return static_cast<const uint8_t *>(_data); }
-	virtual size_t Size() const { return _size; }
+	virtual size_t Size() const override { return _size; }
 
 	ArchiveResource(void *data, size_t size) : _data(data), _size(size) {}
 	virtual ~ArchiveResource() { free(_data); }

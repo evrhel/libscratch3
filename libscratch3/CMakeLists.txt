@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(libscratch3)
 
+set(CMAKE_CXX_STANDARD 14)
+
 find_package(PkgConfig REQUIRED)
 find_package(SDL2 CONFIG REQUIRED)
 find_package(Stb REQUIRED)
@@ -59,6 +61,18 @@ target_link_libraries(libscratch3 PRIVATE
 )
 target_link_libraries(libscratch3 PRIVATE imgui::imgui)
 target_link_libraries(libscratch3 PRIVATE PkgConfig::LIBRSVG)
+
+if (APPLE)
+	find_library(APPLICATION_SERVICES ApplicationServices)
+	find_library(FOUNDATION Foundation)
+	find_library(APP_KIT AppKit)
+	find_library(CARBON Carbon)
+
+	target_link_libraries(libscratch3 PRIVATE ${APPLICATION_SERVICES})
+	target_link_libraries(libscratch3 PRIVATE ${FOUNDATION})
+	target_link_libraries(libscratch3 PRIVATE ${APP_KIT})
+	target_link_libraries(libscratch3 PRIVATE ${CARBON})
+endif()
 
 # pack shaders into header files
 set(SHADER_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)

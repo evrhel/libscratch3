@@ -1760,7 +1760,7 @@ struct DefineProc : public Statement
 			if (!sl)
 				return false;
 
-			if (!sl->sl.size() == 1)
+			if (sl->sl.size() != 1)
 				return false;
 
 			proto = sl->sl[0]->As<ProcProto>();

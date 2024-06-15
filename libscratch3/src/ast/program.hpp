@@ -20,12 +20,12 @@ struct VariableDefList : public ASTNode
 	AST_IMPL(VariableDefList, ASTNode);
 	AST_ACCEPTOR;
 
-	inline const AutoRelease<VariableDef> &Find(const std::string &id) const
+	inline AutoRelease<VariableDef> Find(const std::string &id) const
 	{
 		for (auto &v : variables)
 			if (v->id == id)
 				return v;
-		return 0;
+		return nullptr;
 	}
 
 	std::vector<AutoRelease<VariableDef>> variables;
@@ -49,7 +49,7 @@ struct ListDefList : public ASTNode
 	AST_IMPL(ListDefList, ASTNode);
 	AST_ACCEPTOR;
 
-	inline const AutoRelease<ListDef> &Find(const std::string &id) const
+	inline AutoRelease<ListDef> Find(const std::string &id) const
 	{
 		for (auto &l : lists)
 			if (l->id == id)
@@ -121,7 +121,7 @@ struct SpriteDefList : public ASTNode
 	AST_IMPL(SpriteDefList, ASTNode);
 	AST_ACCEPTOR;
 
-	inline const AutoRelease<SpriteDef> &Find(const std::string &name) const
+	inline AutoRelease<SpriteDef> Find(const std::string &name) const
 	{
 		for (auto &s : sprites)
 			if (s->name == name)

@@ -1,5 +1,6 @@
 #include "memory.hpp"
 
+#include <cmath>
 #include <cassert>
 
 #include <lysys/lysys.hpp>

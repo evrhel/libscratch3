@@ -1,6 +1,7 @@
 #pragma once
 
 #include <type_traits>
+#include <cstdint>
 
 //! \brief Object that maintains a reference count.
 //! 

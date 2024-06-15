@@ -54,7 +54,7 @@ void Debugger::Render()
 
 				ImGui::SeparatorText("Host");
 				ImGui::LabelText("Name", LS_OS);
-				ImGui::LabelText("Architecture", archString);
+				ImGui::LabelText("Architecture", "%s", archString);
 				ImGui::LabelText("Processor Count", "%d", ci.num_cores);
 				ImGui::LabelText("Total Physical", "%llu MiB", mi.total / 1024 / 1024);
 
@@ -283,7 +283,7 @@ void Debugger::Render()
 
 					if (ImGui::CollapsingHeader(name))
 					{
-						ImGui::LabelText("State", GetStateName(script.state));
+						ImGui::LabelText("State", "%s", GetStateName(script.state));
 						ImGui::LabelText("Sprite", "%s", script.sprite->GetNameString());
 						ImGui::LabelText("Wakeup", "%.2g", script.sleepUntil);
 						ImGui::LabelText("Wait Input", script.waitInput ? "true" : "false");
