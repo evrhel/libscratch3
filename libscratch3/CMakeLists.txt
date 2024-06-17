@@ -8,6 +8,7 @@ find_package(PkgConfig REQUIRED)
 find_package(SDL2 CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(portaudio CONFIG REQUIRED)
 
 pkg_check_modules(cairo REQUIRED IMPORTED_TARGET cairo)
 pkg_check_modules(LIBRSVG librsvg-2.0 IMPORTED_TARGET REQUIRED)
@@ -61,6 +62,7 @@ target_link_libraries(libscratch3 PRIVATE
 )
 target_link_libraries(libscratch3 PRIVATE imgui::imgui)
 target_link_libraries(libscratch3 PRIVATE PkgConfig::LIBRSVG)
+target_link_libraries(libscratch3 PRIVATE portaudio)
 
 if (APPLE)
 	find_library(APPLICATION_SERVICES ApplicationServices)

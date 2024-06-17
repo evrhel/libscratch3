@@ -15,6 +15,7 @@
             ]
         },
         "stb",
-        "glib"
+        "glib",
+        "portaudio"
     ]
 }
