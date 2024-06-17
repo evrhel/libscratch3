@@ -175,6 +175,8 @@ public:
 	inline virtual void Visit(StatementListList *node) {}
 	inline virtual void Visit(CostumeDef *node) {}
 	inline virtual void Visit(CostumeDefList *node) {}
+	inline virtual void Visit(SoundDef *node) {}
+	inline virtual void Visit(SoundDefList *node) {}
 	inline virtual void Visit(SpriteDef *node) {}
 	inline virtual void Visit(SpriteDefList *node) {}
 	inline virtual void Visit(StageDef *node) {}

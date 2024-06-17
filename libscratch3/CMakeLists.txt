@@ -9,6 +9,7 @@ find_package(SDL2 CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(portaudio CONFIG REQUIRED)
+find_package(SndFile CONFIG REQUIRED)
 
 pkg_check_modules(cairo REQUIRED IMPORTED_TARGET cairo)
 pkg_check_modules(LIBRSVG librsvg-2.0 IMPORTED_TARGET REQUIRED)
@@ -32,6 +33,7 @@ set(SOURCES
 	${src}/vm/memory.cpp
 	${src}/vm/preload.cpp
 	${src}/vm/script.cpp
+	${src}/vm/sound.cpp
 	${src}/vm/sprite.cpp
 	${src}/vm/vm.cpp
 	${src}/ref.cpp
@@ -63,6 +65,7 @@ target_link_libraries(libscratch3 PRIVATE
 target_link_libraries(libscratch3 PRIVATE imgui::imgui)
 target_link_libraries(libscratch3 PRIVATE PkgConfig::LIBRSVG)
 target_link_libraries(libscratch3 PRIVATE portaudio)
+target_link_libraries(libscratch3 PRIVATE SndFile::sndfile)
 
 if (APPLE)
 	find_library(APPLICATION_SERVICES ApplicationServices)

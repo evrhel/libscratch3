@@ -16,6 +16,7 @@
         },
         "stb",
         "glib",
-        "portaudio"
+        "portaudio",
+        "libsndfile"
     ]
 }

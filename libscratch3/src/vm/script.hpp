@@ -38,6 +38,7 @@ class Sprite;
 class Expression;
 class Value;
 class VirtualMachine;
+class Sound;
 
 struct Script
 {
@@ -49,6 +50,7 @@ struct Script
 	double sleepUntil;  // Time to wake up
 	bool waitInput;  // Wait for input
 	bool askInput;  // Ask for input
+	Sound *waitSound;  // Sound to wait until finished
 
 	uint64_t ticks;  // Number of ticks executed since the last yield
 
@@ -80,6 +82,7 @@ struct Script
 	void LS_NORETURN Terminate();
 	void LS_NORETURN Raise(ExceptionType type, const char *message = nullptr);
 	void Sleep(double seconds);
+	void WaitForSound(Sound *sound);
 
 	void Glide(double x, double y, double t);
 	void AskAndWait(const std::string &question);

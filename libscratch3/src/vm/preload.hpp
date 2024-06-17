@@ -16,6 +16,16 @@ struct CostumeInfo
 	uint64_t dataSize;
 };
 
+struct SoundInfo
+{
+	char *name;
+	char *dataFormat;
+	double rate;
+	unsigned int sampleCount;
+	uint8_t *data;
+	uint64_t dataSize;
+};
+
 struct ScriptInfo
 {
 	uint8_t *loc;
@@ -40,6 +50,7 @@ struct SpriteInfo
 	std::vector<ScriptInfo> scripts;
 
 	std::vector<CostumeInfo> costumes;
+	std::vector<SoundInfo> sounds;
 };
 
 using ParsedSprites = std::vector<SpriteInfo>;

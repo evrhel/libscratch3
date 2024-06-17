@@ -1170,6 +1170,29 @@ public:
 			costume->Accept(this);
 	}
 
+	virtual void Visit(SoundDef *node)
+	{
+		Resource *rsrc = loader.Find(node->md5ext);
+		const uint8_t *data = rsrc->Data();
+		size_t size = rsrc->Size();
+
+		cp.WriteString(Segment_stable, node->name);
+		cp.WriteString(Segment_stable, node->dataFormat);
+		cp.WriteStable<double>(node->rate);
+		cp.WriteStable<uint32_t>(node->sampleCount);
+		cp.WriteReference(Segment_stable, Segment_rdata, cp._rdata.size());
+		cp.WriteStable<uint64_t>(size);
+
+		cp.WriteRdata(data, size);
+	}
+
+	virtual void Visit(SoundDefList *node)
+	{
+		cp.WriteStable<int64_t>(node->sounds.size());
+		for (AutoRelease<SoundDef> &sound : node->sounds)
+			sound->Accept(this);
+	}
+
 	virtual void Visit(SpriteDef *node)
 	{
 		cp.WriteString(Segment_stable, node->name);
@@ -1197,6 +1220,7 @@ public:
 		node->scripts->Accept(this);
 
 		node->costumes->Accept(this);
+		node->sounds->Accept(this);
 	}
 
 	virtual void Visit(SpriteDefList *node)

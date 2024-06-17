@@ -89,6 +89,26 @@ struct CostumeDefList : public ASTNode
 	std::vector<AutoRelease<CostumeDef>> costumes;
 };
 
+struct SoundDef : public ASTNode
+{
+	AST_IMPL(SoundDef, ASTNode);
+	AST_ACCEPTOR;
+
+	std::string name;
+	std::string dataFormat;
+	double rate = 0;
+	int sampleCount = 0;
+	std::string md5ext;
+};
+
+struct SoundDefList : public ASTNode
+{
+	AST_IMPL(SoundDefList, ASTNode);
+	AST_ACCEPTOR;
+
+	std::vector<AutoRelease<SoundDef>> sounds;
+};
+
 // sprite definition
 struct SpriteDef : public ASTNode
 {
@@ -101,6 +121,7 @@ struct SpriteDef : public ASTNode
 	AutoRelease<ListDefList> lists;
 	AutoRelease<StatementListList> scripts;
 	AutoRelease<CostumeDefList> costumes;
+	AutoRelease<SoundDefList> sounds;
 
 	int64_t currentCostume = 1;
 

@@ -95,4 +95,13 @@
 			<Item Name="[Format]">_dataFormat</Item>
 		</Expand>
 	</Type>
+
+	<Type Name="Sound">
+		<DisplayString>{_name.u.string->str,s8b}</DisplayString>
+		<Expand>
+			<Item Name="[Name]">_name.u.string->str,s8</Item>
+			<Item Name="[Rate]">_rate</Item>
+			<Item Name="[Sample Count]">_sampleCount</Item>
+		</Expand>
+	</Type>
 </AutoVisualizer>

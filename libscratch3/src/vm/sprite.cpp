@@ -83,6 +83,21 @@ void Sprite::SetCostume(const String *name)
         SetCostume(it->second);
 }
 
+Sound *Sprite::FindSound(int64_t sound)
+{
+    if (sound < 0 || sound >= _nSounds)
+		return nullptr;
+	return _sounds + sound;
+}
+
+Sound *Sprite::FindSound(const String *name)
+{
+    auto it = _soundNameMap.find(name);
+    if (it != _soundNameMap.end())
+		return FindSound(it->second);
+    return nullptr;
+}
+
 bool Sprite::TouchingColor(int64_t color) const
 {        
     // TODO: implement
@@ -219,6 +234,14 @@ void Sprite::Init(const SpriteInfo *info)
         _costumes[i].Init(&info->costumes[i]);
         _costumeNameMap[_costumes[i].GetName()] = i + 1;
     }
+
+    _nSounds = info->sounds.size();
+    _sounds = new Sound[_nSounds];
+    for (int64_t i = 0; i < _nSounds; i++)
+    {
+		_sounds[i].Init(&info->sounds[i]);
+		_soundNameMap[_sounds[i].GetName()] = i;
+	}
 }
 
 void Sprite::Load(VirtualMachine *vm)
@@ -251,6 +274,9 @@ void Sprite::Load(VirtualMachine *vm)
 
     for (int64_t i = 0; i < _nCostumes; i++)
         _costumes[i].Load();
+
+    for (int64_t i = 0; i < _nSounds; i++)
+        _sounds[i].Load();
 
     SpriteRenderInfo *ri = render->GetRenderInfo(_drawable);
     ri->userData = this;
@@ -373,6 +399,12 @@ bool Sprite::CheckPointAdv(const Vector2 &point) const
 void Sprite::Cleanup()
 {
     _clickListeners.clear();
+
+    if (_sounds)
+    {
+        delete[] _sounds, _sounds = nullptr;
+        _nSounds = 0;
+    }
 
     if (_costumes)
     {

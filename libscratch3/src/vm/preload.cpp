@@ -30,6 +30,31 @@ static uint8_t *ParseCostume(uint8_t *bytecode, size_t bytecodeSize, uint8_t *lo
 	return ptr;
 }
 
+static uint8_t *ParseSound(uint8_t *bytecode, size_t bytecodeSize, uint8_t *loc, SoundInfo *info)
+{
+	uint8_t *ptr = loc;
+
+	info->name = (char *)(bytecode + *(uint64_t *)ptr);
+	ptr += sizeof(uint64_t);
+
+	info->dataFormat = (char *)(bytecode + *(uint64_t *)ptr);
+	ptr += sizeof(uint64_t);
+
+	info->rate = *(double *)ptr;
+	ptr += sizeof(double);
+
+	info->sampleCount = *(uint32_t *)ptr;
+	ptr += sizeof(uint32_t);
+
+	info->data = bytecode + *(uint64_t *)ptr;
+	ptr += sizeof(uint64_t);
+
+	info->dataSize = *(uint64_t *)ptr;
+	ptr += sizeof(uint64_t);
+
+	return ptr;
+}
+
 static uint8_t *ParseSprite(uint8_t *bytecode, size_t bytecodeSize, uint8_t *loc, SpriteInfo *info)
 {
 	uint8_t *ptr = loc;
@@ -87,6 +112,15 @@ static uint8_t *ParseSprite(uint8_t *bytecode, size_t bytecodeSize, uint8_t *loc
 	{
 		CostumeInfo &costume = info->costumes.at(i);
 		ptr = ParseCostume(bytecode, bytecodeSize, ptr, &costume);
+	}
+
+	info->sounds.resize(*(uint64_t *)ptr);
+	ptr += sizeof(uint64_t);
+
+	for (size_t i = 0; i < info->sounds.size(); i++)
+	{
+		SoundInfo &sound = info->sounds.at(i);
+		ptr = ParseSound(bytecode, bytecodeSize, ptr, &sound);
 	}
 
 	return ptr;

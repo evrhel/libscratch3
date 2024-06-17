@@ -21,6 +21,7 @@
 #include "script.hpp"
 #include "io.hpp"
 #include "debug.hpp"
+#include "sound.hpp"
 
 class Loader;
 class VirtualMachine;
@@ -110,6 +111,9 @@ public:
 
 	void ResetTimer();
 
+	void PlaySound(Sound *sound);
+	void StopAllSounds();
+
 	constexpr Loader *GetLoader() const { return _loader; }
 	constexpr GLRenderer *GetRenderer() const { return _render; }
 	constexpr IOHandler &GetIO() const { return _io; }
@@ -150,6 +154,9 @@ private:
 	std::unordered_map<const String *, intptr_t, _StringHasher, _StringEqual> _spriteNames; // Sprite name lookup
 
 	std::unordered_map<String *, Value, _StringHasher, _StringEqual> _variables; // Variables
+
+	std::list<Sound *> _playingSounds; // Playing sounds
+	bool _hasAudio; // Host supports audio
 
 	std::vector<Script> _initScripts; // Initialization scripts
 	std::vector<Script> _scripts; // All scripts

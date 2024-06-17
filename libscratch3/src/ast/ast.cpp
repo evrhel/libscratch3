@@ -208,6 +208,7 @@ private:
 		sd->lists = new ListDefList();
 		sd->scripts = new StatementListList();
 		sd->costumes = new CostumeDefList();
+		sd->sounds = new SoundDefList();
 
 		if (target.HasMember("isStage"))
 		{
@@ -355,6 +356,20 @@ private:
 		}
 		else
 			Warn("Missing `costumes` member in target");
+
+		if (target.HasMember("sounds"))
+		{
+			rapidjson::Value &sounds = target["sounds"];
+			if (!sounds.IsArray())
+			{
+				Error("Expected array parsing sounds in target");
+				goto failure;
+			}
+
+			ParseSounds(sounds, sd->sounds.get());
+		}
+		else
+			Warn("Missing `sounds` member in target");
 
 		if (target.HasMember("currentCostume"))
 		{
@@ -564,6 +579,107 @@ private:
 		}
 	}
 
+	void ParseSounds(rapidjson::Value &sounds, SoundDefList *sdl)
+	{
+		// Iterate over all sounds in the target
+		//
+		// Sounds are defined in the format:
+		// {
+		//		"name": [sound name],
+		//		"dataFormat": [data format],
+		//		"rate": [rate],
+		//		"sampleCount": [sample count],
+		//		"md5ext": [path to sound file]
+		// }
+		for (auto it = sounds.Begin(); it != sounds.End(); ++it)
+		{
+			rapidjson::Value &sound = *it;
+			if (!sound.IsObject())
+			{
+				Error("Expected object parsing sound");
+				continue;
+			}
+
+			if (!sound.HasMember("name"))
+			{
+				Error("Missing `name` member in sound");
+				continue;
+			}
+
+			if (!sound.HasMember("dataFormat"))
+			{
+				Error("Missing `dataFormat` member in sound");
+				continue;
+			}
+
+			if (!sound.HasMember("rate"))
+			{
+				Error("Missing `rate` member in sound");
+				continue;
+			}
+
+			if (!sound.HasMember("sampleCount"))
+			{
+				Error("Missing `sampleCount` member in sound");
+				continue;
+			}
+
+			if (!sound.HasMember("md5ext"))
+			{
+				Error("Missing `md5ext` member in sound");
+				continue;
+			}
+
+			rapidjson::Value &name = sound["name"];
+			rapidjson::Value &dataFormat = sound["dataFormat"];
+			rapidjson::Value &rate = sound["rate"];
+			rapidjson::Value &sampleCount = sound["sampleCount"];
+			rapidjson::Value &md5ext = sound["md5ext"];
+
+			if (!name.IsString())
+			{
+				Error("Expected string parsing name in sound");
+				continue;
+			}
+
+			if (!dataFormat.IsString())
+			{
+				Error("Expected string parsing dataFormat in sound");
+				continue;
+			}
+
+			if (!rate.IsDouble() && !rate.IsInt())
+			{
+				Error("Expected number parsing rate in sound");
+				continue;
+			}
+
+			if (!sampleCount.IsInt())
+			{
+				Error("Expected integer parsing sampleCount in sound");
+				continue;
+			}
+
+			if (!md5ext.IsString())
+			{
+				Error("Expected string parsing md5ext in sound");
+				continue;
+			}
+
+			SoundDef *sd = new SoundDef();
+			sd->name = name.GetString();
+			sd->dataFormat = dataFormat.GetString();
+			sd->rate = rate.GetDouble();
+			sd->sampleCount = sampleCount.GetInt();
+			sd->md5ext = md5ext.GetString();
+
+			// convert data format to lowercase
+			std::transform(sd->dataFormat.begin(), sd->dataFormat.end(), sd->dataFormat.begin(), ::tolower);
+
+			sdl->sounds.push_back(sd);
+		}
+	}
+	
 	//! \brief Parse the "variables" member of a target
 	//!
 	//! \param variables The "variables" member. Must be an object.

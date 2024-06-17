@@ -238,6 +238,26 @@ void VirtualMachine::ResetTimer()
 	_timerStart = GetTime();
 }
 
+void VirtualMachine::PlaySound(Sound *sound)
+{
+	if (sound->IsPlaying())
+	{
+		sound->Stop();
+		sound->Play();
+		return; // already in list
+	}
+
+	_playingSounds.push_back(sound);
+	sound->Play();
+}
+
+void VirtualMachine::StopAllSounds()
+{
+	for (Sound *snd : _playingSounds)
+		snd->Stop();
+	_playingSounds.clear();
+}
+
 void VirtualMachine::OnClick(int64_t x, int64_t y)
 {
 	Vector2 point(x, y);
@@ -314,11 +334,23 @@ VirtualMachine::VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options) :
 	_deltaExecution = 0;
 
 	_thread = nullptr;
+
+	PaError err = Pa_Initialize();
+	if (err == paNoError)
+		_hasAudio = true;
+	else
+	{
+		_hasAudio = false;
+		Scratch3Logf(S, SCRATCH3_SEVERITY_ERROR, "Pa_Initialize failed: %s", Pa_GetErrorText(err));
+	}
 }
 
 VirtualMachine::~VirtualMachine()
 {
 	Cleanup();
+
+	if (_hasAudio)
+		Pa_Terminate();
 }
 
 void VirtualMachine::Render()
@@ -508,9 +540,19 @@ void VirtualMachine::Scheduler()
 
 			bool gliding = script.sprite->GetGlide()->end > time;
 			if (gliding)
+			{
 				continue; // not waiting
-
-			if (script.waitInput || script.askInput || script.sleepUntil > time)
+			}
+			else if (script.waitSound)
+			{
+				// check if sound is playing
+				if (script.waitSound->IsPlaying())
+				{
+					waitingScripts++;
+					continue;
+				}
+			}
+			else if (script.waitInput || script.askInput || script.sleepUntil > time)
 			{
 				waitingScripts++;
 				continue;
@@ -550,7 +592,16 @@ void VirtualMachine::Scheduler()
 
 		if (script.state == TERMINATED)
 			script.Reset();
+	}
 
+	// remove any playing sounds from the list
+	for (auto it = _playingSounds.begin(); it != _playingSounds.end();)
+	{
+		Sound *snd = *it;
+		if (!snd->IsPlaying())
+			it = _playingSounds.erase(it);
+		else
+			it++;
 	}
 
 	_activeScripts = activeScripts;

@@ -73,6 +73,7 @@ void Script::Reset()
 	sleepUntil = 0.0;
 	waitInput = false;
 	askInput = false;
+	waitSound = nullptr;
 	ticks = 0;
 	pc = entry;
 	isReset = true;
@@ -626,19 +627,49 @@ void Script::Main()
 		case Op_getsize:
 			SetReal(Push(), sprite->GetSize());
 			break;
-		case Op_playsoundandwait:
-			// TODO: implement playsoundandwait
-			Pop();
+		case Op_playsoundandwait: {
+			Value &v = CvtString(StackAt(0));
+			if (v.type != ValueType_String)
+			{
+				Pop();
+				break;
+			}
+
+			Sound *sound = sprite->FindSound(v.u.string);
+			if (!sound)
+			{
+				Pop();
+				break;
+			}
+
+			vm->PlaySound(sound);
+			WaitForSound(sound);
+
 			break;
-		case Op_playsound:
-			Pop();
+		}
+		case Op_playsound: {
+			Value &v = CvtString(StackAt(0));
+			if (v.type != ValueType_String)
+			{
+				Pop();
+				break;
+			}
+
+			Sound *sound = sprite->FindSound(v.u.string);
+			if (!sound)
+			{
+				Pop();
+				break;
+			}
+
+			vm->PlaySound(sound);
 			break;
-			//Raise(NotImplemented, "playsound");
+		}
 		case Op_findsound:
 			Raise(NotImplemented, "findsound");
 		case Op_stopsound:
+			vm->StopAllSounds();
 			break;
-			//Raise(NotImplemented, "stopsound");
 		case Op_addsoundeffect:
 			Raise(NotImplemented, "addsoundeffect");
 		case Op_setsoundeffect:
@@ -973,13 +1004,16 @@ void LS_NORETURN Script::Raise(ExceptionType type, const char *message)
 
 void Script::Sleep(double seconds)
 {
-	Value *spOld = sp;
-
 	sleepUntil = vm->GetTime() + seconds;
 	state = WAITING;
 	Sched();
+}
 
-	assert(sp == spOld);
+void Script::WaitForSound(Sound *sound)
+{
+	waitSound = sound;
+	state = WAITING;
+	Sched();
 }
 
 void Script::Glide(double x, double y, double t)

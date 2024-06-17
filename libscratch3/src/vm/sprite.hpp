@@ -7,6 +7,7 @@
 #include <mutil/mutil.h>
 
 #include "costume.hpp"
+#include "sound.hpp"
 #include "script.hpp"
 #include "preload.hpp"
 #include "memory.hpp"
@@ -96,6 +97,9 @@ public:
 
     void SetCostume(const String *name);
 
+    Sound *FindSound(int64_t sound);
+    Sound *FindSound(const String *name);
+
     constexpr int64_t CostumeCount() const { return _nCostumes; }
 
     constexpr intptr_t GetDrawable() const { return _drawable; }
@@ -176,6 +180,11 @@ private:
     int64_t _nCostumes = 0;
 
     std::unordered_map<const String *, int64_t, _StringHasher, _StringEqual> _costumeNameMap;
+
+    Sound *_sounds = nullptr;
+    int64_t _nSounds = 0;
+
+    std::unordered_map<const String *, int64_t, _StringHasher, _StringEqual> _soundNameMap;
 
     bool _transDirty = true;
     intptr_t _drawable = -1; // drawable sprite
