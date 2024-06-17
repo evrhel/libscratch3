@@ -28,4 +28,3 @@ private:
 };
 
 Loader *CreateArchiveLoader(const void *data, size_t size);
-Loader *CreateBytecodeLoader(const void *data, size_t size);

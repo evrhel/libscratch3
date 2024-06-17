@@ -145,13 +145,6 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Load(Scratch3 *S, const char *name
 
 		memcpy(S->bytecode, data, size);
 		S->bytecodeSize = size;
-
-		S->loader = CreateBytecodeLoader(S->bytecode, S->bytecodeSize);
-		if (!S->loader)
-		{
-			free(S->bytecode), S->bytecode = nullptr;
-			return SCRATCH3_ERROR_INVALID_PROGRAM;
-		}
 	}
 	else
 	{

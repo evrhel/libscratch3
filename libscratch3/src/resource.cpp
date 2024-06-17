@@ -100,10 +100,3 @@ Loader *CreateArchiveLoader(const void *data, size_t size)
 
 	return new ArchiveLoader(archive, source);
 }
-
-Loader *CreateBytecodeLoader(const void *data, size_t size)
-{
-	// TODO: Implement
-	return nullptr;
-}
-
