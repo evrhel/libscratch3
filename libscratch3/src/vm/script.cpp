@@ -212,35 +212,35 @@ void Script::Main()
 			Assign(StackAt(0), StackAt(1));
 			break;
 		case Op_eq:
-			SetBool(StackAt(1), Equals(StackAt(0), StackAt(1)));
+			SetBool(StackAt(1), Equals(StackAt(1), StackAt(0)));
 			Pop();
 			break;
 		case Op_neq:
-			SetBool(StackAt(1), !Equals(StackAt(0), StackAt(1)));
+			SetBool(StackAt(1), !Equals(StackAt(1), StackAt(0)));
 			Pop();
 			break;
 		case Op_gt:
-			SetBool(StackAt(1), ToReal(StackAt(0)) > ToReal(StackAt(1)));
+			SetBool(StackAt(1), ToReal(StackAt(1)) > ToReal(StackAt(0)));
 			Pop();
 			break;
 		case Op_ge:
-			SetBool(StackAt(1), ToReal(StackAt(0)) >= ToReal(StackAt(1)));
+			SetBool(StackAt(1), ToReal(StackAt(1)) >= ToReal(StackAt(0)));
 			Pop();
 			break;
 		case Op_lt:
-			SetBool(StackAt(1), ToReal(StackAt(0)) < ToReal(StackAt(1)));
+			SetBool(StackAt(1), ToReal(StackAt(1)) < ToReal(StackAt(0)));
 			Pop();
 			break;
 		case Op_le:
-			SetBool(StackAt(1), ToReal(StackAt(0)) <= ToReal(StackAt(1)));
+			SetBool(StackAt(1), ToReal(StackAt(1)) <= ToReal(StackAt(0)));
 			Pop();
 			break;
 		case Op_land:
-			SetBool(StackAt(1), Truth(StackAt(0)) && Truth(StackAt(1)));
+			SetBool(StackAt(1), Truth(StackAt(1)) && Truth(StackAt(0)));
 			Pop();
 			break;
 		case Op_lor:
-			SetBool(StackAt(1), Truth(StackAt(0)) || Truth(StackAt(1)));
+			SetBool(StackAt(1), Truth(StackAt(1)) || Truth(StackAt(0)));
 			Pop();
 			break;
 		case Op_lnot:
@@ -631,11 +631,14 @@ void Script::Main()
 			Pop();
 			break;
 		case Op_playsound:
-			Raise(NotImplemented, "playsound");
+			Pop();
+			break;
+			//Raise(NotImplemented, "playsound");
 		case Op_findsound:
 			Raise(NotImplemented, "findsound");
 		case Op_stopsound:
-			Raise(NotImplemented, "stopsound");
+			break;
+			//Raise(NotImplemented, "stopsound");
 		case Op_addsoundeffect:
 			Raise(NotImplemented, "addsoundeffect");
 		case Op_setsoundeffect:

@@ -1226,14 +1226,16 @@ public:
 
 	CompiledProgram &cp;
 	Loader &loader;
+	const Scratch3CompilerOptions &options;
 	bool topLevel = false;
 
-	Compiler(CompiledProgram *cp, Loader *loader) : cp(*cp), loader(*loader) {}
+	Compiler(CompiledProgram *cp, Loader *loader, const Scratch3CompilerOptions *options) :
+		cp(*cp), loader(*loader), options(*options) {}
 };
 
 uint8_t *CompiledProgram::Export(size_t *outSize) const
 {
-	size_t size = sizeof(ProgramHeader) + _stable.size() + _text.size() + _data.size() + _rdata.size();
+	size_t size = sizeof(ProgramHeader) + _stable.size() + _text.size() + _data.size() + _rdata.size() + _debug.size();
 	uint8_t *data = new uint8_t[size];
 
 	// write header
@@ -1248,6 +1250,8 @@ uint8_t *CompiledProgram::Export(size_t *outSize) const
 	header->data_size = _data.size();
 	header->rdata = header->data + header->data_size;
 	header->rdata_size = _rdata.size();
+	header->debug = header->rdata + header->rdata_size;
+	header->debug = _debug.size();
 
 	// write text segment
 	memcpy(data + header->text, _text.data(), _text.size());
@@ -1260,6 +1264,9 @@ uint8_t *CompiledProgram::Export(size_t *outSize) const
 
 	// write rdata segment
 	memcpy(data + header->rdata, _rdata.data(), _rdata.size());
+	
+	// write debug segment
+	memcpy(data + header->debug, _debug.data(), _debug.size());
 
 	// resolve references
 	for (auto &p : _references)
@@ -1285,6 +1292,9 @@ uint8_t *CompiledProgram::Export(size_t *outSize) const
 		case Segment_rdata:
 			fromOff = header->rdata + from.off;
 			break;
+		case Segment_debug:
+			fromOff = header->debug + from.off;
+			break;
 		}
 
 		switch (to.seg)
@@ -1302,6 +1312,9 @@ uint8_t *CompiledProgram::Export(size_t *outSize) const
 			break;
 		case Segment_rdata:
 			toOff = header->rdata + to.off;
+			break;
+		case Segment_debug:
+			toOff = header->debug + to.off;
 			break;
 		}
 
@@ -1365,6 +1378,10 @@ void CompiledProgram::WriteString(SegmentType seg, const std::string &str)
 			break;
 		case Segment_rdata:
 			abort(); // cannot write strings to rdata
+			break;
+		case Segment_debug:
+			off = _debug.size();
+			WriteDebug<uint64_t>(0); // placeholder
 			break;
 		}
 
@@ -1485,6 +1502,12 @@ void CompiledProgram::WriteRdata(const void *data, size_t size)
 	memcpy(_rdata.data() + _rdata.size() - size, data, size);
 }
 
+void CompiledProgram::WriteDebug(const void *data, size_t size)
+{
+	_debug.resize(_debug.size() + size);
+	memcpy(_debug.data() + _debug.size() - size, data, size);
+}
+
 void CompiledProgram::WriteReference(SegmentType seg, const DataReference &dst)
 {
 	DataReference from;
@@ -1506,6 +1529,9 @@ void CompiledProgram::WriteReference(SegmentType seg, const DataReference &dst)
 	case Segment_rdata:
 		from.off = _rdata.size();
 		break;
+	case Segment_debug:
+		from.off = _debug.size();
+		break;
 	}
 
 	_references.emplace_back(from, dst);
@@ -1526,7 +1552,7 @@ void CompiledProgram::WriteReference(SegmentType seg, SegmentType dst, uint64_t 
 CompiledProgram *CompileProgram(Program *p, Loader *loader, const Scratch3CompilerOptions *options)
 {
 	CompiledProgram *cp = new CompiledProgram();
-	Compiler compiler(cp, loader);
+	Compiler compiler(cp, loader, options);
 	p->Accept(&compiler);
 	return cp;
 }

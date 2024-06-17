@@ -23,7 +23,8 @@ enum SegmentType
 	Segment_text,
 	Segment_stable, // Sprite table
 	Segment_data,
-	Segment_rdata
+	Segment_rdata,
+	Segment_debug // Debug information
 };
 
 struct DataReference
@@ -48,6 +49,45 @@ struct ProgramHeader
 
 	uint32_t rdata; // Offset of rdata segment
 	uint32_t rdata_size; // Size of rdata segment
+
+	uint32_t debug; // Offset of debug segment
+	uint32_t debug_size; // Size of debug segment
+};
+
+enum
+{
+	DebugEntryType_variable,
+	DebugEntryType_broadcast,
+	DebugEntryType_proc
+};
+
+struct DebugEntry
+{
+	uint32_t type;
+
+	uint8_t _padding[4];
+
+	union
+	{
+		struct
+		{
+			uint64_t id;
+			uint64_t name;
+			uint64_t sprite;
+		} variable;
+
+		struct
+		{
+			uint64_t id;
+			uint64_t name;
+		} broadcast;
+
+		struct
+		{
+			uint64_t id;
+			uint64_t name;
+		} proc;
+	} u;
 };
 
 class CompiledProgram final
@@ -66,6 +106,7 @@ private:
 	Segment _text;
 	Segment _rdata;
 	Segment _data;
+	Segment _debug;
 
 	std::unordered_map<std::string, DataReference> _managedStrings;
 	std::unordered_map<std::string, DataReference> _plainStrings;
@@ -109,6 +150,11 @@ private:
 
 	template <typename T>
 	inline void WriteRdata(const T &data) { WriteRdata(&data, sizeof(T)); }
+
+	void WriteDebug(const void *data, size_t size);
+
+	template <typename T>
+	inline void WriteDebug(const T &data) { WriteDebug(&data, sizeof(T)); }
 
 	void WriteReference(SegmentType seg, const DataReference &dst);
 	void WriteReference(SegmentType seg, SegmentType dst, uint64_t dstoff);
