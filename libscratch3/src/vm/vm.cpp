@@ -264,6 +264,12 @@ void VirtualMachine::OnKeyDown(int scancode)
 		script->Start();
 }
 
+void VirtualMachine::OnResize()
+{
+	for (Sprite *s = _sprites; s < _spritesEnd; s++)
+		s->InvalidateTransform(); // force recompute
+}
+
 VirtualMachine::VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options) :
 	S(S), _io(this), _debug(this)
 {

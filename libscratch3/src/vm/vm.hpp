@@ -124,6 +124,8 @@ public:
 	void OnClick(int64_t x, int64_t y);
 	void OnKeyDown(int scancode);
 
+	void OnResize();
+
 	VirtualMachine &operator=(const VirtualMachine &) = delete;
 	VirtualMachine &operator=(VirtualMachine &&) = delete;
 

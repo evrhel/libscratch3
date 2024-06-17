@@ -119,7 +119,6 @@ void Sprite::Update()
     SpriteRenderInfo *s = render->GetRenderInfo(_drawable);
     s->shouldRender = _shown;
 
-    double uniformScale = _size / 100;
     Costume *c = _costumes + _costume - 1;
 
     if (_vm->GetTime() < _glide.end)
@@ -133,10 +132,14 @@ void Sprite::Update()
 
     if (_transDirty)
     {
-        const Vector2 &cCenter = c->GetLogicalCenter();
-        const Vector2 cSize = Vector2(c->GetLogicalSize());
+        const Vector2 &costumeLogicalCenter = c->GetLogicalCenter();
+        const Vector2 &costumeLogicalSize = c->GetLogicalSize();
 
-        Vector2 size = cSize * static_cast<float>(uniformScale);
+        Vector2 costumeRealCenter = costumeLogicalSize / 2.0f;
+        Vector2 centerOffset = costumeLogicalCenter - costumeRealCenter;
+
+        float uniformScale = static_cast<float>(_size / 100);
+        Vector2 size = costumeLogicalSize * uniformScale;
 
         float rotation;
         if (_rotationStyle == RotationStyle_DontRotate)
@@ -157,7 +160,7 @@ void Sprite::Update()
         Matrix4 scale = mutil::scale(Matrix4(), Vector3(size, 1.0f));
         Matrix4 transPos = mutil::translate(Matrix4(), Vector3(_x, _y, 0.0f));
         Quaternion q = mutil::rotateaxis(Vector3(0.0f, 0.0f, 1.0f), rotation);
-        Matrix4 transCenter = mutil::translate(Matrix4(), Vector3(-cCenter, 0.0f));
+        Matrix4 transCenter = mutil::translate(Matrix4(), Vector3(-centerOffset.x, centerOffset.y, 0.0f));
 
         // compute model matrix
         _model = transPos * mutil::torotation(q) * transCenter * scale;
@@ -168,7 +171,15 @@ void Sprite::Update()
 
         // update sprite render info
         s->model = _model;
-        s->texture = c->GetTexture();
+
+        int fbWidth, fbHeight;
+        SDL_GL_GetDrawableSize(render->GetWindow(), &fbWidth, &fbHeight);
+
+        Vector2 fbSize(fbWidth, fbHeight);
+        const Vector2 &viewportSize = render->GetLogicalSize();
+        
+        Vector2 textureScale = uniformScale * fbSize / viewportSize;
+        s->texture = c->GetTexture(textureScale);
 
         _transDirty = false;
     }
@@ -185,8 +196,6 @@ void Sprite::Update()
         s->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
         _effectDirty = false;
     }
-
-    c->Render(uniformScale, render->GetScale());
 }
 
 void Sprite::Init(const SpriteInfo *info)
@@ -281,15 +290,15 @@ void Sprite::DebugUI() const
     constexpr float kImageHeight = 64;
     for (int64_t id = 1; id <= _nCostumes; id++)
     {
-        Costume *c = _costumes + id - 1;
+       /* Costume *c = _costumes + id - 1;
         ImGui::Text("[%d]: '%s' (%s), origin: (%.2f, %.2f), size: %dx%d, rendered: %dx%d",
             (int)id,
             c->GetNameString(),
             c->IsBitmap() ? "bitmap" : "vector",
-            (double)c->GetLogicalCenter().x,
-            (double)c->GetLogicalCenter().y,
-            (int)c->GetLogicalSize().x,
-            (int)c->GetLogicalSize().y,
+            (double)c->GetCenter().x,
+            (double)c->GetCenter().y,
+            (int)c->GetSize().x,
+            (int)c->GetSize().y,
             (int)c->GetTextureWidth(),
             (int)c->GetTextureHeight());
 
@@ -304,13 +313,13 @@ void Sprite::DebugUI() const
             {
                 if (ImGui::BeginTooltip())
                 {
-                    ImGui::Image((void *)(intptr_t)c->GetTexture(), ImVec2(c->GetLogicalSize().x, c->GetLogicalSize().y), ImVec2(0, 1), ImVec2(1, 0));
+                    ImGui::Image((void *)(intptr_t)c->GetTexture(), ImVec2(c->GetSize().x, c->GetSize().y), ImVec2(0, 1), ImVec2(1, 0));
                     ImGui::EndTooltip();
                 }
             }
         }
         else
-            ImGui::Text("(unloaded)");
+            ImGui::Text("(unloaded)");*/
     }
 }
 
@@ -329,7 +338,7 @@ bool Sprite::CheckSpriteAdv(const Sprite *sprite) const
     Costume *sc = sprite->_costumes + sprite->_costume - 1;
     
     // brute force check
-    const IntVector2 &size = sc->GetLogicalSize();
+    const IntVector2 &size = sc->GetSize();
     for (int32_t x = 0; x < size.x; x++)
     {
         for (int32_t y = 0; y < size.y; y++)

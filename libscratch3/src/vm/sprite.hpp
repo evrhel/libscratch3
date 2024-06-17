@@ -58,6 +58,8 @@ public:
     constexpr void SetY(double y) { _y = y, _transDirty = true; }
     constexpr void SetXY(double x, double y) { _x = x, _y = y, _transDirty = true; }
 
+    constexpr void InvalidateTransform() { _transDirty = true; }
+
     void SetLayer(int64_t layer);
     void MoveLayer(int64_t amount);
 

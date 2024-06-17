@@ -69,7 +69,10 @@ void IOHandler::PollEvents()
 			break;
 		case SDL_WINDOWEVENT:
 			if (evt.window.event == SDL_WINDOWEVENT_RESIZED)
+			{
 				render->Resize();
+				_vm->OnResize();
+			}
 			break;
 		}
 	}

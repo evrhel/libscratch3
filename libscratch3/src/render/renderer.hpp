@@ -63,6 +63,7 @@ public:
     constexpr int GetLogicalRight() const { return _right; }
     constexpr int GetLogicalBottom() const { return _bottom; }
     constexpr int GetLogicalTop() const { return _top; }
+    constexpr const Vector2 &GetLogicalSize() const { return _logicalSize; }
 
     constexpr double GetScale() const { return _scale; }
 
@@ -137,6 +138,7 @@ private:
 
     int _left, _right;
     int _bottom, _top;
+    Vector2 _logicalSize;
 
     double _scale;
     

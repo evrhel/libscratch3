@@ -188,6 +188,8 @@ void GLRenderer::SetLogicalSize(int left, int right, int bottom, int top)
     _top = top;
 
     _proj = mutil::ortho(left, right, bottom, top, -1.0f, 1.0f);
+
+    _logicalSize = Vector2(right - left, top - bottom);
 }
 
 void GLRenderer::BeginRender()

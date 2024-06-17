@@ -30,34 +30,18 @@ public:
 	constexpr const String *GetName() const { return _name.u.string; }
 	constexpr const char *GetNameString() const { return _name.u.string->str; }
 
-	//! \brief Returns the texture of the costume
-	//!
-	//! \return An OpenGL texture
-	constexpr GLuint GetTexture() const { return _texture; }
+	constexpr const IntVector2 &GetCenter() const { return _center; }
+	constexpr const IntVector2 &GetSize() const { return _size; }
 
-	//! \brief Returns the width of the rendered texture
-	//!
-	//! \return The width of the texture, in pixels
-	constexpr GLuint GetTextureWidth() const { return _texWidth; }
-
-	//! \brief Returns the height of the rendered texture
-	//!
-	//! \return The height of the costume, in pixels
-	constexpr GLuint GetTextureHeight() const { return _texHeight; }
-
-	//! \brief Returns the logical center of the costume
-	//!
-	//! This does not have to be located within the costume itself, it
-	//! is used as an anchor point for the sprite.
-	//!
-	//! \return The center of the costume, in units relative to the
-	//! middle of the image
 	constexpr const Vector2 &GetLogicalCenter() const { return _logicalCenter; }
+	constexpr const Vector2 &GetLogicalSize() const { return _logicalSize; }
 
-	//! \brief Returns the logical size of the costume
-	//!
-	//! \return The size of the costume, in units
-	constexpr const IntVector2 &GetLogicalSize() const { return _logicalSize; }
+	//! \brief Get the texture of the costume, at a given scale
+	//! 
+	//! \param scale The scale of the costume
+	//! 
+	//! \return The texture of the costume
+	GLuint GetTexture(const Vector2 &scale);
 
 	//! \brief Checks if a point is inside the costume
 	//!
@@ -71,12 +55,6 @@ public:
 
 	void Load();
 
-	//! \brief Render the costume to a texture of a given size
-	//!
-	//! \param scale The scale of the costume
-	//! \param resolution The resolution of the viewport
-	void Render(double scale, double resolution);
-
 	constexpr bool IsBitmap() const { return _handle == nullptr; }
 
 	Costume &operator=(const Costume &) = delete;
@@ -89,19 +67,23 @@ public:
 private:
 	Value _name;
 
-	GLuint _texture;
+	GLuint *_textures; // texture ids for each LOD, bitmaps have only one LOD
+	GLsizei _lodCount; // number of LODs
+
+	// for base LOD
 	GLuint _texWidth, _texHeight;
-	uint8_t *_mask; // collision mask
+
+	IntVector2 _center;
+	IntVector2 _size;
 
 	Vector2 _logicalCenter;
-	IntVector2 _logicalSize;
+	Vector2 _logicalSize;
 
 	int32_t _bitmapResolution;
 
 	// svg specific
 	RsvgHandle *_handle;
 	int _svgWidth, _svgHeight;
-	double _svgAspect;
 
 	// data
 	std::string _dataFormat;
@@ -110,25 +92,5 @@ private:
 
 	void Cleanup();
 
-	//! \brief Renders SVG images to a texture
-	//!
-	//! If the costume is not an SVG, does nothing. If the SVG has
-	//! already been rendered to a texture with a larger size, does
-	//! nothing. Otherwise, renders the SVG to a texture, which can
-	//! be retrieved with GetTexture().
-	//!
-	//! \param width The width of the texture, in pixels
-	//! \param height The height of the texture, in pixels
-	void RenderSVG(uint32_t width, uint32_t height);
-
-	//! \brief Generates a collision mask for a texture
-	//!
-	//! \param pixels The pixel data of the texture, the alpha channel
-	//! is used to generate the mask and must be the last byte of each
-	//! pixel
-	//! \param width The width of the texture, in pixels
-	//! \param height The height of the texture, in pixels
-	//!
-	//! \return Whether the mask was generated successfully
-	bool GenMaskForPixels(const uint8_t *pixels, uint32_t width, uint32_t height);
+	GLuint RenderLod(double scale);
 };
