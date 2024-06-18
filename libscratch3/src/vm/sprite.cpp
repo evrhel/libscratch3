@@ -239,7 +239,7 @@ void Sprite::Init(const SpriteInfo *info)
     _sounds = new Sound[_nSounds];
     for (int64_t i = 0; i < _nSounds; i++)
     {
-		_sounds[i].Init(&info->sounds[i]);
+		_sounds[i].Init(&info->sounds[i], &_dsp);
 		_soundNameMap[_sounds[i].GetName()] = i;
 	}
 }
@@ -283,6 +283,8 @@ void Sprite::Load(VirtualMachine *vm)
 
     // initial update
     Update();
+
+    GetDSP()->SetPitch(180);
 }
 
 void Sprite::DebugUI() const
@@ -310,7 +312,7 @@ void Sprite::DebugUI() const
     ImGui::LabelText("Ghost", "%.0f", _ghostEffect);
 
     ImGui::SeparatorText("Sound");
-    ImGui::LabelText("Volume", "%.0f%%", _volume);
+    ImGui::LabelText("Volume", "%.0f%%", _dsp.GetVolume());
 
     ImGui::SeparatorText("Costumes");
     constexpr float kImageHeight = 64;

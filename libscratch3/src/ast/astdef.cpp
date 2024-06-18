@@ -58,9 +58,9 @@ const char *const PropGetTypeStrings[PropGetType_Count] = {
 };
 
 const char *const SoundEffectStrings[] = {
-	"unknown",
-	"pitch",
-	"pan"
+	"UNKNOWN",
+	"PITCH",
+	"PAN"
 };
 
 SoundEffect SoundEffectFromString(const std::string &str)

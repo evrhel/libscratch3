@@ -491,11 +491,11 @@ private:
 				continue;
 			}
 
-			if (!costume.HasMember("bitmapResolution"))
-			{
-				Error("Missing `bitmapResolution` member in costume");
-				continue;
-			}
+			//if (!costume.HasMember("bitmapResolution"))
+			//{
+				//Error("Missing `bitmapResolution` member in costume");
+				//continue;
+		//	}
 
 			if (!costume.HasMember("dataFormat"))
 			{
@@ -522,7 +522,7 @@ private:
 			}
 
 			rapidjson::Value &name = costume["name"];
-			rapidjson::Value &bitmapResolution = costume["bitmapResolution"];
+			//rapidjson::Value &bitmapResolution = costume["bitmapResolution"];
 			rapidjson::Value &dataFormat = costume["dataFormat"];
 			rapidjson::Value &md5ext = costume["md5ext"];
 			rapidjson::Value &rotationCenterX = costume["rotationCenterX"];
@@ -534,11 +534,11 @@ private:
 				continue;
 			}
 
-			if (!bitmapResolution.IsInt())
-			{
-				Error("Expected integer parsing bitmapResolution in costume");
-				continue;
-			}
+			//if (!bitmapResolution.IsInt())
+			//{
+			//	Error("Expected integer parsing bitmapResolution in costume");
+			//	continue;
+			//}
 
 			if (!dataFormat.IsString())
 			{
@@ -566,7 +566,13 @@ private:
 
 			CostumeDef *cd = new CostumeDef();
 			cd->name = name.GetString();
-			cd->bitmapResolution = bitmapResolution.GetInt();
+
+			if (costume.HasMember("bitmapResolution"))
+			{
+				rapidjson::Value &bitmapResolution = costume["bitmapResolution"];
+				cd->bitmapResolution = bitmapResolution.GetInt();
+			}
+
 			cd->dataFormat = dataFormat.GetString();
 			cd->md5ext = md5ext.GetString();
 			cd->rotationCenterX = rotationCenterX.GetDouble();

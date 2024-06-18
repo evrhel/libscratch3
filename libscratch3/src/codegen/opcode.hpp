@@ -108,7 +108,6 @@ enum Opcode : uint8_t
 	
 	Op_playsoundandwait,
 	Op_playsound,
-	Op_findsound,
 	Op_stopsound,
 	Op_addsoundeffect,
 	Op_setsoundeffect,

@@ -350,9 +350,11 @@ void Script::Main()
 			Pop();
 			break;
 		case Op_inc:
-			Raise(NotImplemented, "inc");
+			SetReal(StackAt(0), ToReal(StackAt(0)) + 1.0);
+			break;
 		case Op_dec:
-			Raise(NotImplemented, "dec");
+			SetReal(StackAt(0), ToReal(StackAt(0)) - 1.0);
+			break;
 		case Op_movesteps: {
 			double steps = ToReal(StackAt(0));
 			Pop();
@@ -665,27 +667,65 @@ void Script::Main()
 			vm->PlaySound(sound);
 			break;
 		}
-		case Op_findsound:
-			Raise(NotImplemented, "findsound");
 		case Op_stopsound:
 			vm->StopAllSounds();
 			break;
-		case Op_addsoundeffect:
-			Raise(NotImplemented, "addsoundeffect");
-		case Op_setsoundeffect:
-			Raise(NotImplemented, "setsoundeffect");
-		case Op_clearsoundeffects:
-			Raise(NotImplemented, "clearsoundeffects");
-		case Op_addvolume:
-			sprite->SetVolume(sprite->GetVolume() + ToReal(StackAt(0)));
+		case Op_addsoundeffect: {
+			SoundEffect effect = (SoundEffect)*(uint8_t *)pc;
+			pc++;
+
+			DSPController *dsp = sprite->GetDSP();
+			switch (effect)
+			{
+			default:
+				Raise(InvalidArgument, "Invalid sound effect");
+			case SoundEffect_Pitch:
+				dsp->SetPitch(dsp->GetPitch() + ToReal(StackAt(0)));
+				break;
+			case SoundEffect_Pan:
+				dsp->SetPan(dsp->GetPan() + ToReal(StackAt(0)));
+				break;
+			}
+			break;
+		}
+		case Op_setsoundeffect: {
+			SoundEffect effect = (SoundEffect)*(uint8_t *)pc;
+			pc++;
+
+			DSPController *dsp = sprite->GetDSP();
+			switch (effect)
+			{
+			default:
+				Raise(InvalidArgument, "Invalid sound effect");
+			case SoundEffect_Pitch:
+				dsp->SetPitch(ToReal(StackAt(0)));
+				break;
+			case SoundEffect_Pan:
+				dsp->SetPan(ToReal(StackAt(0)));
+				break;
+			}
+			break;
+		}
+		case Op_clearsoundeffects: {
+			DSPController *dsp = sprite->GetDSP();
+			dsp->SetPitch(0.0);
+			dsp->SetPan(0.0);
+			break;
+		}
+		case Op_addvolume: {
+			DSPController *dsp = sprite->GetDSP();
+			dsp->SetVolume(dsp->GetVolume() + ToReal(StackAt(0)));
 			Pop();
 			break;
-		case Op_setvolume:
-			sprite->SetVolume(ToReal(StackAt(0)));
+		}
+		case Op_setvolume: {
+			DSPController *dsp = sprite->GetDSP();
+			dsp->SetVolume(ToReal(StackAt(0)));
 			Pop();
 			break;
+		}
 		case Op_getvolume:
-			SetReal(Push(), sprite->GetVolume());
+			SetReal(Push(), sprite->GetDSP()->GetVolume());
 			break;
 		case Op_onflag:
 			// do nothing
@@ -878,7 +918,7 @@ void Script::Main()
 				SetReal(Push(), s->GetSize());
 				break;
 			case PropertyTarget_Volume:
-				SetReal(Push(), s->GetVolume());
+				SetReal(Push(), s->GetDSP()->GetVolume());
 				break;
 			case PropertyTarget_Variable:
 				Pop();

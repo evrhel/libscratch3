@@ -125,13 +125,10 @@ public:
     constexpr double GetGhostEffect() const { return _ghostEffect; }
     constexpr void SetGhostEffect(double ghostEffect) { _ghostEffect = ghostEffect, _effectDirty = true; }
 
-    constexpr double GetVolume() const { return _volume; }
-    constexpr void SetVolume(double volume) { _volume = volume; }
+    constexpr DSPController *GetDSP() { return &_dsp; }
 
     bool TouchingColor(int64_t color) const;
-
     bool TouchingSprite(const Sprite *sprite) const;
-
     bool TouchingPoint(const Vector2 &point) const;
 
     // call from render thread
@@ -198,7 +195,7 @@ private:
     double _ghostEffect = 0.0;
     bool _effectDirty = true;
 
-    double _volume = 100.0;
+    DSPController _dsp;
 
     Matrix4 _model, _invModel;
     AABB _bbox;
