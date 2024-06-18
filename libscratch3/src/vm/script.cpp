@@ -420,26 +420,14 @@ void Script::Main()
 		case Op_getdir:
 			SetReal(Push(), sprite->GetDirection());
 			break;
-		case Op_say: {
-			Value &v = StackAt(0);
-			CvtString(v);
-
-			if (v.type == ValueType_String)
-				printf("%s is saying: %s\n", sprite->GetNameString(), v.u.string->str);
-
+		case Op_say:
+			sprite->SetMessage(StackAt(0), MESSAGE_STATE_SAY);
 			Pop();
 			break;
-		}
-		case Op_think: {
-			Value &v = StackAt(0);
-			CvtString(v);
-
-			if (v.type == ValueType_String)
-				printf("%s is thinking: %s\n", sprite->GetNameString(), v.u.string->str);
-
+		case Op_think:
+			sprite->SetMessage(StackAt(0), MESSAGE_STATE_THINK);
 			Pop();
 			break;
-		}
 		case Op_setcostume: {
 			Value &v = StackAt(0);
 
@@ -600,6 +588,7 @@ void Script::Main()
 			}
 
 			pc++;
+			break;
 		case Op_movelayer: {
 			int64_t amount = ToInteger(StackAt(0));
 			Pop();
@@ -617,6 +606,7 @@ void Script::Main()
 			}
 
 			pc++;
+			break;
 		}
 		case Op_getcostume:
 			SetInteger(Push(), sprite->GetCostume());
@@ -935,12 +925,51 @@ void Script::Main()
 		case Op_getusername:
 			Assign(Push(), vm->GetIO().GetUsername());
 			break;
-		case Op_rand:
-			Raise(NotImplemented, "rand");
+		case Op_rand: {
+			Value &a = StackAt(1);
+			Value &b = StackAt(0);
+
+			if (a.type == ValueType_Real || b.type == ValueType_Real)
+			{
+				double min = ToReal(a);
+				double max = ToReal(b);
+
+				if (max < min)
+				{
+					double temp = min;
+					min = max;
+					max = temp;
+				}
+			
+				SetReal(a, min + (ls_rand_double() * (max - min)));
+				Pop();
+			}
+			else
+			{
+				int64_t min = ToInteger(a);
+				int64_t max = ToInteger(b);
+
+				if (max < min)
+				{
+					int64_t temp = min;
+					min = max;
+					max = temp;
+				}
+
+				SetInteger(a, min + (ls_rand_uint64() % (max - min + 1)));
+				Pop();
+			}
+
+			break;
+		}
 		case Op_varshow:
-			Raise(NotImplemented, "varshow");
+			//Raise(NotImplemented, "varshow");
+			Pop();
+			break;
 		case Op_varhide:
-			Raise(NotImplemented, "varhide");
+			//Raise(NotImplemented, "varhide");
+			Pop();
+			break;
 		case Op_listadd:
 			ListAppend(StackAt(0), StackAt(1));
 			Pop();

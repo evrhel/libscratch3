@@ -736,6 +736,8 @@ public:
 		// jump back to top
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
+		(uint64_t &)cp._text[jz] = cp._text.size();
+
 		// pop counter
 		cp.WriteOpcode(Op_pop);
 

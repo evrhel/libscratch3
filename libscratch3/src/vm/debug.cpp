@@ -283,9 +283,13 @@ void Debugger::Render()
 
 					if (ImGui::CollapsingHeader(name))
 					{
+						double wakeup = script.sleepUntil ? script.sleepUntil - _vm->GetTime() : 0.0;
+						if (wakeup < 0.0)
+							wakeup = 0.0;
+
 						ImGui::LabelText("State", "%s", GetStateName(script.state));
 						ImGui::LabelText("Sprite", "%s", script.sprite->GetNameString());
-						ImGui::LabelText("Wakeup", "%.2g", script.sleepUntil);
+						ImGui::LabelText("Wakeup", "%.2g", wakeup);
 						ImGui::LabelText("Wait Input", script.waitInput ? "true" : "false");
 						ImGui::LabelText("Ask Input", script.askInput ? "true" : "false");
 					}

@@ -126,7 +126,11 @@ void Sound::Play()
 	if (!_stream)
 		return;
 
-	(void)Pa_StopStream(_stream); // stop if playing
+	if (_isPlaying)
+		(void)Pa_StopStream(_stream);
+
+	_data.pos = 0;
+	_isPlaying = true;
 
 	PaError err = Pa_StartStream(_stream);
 	if (err != paNoError)
@@ -141,17 +145,14 @@ void Sound::Stop()
 	PaError err = Pa_StopStream(_stream);
 	if (err != paNoError)
 		printf("Sound::Stop: Pa_StopStream failed: %s\n", Pa_GetErrorText(err));
-}
 
-bool Sound::IsPlaying() const
-{
-	if (!_stream)
-		return false;
-	return Pa_IsStreamActive(_stream) == 1;
+	_data.pos = 0;
+	_isPlaying = false;
 }
 
 Sound::Sound() :
 	_stream(nullptr),
+	_isPlaying(false),
 	_rate(0),
 	_sampleCount(0),
 	_data({}),
@@ -277,4 +278,5 @@ int Sound::paCallback(
 void Sound::paStreamFinished(void *userData)
 {
 	Sound *sound = static_cast<Sound *>(userData);
+	sound->_isPlaying = false;
 }

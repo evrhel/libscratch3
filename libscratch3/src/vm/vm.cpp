@@ -365,26 +365,32 @@ void VirtualMachine::Render()
 	_io.RenderIO();
 
 	const ImVec2 padding(5, 5);
-	const ImU32 textColor = IM_COL32(255, 255, 255, 255);
+	const ImU32 textColor = IM_COL32(0, 0, 0, 255); //IM_COL32(255, 255, 255, 255);
 	const ImU32 hiddenColor = IM_COL32(128, 128, 128, 255);
-	const ImU32 backColor = IM_COL32(0, 0, 0, 128);
+	const ImU32 backColor = IM_COL32(255, 255, 255, 255); //IM_COL32(0, 0, 0, 128);
 
 	ImDrawList *drawList = ImGui::GetBackgroundDrawList();
 	for (Sprite *s = _sprites; s < _spritesEnd; s++)
 	{
+		const String *message = s->GetMessage();
+		if (!message)
+			continue;
+
+		const AABB &bbox = s->GetBoundingBox();
+
 		int x, y;
-		_render->StageToScreen(s->GetX(), s->GetY(), &x, &y);
+		_render->StageToScreen(s->GetX(), bbox.hi.y, &x, &y);
 
 		ImVec2 position(x, y);
 
-		const char *text = s->GetNameString();
+		const char *text = message->str;
 		ImVec2 textSize = ImGui::CalcTextSize(text);
 		
 		ImVec2 topLeft(position.x - padding.x, position.y - padding.y);
 		ImVec2 botRight(position.x + textSize.x + padding.x, position.y + textSize.y + padding.y);
 
 		drawList->AddRectFilled(topLeft, botRight, backColor);
-		drawList->AddText(position, s->IsShown() ? textColor : hiddenColor, s->GetNameString());
+		drawList->AddText(position, textColor, text);
 	}
 
 	_debug.Render();

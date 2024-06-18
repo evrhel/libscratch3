@@ -43,10 +43,9 @@ public:
 
     constexpr bool IsStage() const { return _isStage; }
     
-    constexpr const std::string &GetMessage() const { return _message; }
+    constexpr const String *GetMessage() const { return _message.u.string; }
     constexpr int GetMessageState() const { return _messageState; }
-    inline void SetMessage(const std::string &message, int state) { _message = message, _messageState = state; }
-    inline void ClearMessage() { _message.clear(), _messageState = MESSAGE_STATE_NONE; }
+    void SetMessage(const Value &message, int state);
 
     constexpr GlideInfo *GetGlide() { return &_glide; }
 
@@ -144,6 +143,8 @@ public:
 
     constexpr const std::vector<Script *> &GetClickListeners() const { return _clickListeners; }
 
+    constexpr const AABB &GetBoundingBox() const { return _bbox; }
+
     Sprite();
     ~Sprite();
 private:
@@ -169,7 +170,7 @@ private:
 
     GlideInfo _glide;
 
-	std::string _message;
+	Value _message;
 	int _messageState = MESSAGE_STATE_NONE;
     
     int64_t _costume = 1;

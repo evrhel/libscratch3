@@ -110,16 +110,16 @@ void main()
 
     vec4 color = texture(uTexture, texCoord);
 
-    /*const float epsilon = 0.0001;
+    const float epsilon = 0.0001;
 
-    color.rgb = clamp(color.rgb / (color.a + epsilon), 0.0, 1.0);
+    //color.rgb = clamp(color.rgb / (color.a + epsilon), 0.0, 1.0);
 
-    color = colorEffect(color);
+    //color = colorEffect(color);
     color = brightnessEffect(color);
 
-    color.rgb *= color.a + epsilon;
+    //color.rgb *= color.a + epsilon;
 
-    color = ghostEffect(color);*/
+    color = ghostEffect(color);
 
     FragColor = color * uColor;
 }

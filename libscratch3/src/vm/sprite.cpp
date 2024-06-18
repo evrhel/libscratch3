@@ -66,6 +66,12 @@ static constexpr bool AABBContains(const AABB &a, const Vector2 &p)
            p.y >= a.lo.y && p.y <= a.hi.y;
 }
 
+void Sprite::SetMessage(const Value &message, int state)
+{
+    CvtString(Assign(_message, message));
+    _messageState = _message.type == ValueType_String ? state : MESSAGE_STATE_NONE;
+}
+
 void Sprite::SetLayer(int64_t layer)
 {
     _vm->GetRenderer()->SetLayer(_drawable, layer);
@@ -202,7 +208,7 @@ void Sprite::Update()
     if (_effectDirty)
     {
         s->colorEffect = mutil::mod(static_cast<float>(_colorEffect / 200), 1.0f);
-        s->brightnessEffect = clamp(static_cast<float>(_brightnessEffect / 100), -1.0f, 1.0f);
+        s->brightnessEffect = clamp(static_cast<float>(_brightnessEffect / 100), -1.0f, 1.0f) + 1;
         s->fisheyeEffect = mutil::max(0.0f, static_cast<float>(_fisheyeEffect + 100) / 100.0f);
         s->whirlEffect = -_whirlEffect * MUTIL_PI / 180.0f;
         s->pixelateEffect = mutil::abs(static_cast<float>(_pixelateEffect)) / 10;
@@ -352,6 +358,7 @@ void Sprite::DebugUI() const
 Sprite::Sprite()
 {
     InitializeValue(_name);
+    InitializeValue(_message);
 }
 
 Sprite::~Sprite()
@@ -417,7 +424,7 @@ void Sprite::Cleanup()
     _vm = nullptr;
 
     _messageState = MESSAGE_STATE_NONE;
-    _message.clear();
+    ReleaseValue(_message);
 
     ReleaseValue(_name);
 }

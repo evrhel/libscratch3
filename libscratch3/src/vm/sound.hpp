@@ -77,7 +77,7 @@ public:
 	// use VirtualMachine::PlaySound
 	void Play();
 	void Stop();
-	bool IsPlaying() const;
+	constexpr bool IsPlaying() const { return _isPlaying; }
 
 	Sound &operator=(const Sound &) = delete;
 	Sound &operator=(Sound &&) = delete;
@@ -90,6 +90,7 @@ private:
 	Value _name;
 
 	PaStream *_stream;
+	bool _isPlaying;
 
 	// data
 	std::string _dataFormat;
