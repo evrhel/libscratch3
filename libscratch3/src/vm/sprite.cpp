@@ -283,8 +283,6 @@ void Sprite::Load(VirtualMachine *vm)
 
     // initial update
     Update();
-
-    GetDSP()->SetPitch(180);
 }
 
 void Sprite::DebugUI() const

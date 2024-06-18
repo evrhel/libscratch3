@@ -111,12 +111,22 @@ void Sound::Load()
 		Cleanup();
 		return;
 	}
+
+	err = Pa_SetStreamFinishedCallback(_stream, paStreamFinished);
+	if (err != paNoError)
+	{
+		printf("Sound::Load: Pa_SetStreamFinishedCallback failed: %s\n", Pa_GetErrorText(err));
+		Cleanup();
+		return;
+	}
 }
 
 void Sound::Play()
 {
 	if (!_stream)
 		return;
+
+	(void)Pa_StopStream(_stream); // stop if playing
 
 	PaError err = Pa_StartStream(_stream);
 	if (err != paNoError)
@@ -198,44 +208,47 @@ int Sound::paCallback(
 		if (read < BUFFER_LENGTH)
 			return paComplete;
 	}
-	if (resampleRatio > 1.0f)
+	else if (resampleRatio > 1.0f)
 	{
 		float srcPos = 0.0f;
 		sf_count_t offset = 0;
 		sf_count_t outIdx = 0;
 
-		while (outIdx < BUFFER_LENGTH)
+		sf_count_t needed = static_cast<sf_count_t>(mutil::ceil(framesPerBuffer * resampleRatio));
+
+		for (;;)
 		{
-			read = sf_readf_float(sound->_file, tmp, BUFFER_LENGTH);
-			if (read < BUFFER_LENGTH)
+			sf_count_t toRead = needed - offset;
+			if (toRead > BUFFER_LENGTH)
+				toRead = BUFFER_LENGTH;
+
+			read = sf_readf_float(sound->_file, tmp, toRead);
+			if (read < toRead)
 				return paComplete;
 
-			sf_count_t readPos = 0;
-			while (readPos < BUFFER_LENGTH && outIdx < BUFFER_LENGTH)
+			while (outIdx < BUFFER_LENGTH)
 			{
-				readPos = static_cast<sf_count_t>(srcPos - offset);
-				sf_count_t nextReadPos = static_cast<sf_count_t>(srcPos + resampleRatio - offset);
+				float pos = srcPos - offset;
 
-				if (nextReadPos >= BUFFER_LENGTH)
-					out[outIdx++] = tmp[readPos]; // last sample
+				sf_count_t a = static_cast<sf_count_t>(pos);
+				if (a >= read)
+					break;
+
+				sf_count_t b = a + 1;
+				float frac = mutil::fract(pos);
+
+				if (b >= read)
+					out[outIdx++] = tmp[a]; // last sample
 				else
-				{
-					// lowpass filter
-					float sum = 0.0f;
-					sf_count_t count = 0;
-					for (sf_count_t i = readPos; i < nextReadPos; i++)
-					{
-						sum += tmp[i];
-						count++;
-					}
-
-					out[outIdx++] = sum / count;
-				}
+					out[outIdx++] = mutil::lerp(tmp[a], tmp[b], frac);
 
 				srcPos += resampleRatio;
 			}
 
-			offset += BUFFER_LENGTH;
+			if (outIdx >= BUFFER_LENGTH)
+				break;
+
+			offset += read;
 		}
 	}
 	else // < 1.0f
@@ -259,4 +272,9 @@ int Sound::paCallback(
 	}
 
 	return paContinue;
+}
+
+void Sound::paStreamFinished(void *userData)
+{
+	Sound *sound = static_cast<Sound *>(userData);
 }

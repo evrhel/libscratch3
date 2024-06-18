@@ -8,7 +8,7 @@
 #include "preload.hpp"
 #include "memory.hpp"
 
-#define BUFFER_LENGTH 1024
+#define BUFFER_LENGTH 512
 
 struct SoundMemoryFile
 {
@@ -111,4 +111,6 @@ private:
 		const PaStreamCallbackTimeInfo *timeInfo,
 		PaStreamCallbackFlags statusFlags,
 		void *userData);
+
+	static void paStreamFinished(void *userData);
 };
