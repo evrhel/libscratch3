@@ -297,6 +297,86 @@ void Debugger::Render()
 
 				ImGui::EndTabItem();
 			}
+			
+			if (ImGui::BeginTabItem("Audio"))
+			{
+				static bool showPlaying = true;
+				static bool showStopped = false;
+				static bool showUnloaded = false;
+
+				ImGui::SeparatorText("Information");
+
+				ImGui::LabelText("Host Supports Audio", "%s", _vm->HasAudio() ? "true" : "false");
+				ImGui::LabelText("Buffer Length", "%d", BUFFER_LENGTH);
+
+				if (_vm->HasAudio())
+				{
+					const PaDeviceInfo *info = Pa_GetDeviceInfo(Pa_GetDefaultOutputDevice());
+					ImGui::LabelText("Output Device", "%s", info->name);
+				}
+				else
+				{
+					ImGui::LabelText("Output Device", "(none)");
+				}
+
+				int loaded = 0;
+				for (Sound *sound : _vm->GetSounds())
+				{
+					if (sound->IsLoaded())
+						loaded++;
+				}
+
+				ImGui::LabelText("Sounds Loaded", "%d/%zu", loaded, _vm->GetSounds().size());
+
+				ImGui::SeparatorText("Sounds");
+
+				ImGui::Checkbox("Playing", &showPlaying);
+				ImGui::SameLine();
+
+				ImGui::Checkbox("Stopped", &showStopped);
+
+				for (Sound *s : _vm->GetSounds())
+				{
+					if (s->IsLoaded())
+					{
+						if (s->IsPlaying() && !showPlaying)
+							continue;
+
+						if (!s->IsPlaying() && !showStopped)
+							continue;
+					}
+					else if (!showUnloaded)
+						continue;					
+
+					if (ImGui::CollapsingHeader(s->GetNameString()))
+					{
+						const SoundMemoryFile &data = s->GetData();
+						double duration = s->GetDuration();
+						double location = duration * data.pos / data.size;
+
+						ImGui::LabelText("Rate", "%.0f Hz", s->GetRate());
+
+						int min = static_cast<int>(duration / 60);
+						int sec = duration - min * 60;
+						ImGui::LabelText("Duration", "%d:%02d (%.2f sec)", min, sec, duration);
+
+						min = static_cast<int>(location / 60);
+						sec = location - min * 60;
+						ImGui::LabelText("Position", "%d:%02d (%.2f sec)", min, sec, location);
+
+						ImGui::LabelText("Format", "%s", s->GetFormat().c_str());
+
+						ImGui::LabelText("Loaded", s->IsLoaded() ? "true" : "false");
+						if (s->IsLoaded())
+						{
+							ImGui::LabelText("Playing", s->IsPlaying() ? "true" : "false");
+							ImGui::LabelText("CPU", "%.2f%%", Pa_GetStreamCpuLoad(s->GetStream()) * 100.0);
+						}
+					}
+				}
+
+				ImGui::EndTabItem();
+			}
 
 			ImGui::EndTabBar();
 		}

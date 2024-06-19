@@ -69,15 +69,29 @@ class Sound final
 {
 public:
 	constexpr const String *GetName() const { return _name.u.string; }
+	constexpr const char *GetNameString() const { return _name.u.string->str; }
 
 	void Init(const SoundInfo *info, DSPController *dsp);
 
 	void Load();
 
+	constexpr bool IsLoaded() const { return _stream != nullptr; }
+
 	// use VirtualMachine::PlaySound
 	void Play();
 	void Stop();
 	constexpr bool IsPlaying() const { return _isPlaying; }
+
+	// used by debuggers
+	constexpr PaStream *GetStream() const { return _stream; }
+
+	constexpr const SoundMemoryFile &GetData() const { return _data; }
+
+	constexpr const std::string &GetFormat() const { return _dataFormat; }
+
+	constexpr double GetRate() const { return _rate; }
+	constexpr unsigned int GetSampleCount() const { return _sampleCount; }
+	constexpr double GetDuration() const { return static_cast<double>(_sampleCount) / _rate; }
 
 	Sound &operator=(const Sound &) = delete;
 	Sound &operator=(Sound &&) = delete;
@@ -94,7 +108,7 @@ private:
 
 	// data
 	std::string _dataFormat;
-	unsigned int _rate;
+	double _rate;
 	unsigned int _sampleCount;
 	SoundMemoryFile _data;
 

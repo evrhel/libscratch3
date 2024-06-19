@@ -98,6 +98,8 @@ public:
 
     Sound *FindSound(int64_t sound);
     Sound *FindSound(const String *name);
+    constexpr Sound *GetSounds() const { return _sounds; }
+    constexpr int64_t GetSoundCount() const { return _nSounds; }
 
     constexpr int64_t CostumeCount() const { return _nCostumes; }
 

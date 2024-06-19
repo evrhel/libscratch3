@@ -59,7 +59,7 @@ static SF_VIRTUAL_IO _sfVirtualIo = {
 void DSPController::SetPitch(double pitch)
 {
 	// 2^(1/12)
-	constexpr double kSemitone = 1.0594630943592952645618252949463f;
+	constexpr double kSemitone = 1.0594630943592952645618252949463;
 
 	if (pitch < -360.0)
 		pitch = -360.0;
@@ -94,29 +94,31 @@ void Sound::Load()
 		return;
 	}
 
-	PaError err;
-
-	err = Pa_OpenDefaultStream(
-		&_stream,
-		0,
-		_info.channels,
-		paFloat32,
-		_info.samplerate,
-		BUFFER_LENGTH,
-		paCallback,
-		this);
-	if (err != paNoError)
-	{
-		printf("Sound::Load: Pa_OpenDefaultStream failed: %s\n", Pa_GetErrorText(err));
-		Cleanup();
-		return;
-	}
+	// defer stream creation until Play is called
 }
 
 void Sound::Play()
 {
 	if (!_stream)
-		return;
+	{
+		PaError err;
+
+		err = Pa_OpenDefaultStream(
+			&_stream,
+			0,
+			_info.channels,
+			paFloat32,
+			_info.samplerate,
+			BUFFER_LENGTH,
+			paCallback,
+			this);
+		if (err != paNoError)
+		{
+			printf("Sound::Load: Pa_OpenDefaultStream failed: %s\n", Pa_GetErrorText(err));
+			Cleanup();
+			return;
+		}
+	}
 
 	if (_isPlaying)
 		(void)Pa_StopStream(_stream);
@@ -210,10 +212,12 @@ int Sound::paCallback(
 		sf_count_t offset = 0;
 		sf_count_t outIdx = 0;
 
+		// total number of samples needed
 		sf_count_t needed = static_cast<sf_count_t>(mutil::ceil(framesPerBuffer * resampleRatio));
 
 		for (;;)
 		{
+			// clamp remaining samples to read to the buffer size
 			sf_count_t toRead = needed - offset;
 			if (toRead > BUFFER_LENGTH)
 				toRead = BUFFER_LENGTH;
@@ -234,7 +238,7 @@ int Sound::paCallback(
 					break;
 
 				sf_count_t b = a + 1;
-				float frac = mutil::fract(pos);
+				float frac = mutil::fract(pos); // position between a and b
 
 				if (b >= read)
 				{
@@ -242,10 +246,10 @@ int Sound::paCallback(
 					outIdx = BUFFER_LENGTH; // break out of the loop
 					break;
 				}
-				else
+				else // interpolate
 					out[outIdx++] = mutil::lerp(tmp[a], tmp[b], frac);
 
-				srcPos += resampleRatio;
+				srcPos += resampleRatio; // increement source position
 			}
 
 			if (outIdx >= BUFFER_LENGTH)
@@ -256,7 +260,9 @@ int Sound::paCallback(
 	}
 	else // < 1.0f
 	{
+		// number of samples needed
 		sf_count_t floatsNeeded = static_cast<sf_count_t>(mutil::round(framesPerBuffer * resampleRatio));
+
 		read = sf_readf_float(sound->_file, tmp, floatsNeeded);
 		if (read == 0)
 		{

@@ -114,6 +114,9 @@ public:
 	void PlaySound(Sound *sound);
 	void StopAllSounds();
 
+	constexpr bool HasAudio() const { return _hasAudio; }
+	constexpr const std::vector<Sound *> &GetSounds() const { return _sounds; }
+
 	constexpr Loader *GetLoader() const { return _loader; }
 	constexpr GLRenderer *GetRenderer() const { return _render; }
 	constexpr IOHandler &GetIO() const { return _io; }
@@ -155,6 +158,7 @@ private:
 
 	std::unordered_map<String *, Value, _StringHasher, _StringEqual> _variables; // Variables
 
+	std::vector<Sound *> _sounds; // All sounds
 	std::list<Sound *> _playingSounds; // Playing sounds
 	bool _hasAudio; // Host supports audio
 

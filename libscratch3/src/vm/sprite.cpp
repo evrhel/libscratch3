@@ -317,41 +317,59 @@ void Sprite::DebugUI() const
 
     ImGui::SeparatorText("Sound");
     ImGui::LabelText("Volume", "%.0f%%", _dsp.GetVolume());
+    ImGui::LabelText("Pitch", "%.0f (%+.0f semitones, ratio %.2f)", _dsp.GetPitch(), _dsp.GetPitch() / 10, _dsp.GetResampleRatio());
+    ImGui::LabelText("Pan", "%.0f", _dsp.GetPan());
 
     ImGui::SeparatorText("Costumes");
     constexpr float kImageHeight = 64;
     for (int64_t id = 1; id <= _nCostumes; id++)
     {
-       /* Costume *c = _costumes + id - 1;
-        ImGui::Text("[%d]: '%s' (%s), origin: (%.2f, %.2f), size: %dx%d, rendered: %dx%d",
+        Costume *c = _costumes + id - 1;
+        const IntVector2 &size = c->GetSize();
+
+        ImGui::Text("[%d]: '%s' (%s), origin: (%.2f, %.2f), size: %dx%d",
             (int)id,
             c->GetNameString(),
             c->IsBitmap() ? "bitmap" : "vector",
             (double)c->GetCenter().x,
             (double)c->GetCenter().y,
             (int)c->GetSize().x,
-            (int)c->GetSize().y,
-            (int)c->GetTextureWidth(),
-            (int)c->GetTextureHeight());
+            (int)c->GetSize().y);
 
-        float aspect = (float)c->GetTextureWidth() / c->GetTextureHeight();
+        float aspect = (float)size.x / size.y;
         float imageWidth = kImageHeight * aspect;
 
-        void *tex = (void *)(intptr_t)c->GetTexture();
+        float scale = kImageHeight / size.y;
+
+        void *tex = (void *)(intptr_t)c->GetTexture(Vector2(scale));
         if (tex)
         {
-            ImGui::Image((void *)(intptr_t)c->GetTexture(), ImVec2(imageWidth, kImageHeight), ImVec2(0, 1), ImVec2(1, 0));
+            ImGui::Image(tex, ImVec2(imageWidth, kImageHeight), ImVec2(0, 1), ImVec2(1, 0));
             if (ImGui::IsItemHovered())
             {
                 if (ImGui::BeginTooltip())
                 {
-                    ImGui::Image((void *)(intptr_t)c->GetTexture(), ImVec2(c->GetSize().x, c->GetSize().y), ImVec2(0, 1), ImVec2(1, 0));
+                    ImGui::Image(tex, ImVec2(c->GetSize().x, c->GetSize().y), ImVec2(0, 1), ImVec2(1, 0));
                     ImGui::EndTooltip();
                 }
             }
         }
         else
-            ImGui::Text("(unloaded)");*/
+            ImGui::Text("(unloaded)");
+    }
+
+    ImGui::SeparatorText("Sounds");
+    for (int64_t i = 0; i < _nSounds; i++)
+    {
+        Sound &s = _sounds[i];
+
+        ImGui::Text("[%d]: '%s' (%s), rate: %.2f, length: %.2f, playing: %s",
+			(int)i+1,
+			s.GetNameString(),
+			s.GetFormat().c_str(),
+            s.GetRate(),
+            s.GetDuration(),
+            s.IsPlaying() ? "true" : "false");
     }
 }
 

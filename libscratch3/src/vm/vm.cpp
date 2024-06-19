@@ -661,7 +661,11 @@ void VirtualMachine::Main()
 
 	// Initialize graphics resources
 	for (Sprite *s = _sprites; s < _spritesEnd; s++)
+	{
 		s->Load(this);
+		for (int64_t i = 0; i < s->GetSoundCount(); i++)
+			_sounds.push_back(&s->GetSounds()[i]);
+	}
 
 	_messageListeners.clear();
 	_keyListeners.clear();
