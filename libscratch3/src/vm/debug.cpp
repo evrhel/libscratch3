@@ -334,6 +334,9 @@ void Debugger::Render()
 				ImGui::SameLine();
 
 				ImGui::Checkbox("Stopped", &showStopped);
+				ImGui::SameLine();
+
+				ImGui::Checkbox("Unloaded", &showUnloaded);
 
 				for (Sound *s : _vm->GetSounds())
 				{

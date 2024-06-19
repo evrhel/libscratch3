@@ -60,7 +60,6 @@ static void Usage()
 	printf("Options:\n");
 	printf("  -h, --help            Show this message\n");
 	printf("  -v, --version         Show version\n");
-	printf("  -q, --quiet           Suppress all output\n");
 	printf("  -Og, -O0, -O1, -O2    Set optimization level, default -O2\n");
 	printf("  -c, --compile         Only compile project\n");
 	printf("  -o, --out <file>      Specify binary output file\n");
@@ -69,6 +68,7 @@ static void Usage()
 	printf("  -W, --width <width>   Set window width\n");
 	printf("  -H, --height <height> Set window height\n");
 	printf("  -r, --resizable       Set window resizable\n");
+	printf("  -p, --preload         Preload assets before running\n");
 }
 
 static void Version()
@@ -79,7 +79,6 @@ static void Version()
 struct Options
 {
 	char *file = nullptr;
-	bool quiet = false;
 	int optimization = 2;
 	bool onlyCompile = false;
 	char *out = nullptr;
@@ -89,6 +88,7 @@ struct Options
 	int width = -1;
 	int height = -1;
 	bool resizable = false;
+	bool preload = false;
 
 	void Parse(int argc, char *argv[])
 	{
@@ -105,8 +105,6 @@ struct Options
 				Version();
 				exit(0);
 			}
-			else if (!strcmp(arg, "--quiet"))
-				quiet = true;
 			else if (!strcmp(arg, "--compile"))
 				onlyCompile = true;
 			else if (!strcmp(arg, "--out") || !strcmp(arg, "-o"))
@@ -149,6 +147,8 @@ struct Options
 			}
 			else if (!strcmp(arg, "--resizable"))
 				resizable = true;
+			else if (!strcmp(arg, "--preload"))
+				preload = true;
 			else if (!strcmp(arg, "-Og"))
 			{
 				optimization = 0;
@@ -174,9 +174,6 @@ struct Options
 					case 'v':
 						Version();
 						exit(0);
-					case 'q':
-						quiet = true;
-						break;
 					case 'c':
 						onlyCompile = true;
 						break;
@@ -185,6 +182,9 @@ struct Options
 						break;
 					case 'r':
 						resizable = true;
+						break;
+					case 'p':
+						preload = true;
 						break;
 					case 'o':
 					case 'F':
@@ -244,8 +244,7 @@ static void ExportCompiled(Scratch3 *S, Options &opts)
 	ls_handle file = ls_open(out.c_str(), LS_FILE_WRITE, 0, LS_CREATE_ALWAYS);
 	if (!file)
 	{
-		if (!opts.quiet)
-			printf("Failed to open output file\n");
+		printf("Failed to open output file\n");
 		exit(1);
 	}
 
@@ -253,8 +252,7 @@ static void ExportCompiled(Scratch3 *S, Options &opts)
 
 	ls_close(file);
 
-	if (!opts.quiet)
-		printf("Wrote binary to `%s`\n", out.c_str());
+	printf("Wrote binary to `%s`\n", out.c_str());
 
 	Scratch3Destroy(S);
 }
@@ -279,39 +277,33 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (!opts.quiet)
-		printf("Loading project `%s`\n", opts.file);
+	printf("Loading project `%s`\n", opts.file);
 
 	S = Scratch3Create();
 	if (!S)
 	{
-		if (!opts.quiet)
-			printf("Failed to create instance\n");
+		printf("Failed to create instance\n");
 		exit(1);
 	}
 
-	int severity = opts.quiet ? SCRATCH3_SEVERITY_MAX : SCRATCH3_SEVERITY_INFO;
-	Scratch3SetLog(S, Scratch3GetStdoutLog(), severity, nullptr);
+	Scratch3SetLog(S, Scratch3GetStdoutLog(), SCRATCH3_SEVERITY_INFO, nullptr);
 
 	size_t size;
 	void *data = ReadFile(opts.file, &size);
 	if (!data)
 	{
-		if (!opts.quiet)
-			printf("Failed to read project\n");
+		printf("Failed to read project\n");
 		exit(1);
 	}
 
 	rc = Scratch3Load(S, GetName(opts.file).c_str(), data, size);
 	if (rc != SCRATCH3_ERROR_SUCCESS)
 	{
-		if (!opts.quiet)
-			printf("Failed to load project: %s\n", Scratch3GetErrorString(rc));
+		printf("Failed to load project: %s\n", Scratch3GetErrorString(rc));
 		exit(1);
 	}
 
-	if (!opts.quiet)
-		printf("Compiling project\n");
+	printf("Compiling project\n");
 
 	Scratch3CompilerOptions compileOptions;
 	memset(&compileOptions, 0, sizeof(compileOptions));
@@ -321,8 +313,7 @@ int main(int argc, char *argv[])
 	rc = Scratch3Compile(S, &compileOptions);
 	if (rc != SCRATCH3_ERROR_SUCCESS)
 	{
-		if (!opts.quiet)
-			printf("Failed to compile project: %s\n", Scratch3GetErrorString(rc));
+		printf("Failed to compile project: %s\n", Scratch3GetErrorString(rc));
 		exit(1);
 	}
 
@@ -343,24 +334,21 @@ int main(int argc, char *argv[])
 	rc = Scratch3VMInit(S, &vmOptions);
 	if (rc != SCRATCH3_ERROR_SUCCESS)
 	{
-		if (!opts.quiet)
-			printf("Failed to initialize VM: %s\n", Scratch3GetErrorString(rc));
+		printf("Failed to initialize VM: %s\n", Scratch3GetErrorString(rc));
 		exit(1);
 	}
 
 	rc = Scratch3VMRun(S);
 	if (rc != SCRATCH3_ERROR_SUCCESS)
 	{
-		if (!opts.quiet)
-			printf("Failed to run project: %s\n", Scratch3GetErrorString(rc));
+		printf("Failed to run project: %s\n", Scratch3GetErrorString(rc));
 		exit(1);
 	}
 
 	rc = Scratch3VMWait(S, -1);
 	if (rc != SCRATCH3_ERROR_SUCCESS)
 	{
-		if (!opts.quiet)
-			printf("Failed to wait for project to finish: %s\n", Scratch3GetErrorString(rc));
+		printf("Failed to wait for project to finish: %s\n", Scratch3GetErrorString(rc));
 		exit(1);
 	}
 

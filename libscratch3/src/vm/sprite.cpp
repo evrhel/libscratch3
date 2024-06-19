@@ -66,10 +66,10 @@ static constexpr bool AABBContains(const AABB &a, const Vector2 &p)
            p.y >= a.lo.y && p.y <= a.hi.y;
 }
 
-void Sprite::SetMessage(const Value &message, int state)
+void Sprite::SetMessage(const Value &message, MessageState state)
 {
     CvtString(Assign(_message, message));
-    _messageState = _message.type == ValueType_String ? state : MESSAGE_STATE_NONE;
+    _messageState = _message.type == ValueType_String ? state : MessageState_None;
 }
 
 void Sprite::SetLayer(int64_t layer)
@@ -441,7 +441,7 @@ void Sprite::Cleanup()
 
     _vm = nullptr;
 
-    _messageState = MESSAGE_STATE_NONE;
+    _messageState = MessageState_None;
     ReleaseValue(_message);
 
     ReleaseValue(_name);

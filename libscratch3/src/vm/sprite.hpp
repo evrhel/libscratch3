@@ -31,9 +31,12 @@ struct GlideInfo
 	double start = -1.0, end = 0.0; // Start and end times
 };
 
-#define MESSAGE_STATE_NONE 0
-#define MESSAGE_STATE_SAY 1
-#define MESSAGE_STATE_THINK 2
+enum MessageState
+{
+    MessageState_None,
+    MessageState_Say,
+    MessageState_Think
+};
 
 class Sprite
 {
@@ -45,7 +48,7 @@ public:
     
     constexpr const String *GetMessage() const { return _message.u.string; }
     constexpr int GetMessageState() const { return _messageState; }
-    void SetMessage(const Value &message, int state);
+    void SetMessage(const Value &message, MessageState state);
 
     constexpr GlideInfo *GetGlide() { return &_glide; }
 
@@ -173,7 +176,7 @@ private:
     GlideInfo _glide;
 
 	Value _message;
-	int _messageState = MESSAGE_STATE_NONE;
+    MessageState _messageState = MessageState_None;
     
     int64_t _costume = 1;
     Costume *_costumes = nullptr;
