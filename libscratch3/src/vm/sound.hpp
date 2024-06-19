@@ -112,6 +112,4 @@ private:
 		const PaStreamCallbackTimeInfo *timeInfo,
 		PaStreamCallbackFlags statusFlags,
 		void *userData);
-
-	static void paStreamFinished(void *userData);
 };

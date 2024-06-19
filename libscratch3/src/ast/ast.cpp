@@ -399,6 +399,20 @@ private:
 		else
 			Warn("Missing `layerOrder` member in target");
 
+		if (target.HasMember("visible"))
+		{
+			rapidjson::Value &visible = target["visible"];
+			if (!visible.IsBool())
+			{
+				Error("Expected boolean parsing `visible` in target");
+				goto failure;
+			}
+			else
+				sd->visible = visible.GetBool();
+		}
+		else
+			Warn("Missing `visible` member in target");
+
 		if (target.HasMember("x"))
 		{
 			rapidjson::Value &x = target["x"];

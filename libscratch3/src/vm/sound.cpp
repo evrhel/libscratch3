@@ -111,14 +111,6 @@ void Sound::Load()
 		Cleanup();
 		return;
 	}
-
-	err = Pa_SetStreamFinishedCallback(_stream, paStreamFinished);
-	if (err != paNoError)
-	{
-		printf("Sound::Load: Pa_SetStreamFinishedCallback failed: %s\n", Pa_GetErrorText(err));
-		Cleanup();
-		return;
-	}
 }
 
 void Sound::Play()
@@ -206,8 +198,11 @@ int Sound::paCallback(
 	{
 		// no resampling, just copy
 		read = sf_readf_float(sound->_file, out, BUFFER_LENGTH);
-		if (read < BUFFER_LENGTH)
+		if (read == 0)
+		{
+			sound->_isPlaying = false;
 			return paComplete;
+		}
 	}
 	else if (resampleRatio > 1.0f)
 	{
@@ -224,8 +219,11 @@ int Sound::paCallback(
 				toRead = BUFFER_LENGTH;
 
 			read = sf_readf_float(sound->_file, tmp, toRead);
-			if (read < toRead)
+			if (read == 0)
+			{
+				sound->_isPlaying = false;
 				return paComplete;
+			}
 
 			while (outIdx < BUFFER_LENGTH)
 			{
@@ -239,7 +237,11 @@ int Sound::paCallback(
 				float frac = mutil::fract(pos);
 
 				if (b >= read)
-					out[outIdx++] = tmp[a]; // last sample
+				{
+					out[outIdx] = tmp[a]; // last sample
+					outIdx = BUFFER_LENGTH; // break out of the loop
+					break;
+				}
 				else
 					out[outIdx++] = mutil::lerp(tmp[a], tmp[b], frac);
 
@@ -256,8 +258,11 @@ int Sound::paCallback(
 	{
 		sf_count_t floatsNeeded = static_cast<sf_count_t>(mutil::round(framesPerBuffer * resampleRatio));
 		read = sf_readf_float(sound->_file, tmp, floatsNeeded);
-		if (read < floatsNeeded)
+		if (read == 0)
+		{
+			sound->_isPlaying = false;
 			return paComplete;
+		}
 
 		// interpolate
 		for (sf_count_t i = 0; i < BUFFER_LENGTH; i++)
@@ -266,17 +271,14 @@ int Sound::paCallback(
 			float frac = mutil::fract(fpos);
 			sf_count_t pos = static_cast<sf_count_t>(fpos);
 			if (pos + 1 >= read)
+			{
 				out[i] = tmp[pos]; // last sample
+				break;
+			}
 			else
 				out[i] = mutil::lerp(tmp[pos], tmp[pos + 1], frac);
 		}
 	}
 
 	return paContinue;
-}
-
-void Sound::paStreamFinished(void *userData)
-{
-	Sound *sound = static_cast<Sound *>(userData);
-	sound->_isPlaying = false;
 }
