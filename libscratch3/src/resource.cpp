@@ -40,12 +40,11 @@ private:
 class ArchiveLoader : public Loader
 {
 public:
-	ArchiveLoader(zip_t *archive, zip_source_t *source) : _archive(archive), _source(source) {}
+	ArchiveLoader(zip_t *archive) : _archive(archive) {}
 
 	virtual ~ArchiveLoader()
 	{
 		zip_close(_archive);
-		zip_source_free(_source);
 	}
 protected:
 	virtual Resource *Load(const std::string &name) override
@@ -82,7 +81,6 @@ protected:
 	}
 private:
 	zip_t *_archive;
-	zip_source_t *_source;
 };
 
 Loader *CreateArchiveLoader(const void *data, size_t size)
@@ -98,5 +96,6 @@ Loader *CreateArchiveLoader(const void *data, size_t size)
 		return nullptr;
 	}
 
-	return new ArchiveLoader(archive, source);
+	// source is managed by the archive
+	return new ArchiveLoader(archive);
 }
