@@ -28,9 +28,17 @@ class VirtualMachine;
 class Sprite;
 class GLRenderer;
 
+//! \brief Scratch 3 virtual machine
 class VirtualMachine final
 {
 public:
+	//! \brief Load a project from bytecode
+	//!
+	//! \param name The name of the project
+	//! \param bytecode The bytecode
+	//! \param size The size of the bytecode
+	//!
+	//! \return An error code
 	int Load(const std::string &name, uint8_t *bytecode, size_t size);
 
 	//
@@ -63,8 +71,16 @@ public:
 	//! \return An error code
 	int VMWait(unsigned long ms);
 
+	//! \brief Suspend the VM
+	//!
+	//! Suspends execution of scripts. Does nothing if the VM is
+	//! already suspended.
 	void VMSuspend();
 
+	//! \brief Resume the VM
+	//!
+	//! Resumes execution of scripts. Does nothing if the VM is
+	//! already running.
 	void VMResume();
 
 	//
@@ -79,16 +95,43 @@ public:
 	//! clicked twice, they will restart.
 	void SendFlagClicked();
 
+	//! \brief Send a message
+	//!
+	//! Queues a message to be sent to all listeners. If a script
+	//! is listening for the message, it will be scheduled for
+	//! execution. If it is already running, it will restart.
 	void Send(const std::string &message);
 
 	void SendAndWait(const std::string &message);
 
 	void SendKeyPressed(int scancode);
 
+	//! \brief Queue a question to ask the user
+	//!
+	//! \brief script The script that is asking the question
+	//! \brief question The question to ask
 	void EnqueueAsk(Script *script, const std::string &question);
 
+	//! \brief Panic the VM
+	//!
+	//! This function will panic the VM with the given message. The
+	//! VM will terminate immediately and the message will be printed
+	//! to the console. This function does not return.
+	//!
+	//! It is always safe to call this function from within the VM's
+	//! thread. Internally, this performs a longjmp to the VM's panic
+	//! handler.
+	//!
+	//! \param message The panic message
 	void LS_NORETURN Panic(const char *message = nullptr);
 
+	//! \brief Get a reference to a variable
+	//!
+	//! Panics if the variable does not exist.
+	//!
+	//! \param name The name of the variable
+	//!
+	//! \return A reference to the variable
 	Value &GetVariableRef(const Value &name);
 
 	//
@@ -111,7 +154,12 @@ public:
 
 	void ResetTimer();
 
+	//! \brief Play a sound
+	//!
+	//! \param sound The sound to play
 	void PlaySound(Sound *sound);
+
+	//! \brief Stop all sounds
 	void StopAllSounds();
 
 	constexpr bool HasAudio() const { return _hasAudio; }

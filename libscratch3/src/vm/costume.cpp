@@ -33,13 +33,6 @@ void Costume::Load()
 			return;
 		}
 
-		// check for invalid size
-		if (width > MAX_TEXTURE_SIZE || height > MAX_TEXTURE_SIZE)
-		{
-			printf("Costume::Load: Image %s is too large (%dx%d)\n", GetNameString(), width, height);
-			return;
-		}
-
 		_textures = (GLuint *)calloc(1, sizeof(GLuint));
 		if (!_textures)
 		{

@@ -55,4 +55,9 @@ struct SpriteInfo
 
 using ParsedSprites = std::vector<SpriteInfo>;
 
+//! \brief Parse the bytecode to extract the sprites.
+//!
+//! \param bytecode The bytecode to parse.
+//! \param bytecodeSize The size of the bytecode.
+//! \param sprites The parsed sprites.
 void ParseSprites(uint8_t *bytecode, size_t bytecodeSize, ParsedSprites *sprites);

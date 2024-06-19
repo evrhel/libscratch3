@@ -507,6 +507,7 @@ void VirtualMachine::DispatchEvents()
 
 void VirtualMachine::Scheduler()
 {
+	// update screen at a fixed interval
 	const long long kUpdateInterval = 1000000000ll / _options.framerate;
 
 	int activeScripts = 0, waitingScripts = 0;
@@ -530,7 +531,7 @@ void VirtualMachine::Scheduler()
 
 		time = ls_nanotime();
 		if (time >= _nextScreenUpdate)
-			break; // a script is likely taking too long
+			break; // a script is likely taking too long, dont miss the screen update
 
 		if (!script.fiber)
 			continue; // cannot be scheduled
@@ -547,19 +548,23 @@ void VirtualMachine::Scheduler()
 			bool gliding = script.sprite->GetGlide()->end > time;
 			if (gliding)
 			{
-				continue; // not waiting
+				// gliding to a point
+				waitingScripts++;
+				continue;
 			}
 			else if (script.waitSound)
 			{
-				// check if sound is playing
+				// waiting for a sound to finish
 				if (script.waitSound->IsPlaying())
 				{
+					// still playing, wait
 					waitingScripts++;
 					continue;
 				}
 			}
 			else if (script.waitInput || script.askInput || script.sleepUntil > time)
 			{
+				// waiting for an answer or timed sleep
 				waitingScripts++;
 				continue;
 			}
@@ -569,7 +574,7 @@ void VirtualMachine::Scheduler()
 		}
 
 		if (script.state != RUNNABLE)
-			continue;
+			continue; // not ready to run
 
 		activeScripts++;
 
@@ -597,7 +602,7 @@ void VirtualMachine::Scheduler()
 		}
 
 		if (script.state == TERMINATED)
-			script.Reset();
+			script.Reset(); // script terminated, reset it
 	}
 
 	// remove any playing sounds from the list
@@ -614,6 +619,7 @@ void VirtualMachine::Scheduler()
 	_waitingScripts = waitingScripts;
 }
 
+// entry point for script fibers
 static int ScriptEntryThunk(void *scriptPtr)
 {
 	Script *script = (Script *)scriptPtr;
@@ -626,6 +632,7 @@ void VirtualMachine::Main()
 	_nextScript = 0;
 	_enableScreenUpdates = true;
 
+	// set panic handler
 	memset(_panicJmp, 0, sizeof(_panicJmp));
 	int rc = setjmp(_panicJmp);
 	if (rc == 1)
@@ -638,9 +645,11 @@ void VirtualMachine::Main()
 		return;
 	}
 
+	// convert the VM thread to a fiber
 	if (ls_convert_to_fiber(NULL) != 0)
 		Panic("Failed to convert to fiber");
 
+	// create fibers for initialization scripts
 	for (Script &script : _initScripts)
 	{
 		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
@@ -648,6 +657,7 @@ void VirtualMachine::Main()
 			Panic("Failed to create fiber");
 	}
 
+	// create fibers for scripts
 	for (Script &script : _scripts)
 	{
 		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
@@ -655,6 +665,7 @@ void VirtualMachine::Main()
 			Panic("Failed to create fiber");
 	}
 
+	// initialize graphics
 	_render = new GLRenderer(_spritesEnd - _sprites - 1); // exclude the stage
 	if (_render->HasError())
 		Panic("Failed to initialize graphics");
@@ -707,6 +718,7 @@ void VirtualMachine::Main()
 			break;
 		}
 		case Op_onclone:
+			// TODO: support
 			break;
 		}
 	}
@@ -728,7 +740,12 @@ void VirtualMachine::Main()
 
 	_epoch = ls_time64();
 
-	// run initialization scripts
+	// Run initialization scripts
+	//
+	// These scripts are run only once and set the initial values
+	// for a sprite's variables. Anything may be done here, but
+	// if an initialization script ever yields, the VM will panic.
+	// The only way a script should return control is by terminating.
 	for (Script &script : _initScripts)
 	{
 		script.Start();

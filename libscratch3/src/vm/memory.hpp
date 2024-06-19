@@ -5,24 +5,25 @@
 
 #include <lysys/lysys.hpp>
 
+// initial capacity for lists
 #define INITIAL_CAPACITY 8
 
 #define VALUE_STATIC 0x01 // value is statically allocated
 
 enum ValueType
 {
-	ValueType_None = 0,
+	ValueType_None = 0, // no value
 
 	/* Numeric types */
 
-	ValueType_Integer,
-	ValueType_Real,
-	ValueType_Bool,
+	ValueType_Integer, // int64_t
+	ValueType_Real, // double
+	ValueType_Bool, // bool
 
 	/* Reference types */
 
-	ValueType_String,
-	ValueType_List
+	ValueType_String, // String *
+	ValueType_List // List *
 };
 
 struct Reference;
@@ -31,20 +32,20 @@ struct List;
 
 struct Value
 {
-	uint16_t type;
-	uint16_t flags;
+	uint16_t type; // Type of the value, as a ValueType
+	uint16_t flags; // Flags for the value
 
 	uint8_t __padding[4];
 
 	union
 	{
-		int64_t integer;
-		double real;
-		bool boolean;
+		int64_t integer; // ValueType_Integer
+		double real; // ValueType_Real
+		bool boolean; // ValueType_Bool
 
-		Reference *ref;
-		String *string;
-		List *list;
+		Reference *ref; // (any reference type)
+		String *string; // ValueType_String
+		List *list; // ValueType_List
 	} u;
 };
 
@@ -57,19 +58,24 @@ struct Reference
 struct String
 {
 	Reference ref;
-	int64_t len;
-	int64_t hash;
-	char str[1];
+	int64_t len; // length of the string (excluding null terminator)
+	int64_t hash; // hash of the string
+	char str[1]; // string data, null-terminated
 };
 
 struct List
 {
 	Reference ref;
-	int64_t len;
-	int64_t capacity;
-	Value *values;
+	int64_t len; // number of elements in the list
+	int64_t capacity; // capacity of the list
+	Value *values; // array of values, of length capacity
 };
 
+//! \brief Hash a string
+//!
+//! \param s The string to hash
+//!
+//! \return The hash of the string
 constexpr uint32_t HashString(const char *s)
 {
 	uint32_t hash = 1315423911;
@@ -78,11 +84,45 @@ constexpr uint32_t HashString(const char *s)
 	return hash;
 }
 
+//! \brief Compare strings case-insensitively
+//!
+//! \param lstr The left string
+//! \param rstr The right string
+//!
+//! \return true if the strings are equal, false otherwise
 bool StringEqualsRaw(const char *lstr, const char *rstr);
+
+//! \brief Compare strings with Scratch semantics
+//!
+//! Scratch strings are case-insensitive and ignore leading and trailing
+//! whitespace.
+//!
+//! \param lstr The left string
+//! \param rstr The right string
+//!
+//! \return true if the strings are equal, false otherwise
 bool StringEquals(const char *lstr, const char *rstr);
 
+//! \brief Evaluate the truthiness of a value
+//!
+//! \param val The value to evaluate
+//!
+//! \return true if the value is truthy, false otherwise
 bool Truth(const Value &val);
+
+//! \brief Compare two values
+//!
+//! \param lhs The left value
+//! \param rhs The right value
+//!
+//! \return true if the values are equal, false otherwise
 bool Equals(const Value &lhs, const Value &rhs);
+
+//
+/////////////////////////////////////////////////////////////////////
+// Assignment operations
+//
+
 Value &Assign(Value &lhs, const Value &rhs);
 Value &SetInteger(Value &lhs, int64_t rhs);
 Value &SetReal(Value &lhs, double rhs);
@@ -96,6 +136,11 @@ Value &SetParsedString(Value &lhs, const std::string &rhs);
 Value &SetParsedString(Value &lhs, const char *rhs);
 Value &SetEmpty(Value &lhs);
 
+//
+/////////////////////////////////////////////////////////////////////
+// List operations
+//
+
 Value &ListGet(Value &lhs, const Value &list, int64_t index);
 void ListSet(Value &list, int64_t index, const Value &v);
 int64_t ListIndexOf(const Value &list, const Value &v);
@@ -107,11 +152,21 @@ void ListDelete(const Value &list, const Value &index);
 void ListClear(const Value &list);
 void ListInsert(const Value &list, int64_t index, const Value &v);
 
+//
+/////////////////////////////////////////////////////////////////////
+// String operations
+//
+
 Value &CvtString(Value &v);
 int64_t ValueLength(const Value &v);
 Value &ConcatValue(Value &lhs, const Value &rhs);
 char ValueCharAt(const Value &v, int64_t index);
 bool ValueContains(const Value &lhs, const Value &rhs);
+
+//
+/////////////////////////////////////////////////////////////////////
+// Conversion operations
+//
 
 int64_t ToInteger(const Value &v);
 double ToReal(const Value &v);
@@ -129,14 +184,39 @@ const char *ToString(const Value &v, int64_t *len = nullptr);
 //! \return A string representation of the value
 const char *GetRawString(const Value &v, int64_t *len = nullptr);
 
+//! \brief Allocate a string
+//!
+//! Allocates a String object with enough space to store a string of
+//! the given length, including its null terminator. The contents of
+//! the string are initialized to zero.
+//!
+//! If allocation fails, the function will assign a None value to the
+//! given value.
+//!
+//! \param v Value to store the string
+//! \param len Length of the string
+//!
+//! \return v
 Value &AllocString(Value &v, int64_t len);
 
+//! \brief Allocate a list
+//!
+//! Allocates a List object of the given length. All entries in the
+//! list are initialized to None.
+//!
+//! \param v Value to store the list
+//! \param len Length of the list
+//!
+//! \return v
 Value &AllocList(Value &v, int64_t len);
 
 //! \brief Initialize a value
 //! 
 //! Only call this function on a value that has not been initialized.
 //! Doing so may cause a memory leak.
+//!
+//! If allocation fails, the function will assign a None value to the
+//! given value.
 //! 
 //! \param v Value to initialize
 //! 
@@ -148,10 +228,33 @@ constexpr Value &InitializeValue(Value &v)
 	return v;
 }
 
+//! \brief Increment the reference count of a value
+//!
+//! \param v Value to retain
+//!
+//! \return v
 Value &RetainValue(Value &v);
+
+//! \brief Decrement the reference count of a value
+//!
+//! The referenced value will be freed if the reference count reaches
+//! zero. Regardless of the reference count, the value will be
+//! assigned to a None value on return. Calling this function on a
+//! non-reference type or statically allocated value will have no
+//! effect.
+//!
+//! \param v Value to release
 void ReleaseValue(Value &v);
+
+//! \brief Free a value, immediately
+//!
+//! The value will be freed immediately, regardless of its reference
+//! count. The contents of the value are undefined after this function
+//! is called. Calling on a statically allocated value will result in
+//! undefined behavior.
 void FreeValue(Value &v);
 
+//! \brief Hashes a string for use in a hash table
 struct _StringHasher
 {
 	constexpr size_t operator()(const String *str) const
@@ -160,6 +263,7 @@ struct _StringHasher
 	}
 };
 
+//! \brief Compares two strings for use in a hash table
 struct _StringEqual
 {
 	constexpr bool operator()(const String *lhs, const String *rhs) const

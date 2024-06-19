@@ -17,4 +17,9 @@ enum ExceptionType
 	VMError // Internal error
 };
 
+//! \brief Get a string representation of an exception type.
+//!
+//! \param type The exception type.
+//!
+//! \return A string representation of the exception type.
 const char *ExceptionString(ExceptionType type);

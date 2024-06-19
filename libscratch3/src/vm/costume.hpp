@@ -12,10 +12,7 @@
 #include "preload.hpp"
 #include "memory.hpp"
 
-// maximum allowed texture size
-#define MAX_TEXTURE_SIZE 2048
-
-// threshold for the collision mask
+// threshold for the collision mask's alpha channel
 #define MASK_THRESHOLD 128
 
 using namespace mutil;
@@ -23,6 +20,7 @@ using namespace mutil;
 class Loader;
 class CostumeDef;
 
+//! \brief A costume (skin) for a sprite
 class Costume
 {
 public:
@@ -30,10 +28,24 @@ public:
 	constexpr const String *GetName() const { return _name.u.string; }
 	constexpr const char *GetNameString() const { return _name.u.string->str; }
 
+	//! \brief Get the center of the costume
+	//!
+	//! \return The center of the costume, in pixels
 	constexpr const IntVector2 &GetCenter() const { return _center; }
+
+	//! \brief Get the size of the costume
+	//!
+	//! \return The size of the costume, in pixels
 	constexpr const IntVector2 &GetSize() const { return _size; }
 
+	//! \brief Get the logical center of the costume
+	//!
+	//! \return The logical center of the costume, in units
 	constexpr const Vector2 &GetLogicalCenter() const { return _logicalCenter; }
+
+	//! \brief Get the logical size of the costume
+	//!
+	//! \return The logical size of the costume, in units
 	constexpr const Vector2 &GetLogicalSize() const { return _logicalSize; }
 
 	//! \brief Get the texture of the costume, at a given scale
@@ -51,8 +63,17 @@ public:
 	//! \return Whether the point is inside the costume
 	bool TestCollision(int32_t x, int32_t y) const;
 
+	//! \brief Initialize the costume
+	//!
+	//! Sets up basic information about the costume, such as the name and the
+	//! center and size of the costume.
+	//!
+	//! \param info The information about the costume
 	void Init(const CostumeInfo *info);
 
+	//! \brief Load the costumes
+	//!
+	//! Loads any necessary data for the costume, such as the texture or SVG data.
 	void Load();
 
 	constexpr bool IsBitmap() const { return _handle == nullptr; }
@@ -73,20 +94,20 @@ private:
 	// for base LOD
 	GLuint _texWidth, _texHeight;
 
-	IntVector2 _center;
-	IntVector2 _size;
+	IntVector2 _center; // center of the costume (pixels)
+	IntVector2 _size; // size of the costume (pixels)
 
-	Vector2 _logicalCenter;
-	Vector2 _logicalSize;
+	Vector2 _logicalCenter; // center of the costume (units)
+	Vector2 _logicalSize; // size of the costume (units)
 
-	int32_t _bitmapResolution;
+	int32_t _bitmapResolution; // pixels per unit
 
 	// svg specific
 	RsvgHandle *_handle;
 	int _svgWidth, _svgHeight;
 
 	// data
-	std::string _dataFormat;
+	std::string _dataFormat; // "svg", "png", etc.
 	uint8_t *_data;
 	uint64_t _dataSize;
 

@@ -65,15 +65,14 @@ template <typename T>
 class AutoRelease
 {
 public:
-	//! \brief Return a raw pointer to the object.
-	//! 
-	//! The object will not be retained before being returned.
-	//! 
-	//! \return A raw pointer to the object.
 	constexpr T *operator->() const { return _obj; }
-
 	constexpr T &operator*() const { return *_obj; }
 	
+	//! \brief Return a raw pointer to the object.
+	//!
+	//! The object will not be retained before being returned.
+	//!
+	//! \return A raw pointer to the object.
 	constexpr T *get() const { return _obj; }
 
 	//! \brief Check if the object is not nullptr.
