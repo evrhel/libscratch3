@@ -54,22 +54,18 @@ public:
 	//! \return An error code
 	int VMStart();
 
+	//! \brief Update the VM
+	//!	
+	//! \return 0 if the VM should continue running, 1 if the VM should terminate,
+	//! and -1 if an error occurred.
+	int VMUpdate();
+
 	//! \brief Terminate the VM
 	//! 
 	//! Schedule all scripts for termination. This function does not
 	//! guarantee that the VM will terminate immediately. Call
 	//! VMWait to ensure that the VM has terminated.
 	void VMTerminate();
-
-	//! \brief Wait for the VM to terminate
-	//! 
-	//! Blocks until the VM has terminated. This does not stop the VM
-	//! from running, only waits for all its scripts to terminate.
-	//! 
-	//! \param ms Number of milliseconds to wait
-	//! 
-	//! \return An error code
-	int VMWait(unsigned long ms);
 
 	//! \brief Suspend the VM
 	//!
@@ -268,6 +264,7 @@ private:
 	bool _panicing; // Panic flag
 	const char *_panicMessage; // Panic message
 	jmp_buf _panicJmp; // Panic jump buffer
+	bool _panicJmpSet; // Panic jump buffer is set
 
 	Script *_current; // Currently executing script
 
@@ -275,12 +272,11 @@ private:
 
 	double _interpreterTime; // Time taken to run the interpreter once
 	double _deltaExecution; // Time since last scheduled execution
+	double _lastExecution; // Time of last scheduled execution
 
 	long long _lastScreenUpdate; // Time of last screen update
 	long long _nextScreenUpdate; // Time of next screen update
 	bool _enableScreenUpdates; // Enable screen updates
-
-	ls_handle _thread; // VM thread
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -299,17 +295,10 @@ private:
 	//! function still leave the VM in a usable state.
 	void Cleanup();
 
-	void ShutdownThread();
-
 	void DispatchEvents();
 	 
 	//! \brief Handles script scheduling
 	void Scheduler();
-
-	//! \brief Main vm loop
-	void Main();
-
-	static int ThreadProc(void *data);
 
 	friend class Debugger;
 };

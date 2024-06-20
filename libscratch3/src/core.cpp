@@ -230,25 +230,24 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMInit(Scratch3 *S, const Scratch3
 	return rc;
 }
 
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMRun(Scratch3 *S)
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMStart(Scratch3 *S)
 {
 	if (!S->vm)
 		return SCRATCH3_ERROR_NO_VM;
 	return S->vm->VMStart();
 }
 
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMUpdate(Scratch3 *S)
+{
+	if (!S->vm)
+		return SCRATCH3_ERROR_NO_VM;
+	return S->vm->VMUpdate();
+}
+
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMTerminate(Scratch3 *S)
 {
 	if (!S->vm)
 		return SCRATCH3_ERROR_NO_VM;
-
 	S->vm->VMTerminate();
 	return SCRATCH3_ERROR_SUCCESS;
-}
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMWait(Scratch3 *S, unsigned long timeout)
-{
-	if (!S->vm)
-		return SCRATCH3_ERROR_NO_VM;
-	return S->vm->VMWait(timeout);
 }

@@ -80,6 +80,8 @@ struct Script
 	void Init(const ScriptInfo *info);
 
 	//! \brief Release resources used by the script.
+	//! 
+	//! This only releases the stack.
 	void Destroy();
 
 	//! \brief Reset the script to an embryonic state.

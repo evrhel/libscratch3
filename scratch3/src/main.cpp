@@ -338,17 +338,18 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	rc = Scratch3VMRun(S);
+	rc = Scratch3VMStart(S);
 	if (rc != SCRATCH3_ERROR_SUCCESS)
 	{
-		printf("Failed to run project: %s\n", Scratch3GetErrorString(rc));
+		printf("Failed to start VM: %s\n", Scratch3GetErrorString(rc));
 		exit(1);
 	}
 
-	rc = Scratch3VMWait(S, -1);
-	if (rc != SCRATCH3_ERROR_SUCCESS)
+	while ((rc = Scratch3VMUpdate(S) == 0)); // loop until VM terminates
+
+	if (rc != 1)
 	{
-		printf("Failed to wait for project to finish: %s\n", Scratch3GetErrorString(rc));
+		printf("VM terminated abnormally\n");
 		exit(1);
 	}
 

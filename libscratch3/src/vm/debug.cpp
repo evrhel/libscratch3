@@ -349,13 +349,18 @@ void Debugger::Render()
 							continue;
 					}
 					else if (!showUnloaded)
-						continue;					
+						continue;
 
-					if (ImGui::CollapsingHeader(s->GetNameString()))
+					char name[128];
+					snprintf(name, sizeof(name), "%p (%s)", s, s->GetNameString());
+
+					if (ImGui::CollapsingHeader(name))
 					{
 						const SoundMemoryFile &data = s->GetData();
 						double duration = s->GetDuration();
 						double location = duration * data.pos / data.size;
+
+						ImGui::LabelText("Name", "%s", s->GetNameString());
 
 						ImGui::LabelText("Rate", "%.0f Hz", s->GetRate());
 

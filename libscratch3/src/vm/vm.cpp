@@ -100,16 +100,205 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 	return SCRATCH3_ERROR_SUCCESS;
 }
 
+// entry point for script fibers
+static int ScriptEntryThunk(void *scriptPtr)
+{
+	Script *script = (Script *)scriptPtr;
+	script->Main();
+	return 0;
+}
+
 int VirtualMachine::VMStart()
 {
-	if (_running || _panicing)
-		return -1;
+	if (_running)
+		return SCRATCH3_ERROR_ALREADY_RUNNING;
 
 	_shouldStop = false;
 
-	_thread = ls_thread_create(&ThreadProc, this);
-	if (!_thread)
-		return -1;
+	_nextScript = 0;
+	_enableScreenUpdates = true;
+
+	// temporary panic handler
+	_panicJmpSet = false;
+	memset(_panicJmp, 0, sizeof(_panicJmp));
+	int rc = setjmp(_panicJmp);
+	if (rc == 1)
+	{
+		assert(_panicing);
+
+		// panic
+		printf("<PANIC> %s\n", _panicMessage);
+		return SCRATCH3_ERROR_UNKNOWN;
+	}
+
+	// convert the VM thread to a fiber
+	if (ls_convert_to_fiber(NULL) != 0)
+		Panic("Failed to convert to fiber");
+
+	// create fibers for initialization scripts
+	for (Script &script : _initScripts)
+	{
+		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
+		if (!script.fiber)
+			Panic("Failed to create fiber");
+	}
+
+	// create fibers for scripts
+	for (Script &script : _scripts)
+	{
+		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
+		if (!script.fiber)
+			Panic("Failed to create fiber");
+	}
+
+	// initialize graphics
+	_render = new GLRenderer(_spritesEnd - _sprites - 1); // exclude the stage
+	if (_render->HasError())
+		Panic("Failed to initialize graphics");
+
+	// Initialize graphics resources
+	for (Sprite *s = _sprites; s < _spritesEnd; s++)
+	{
+		s->Load(this);
+		for (int64_t i = 0; i < s->GetSoundCount(); i++)
+			_sounds.push_back(&s->GetSounds()[i]);
+	}
+
+	_messageListeners.clear();
+	_keyListeners.clear();
+	_flagListeners.clear();
+
+	// Find listeners
+	for (Script &script : _scripts)
+	{
+		uint8_t *ptr = script.entry;
+		uint8_t opcode = *ptr;
+		ptr++;
+
+		switch (opcode)
+		{
+		default:
+			Panic("Script entry is not an event");
+		case Op_onflag:
+			_flagListeners.push_back(&script);
+			break;
+		case Op_onkey: {
+			uint16_t sc = *(uint16_t *)ptr;
+			ptr += sizeof(uint16_t);
+			_keyListeners[(SDL_Scancode)sc].push_back(&script);
+			break;
+		}
+		case Op_onclick:
+			// Handled by the sprite
+			break;
+		case Op_onbackdropswitch:
+			script.autoStart = true;
+			break;
+		case Op_ongt:
+			script.autoStart = true;
+			break;
+		case Op_onevent: {
+			char *evt = (char *)(_bytecode + *(uint64_t *)ptr);
+			ptr += sizeof(uint64_t);
+			_messageListeners[evt].push_back(&script);
+			break;
+		}
+		case Op_onclone:
+			// TODO: support
+			break;
+		}
+	}
+
+	SDL_Window *window = _render->GetWindow();
+	SDL_SetWindowTitle(window, "Scratch 3");
+
+	_flagClicked = false;
+	_toSend.clear();
+	_askQueue = std::queue<std::pair<Script *, std::string>>();
+	_asker = nullptr;
+	_question.clear();
+	memset(_inputBuf, 0, sizeof(_inputBuf));
+
+	_timerStart = 0.0;
+	_deltaExecution = 0.0;
+
+	_running = true;
+
+	_epoch = ls_time64();
+
+	// Run initialization scripts
+	//
+	// These scripts are run only once and set the initial values
+	// for a sprite's variables. Anything may be done here, but
+	// if an initialization script ever yields, the VM will panic.
+	// The only way a script should return control is by terminating.
+	for (Script &script : _initScripts)
+	{
+		script.Start();
+		_current = &script;
+		ls_fiber_switch(script.fiber);
+
+		_current = nullptr;
+
+		if (_panicing)
+			longjmp(_panicJmp, 1);
+
+		if (script.except != Exception_None)
+			Panic("Initialization script raised an exception");
+
+		if (script.state != TERMINATED)
+			Panic("Initialization script did not terminate");
+
+		// no longer needed
+		ls_close(script.fiber);
+		script.Destroy();
+	}
+
+	SendFlagClicked();
+
+	_lastExecution = GetTime();
+
+	return 0;
+}
+
+int VirtualMachine::VMUpdate()
+{
+	// set panic handler
+	if (!_panicJmpSet)
+	{
+		_panicJmpSet = true;
+		memset(_panicJmp, 0, sizeof(_panicJmp));
+		int rc = setjmp(_panicJmp);
+		if (rc == 1)
+		{
+			assert(_panicing);
+
+			// panic
+			printf("<PANIC> %s\n", _panicMessage);
+			return -1;
+		}
+	}
+
+	_io.PollEvents();
+
+	if (_shouldStop)
+		return 1;
+
+	DispatchEvents();
+
+	if (!_suspend)
+	{
+		double start = GetTime();
+
+		_deltaExecution = start - _lastExecution;
+		_lastExecution = start;
+
+		Scheduler();
+
+		_interpreterTime = GetTime() - start;
+	}
+
+	Render();
 
 	return 0;
 }
@@ -117,18 +306,6 @@ int VirtualMachine::VMStart()
 void VirtualMachine::VMTerminate()
 {
 	_shouldStop = true;
-}
-
-int VirtualMachine::VMWait(unsigned long ms)
-{
-	if (!_thread)
-		return SCRATCH3_ERROR_SUCCESS;
-
-	int rc = ls_timedwait(_thread, ms);
-	if (rc == -1)
-		return SCRATCH3_ERROR_UNKNOWN;
-
-	return rc == 1 ? SCRATCH3_ERROR_TIMEOUT : SCRATCH3_ERROR_SUCCESS;
 }
 
 void VirtualMachine::VMSuspend()
@@ -341,8 +518,6 @@ VirtualMachine::VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options) :
 	_interpreterTime = 0;
 	_deltaExecution = 0;
 
-	_thread = nullptr;
-
 	PaError err = Pa_Initialize();
 	if (err == paNoError)
 		_hasAudio = true;
@@ -408,12 +583,17 @@ void VirtualMachine::Render()
 
 void VirtualMachine::Cleanup()
 {
-	if (_thread && ls_thread_id_self() != ls_thread_id(_thread))
-	{
-		_shouldStop = true;
-		ls_wait(_thread);
-		ls_close(_thread), _thread = nullptr;
-	}
+	for (Script &s : _scripts)
+		ls_close(s.fiber), s.fiber = nullptr;
+	ls_convert_to_thread();
+
+	if (_sprites)
+		delete[] _sprites, _sprites = nullptr;
+
+	_io.Release();
+
+	if (_render)
+		delete _render, _render = nullptr;
 
 	_flagClicked = false;
 	_toSend.clear();
@@ -445,27 +625,12 @@ void VirtualMachine::Cleanup()
 	_bytecode = nullptr;
 	_bytecodeSize = 0;
 
-	_spriteNames.clear();
-}
 
-void VirtualMachine::ShutdownThread()
-{
 	_activeScripts = 0;
 	_waitingScripts = 0;
 	_running = false;
 
-	if (_sprites)
-		delete[] _sprites, _sprites = nullptr;
-
-	_io.Release();
-
-	if (_render)
-		delete _render, _render = nullptr;
-
-	// clean up fibers
-	for (Script &s : _scripts)
-		ls_close(s.fiber), s.fiber = nullptr;
-	ls_convert_to_thread();
+	_spriteNames.clear();
 }
 
 void VirtualMachine::DispatchEvents()
@@ -629,187 +794,4 @@ void VirtualMachine::Scheduler()
 
 	_activeScripts = activeScripts;
 	_waitingScripts = waitingScripts;
-}
-
-// entry point for script fibers
-static int ScriptEntryThunk(void *scriptPtr)
-{
-	Script *script = (Script *)scriptPtr;
-	script->Main();
-	return 0;
-}
-
-void VirtualMachine::Main()
-{
-	_nextScript = 0;
-	_enableScreenUpdates = true;
-
-	// set panic handler
-	memset(_panicJmp, 0, sizeof(_panicJmp));
-	int rc = setjmp(_panicJmp);
-	if (rc == 1)
-	{
-		assert(_panicing);
-
-		// panic
-		printf("<PANIC> %s\n", _panicMessage);
-		ShutdownThread();
-		return;
-	}
-
-	// convert the VM thread to a fiber
-	if (ls_convert_to_fiber(NULL) != 0)
-		Panic("Failed to convert to fiber");
-
-	// create fibers for initialization scripts
-	for (Script &script : _initScripts)
-	{
-		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
-		if (!script.fiber)
-			Panic("Failed to create fiber");
-	}
-
-	// create fibers for scripts
-	for (Script &script : _scripts)
-	{
-		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
-		if (!script.fiber)
-			Panic("Failed to create fiber");
-	}
-
-	// initialize graphics
-	_render = new GLRenderer(_spritesEnd - _sprites - 1); // exclude the stage
-	if (_render->HasError())
-		Panic("Failed to initialize graphics");
-
-	// Initialize graphics resources
-	for (Sprite *s = _sprites; s < _spritesEnd; s++)
-	{
-		s->Load(this);
-		for (int64_t i = 0; i < s->GetSoundCount(); i++)
-			_sounds.push_back(&s->GetSounds()[i]);
-	}
-
-	_messageListeners.clear();
-	_keyListeners.clear();
-	_flagListeners.clear();
-
-	// Find listeners
-	for (Script &script : _scripts)
-	{
-		uint8_t *ptr = script.entry;
-		uint8_t opcode = *ptr;
-		ptr++;
-
-		switch (opcode)
-		{
-		default:
-			Panic("Script entry is not an event");
-		case Op_onflag:
-			_flagListeners.push_back(&script);
-			break;
-		case Op_onkey: {
-			uint16_t sc = *(uint16_t *)ptr;
-			ptr += sizeof(uint16_t);
-			_keyListeners[(SDL_Scancode)sc].push_back(&script);
-			break;
-		}
-		case Op_onclick:
-			// Handled by the sprite
-			break;
-		case Op_onbackdropswitch:
-			script.autoStart = true;
-			break;
-		case Op_ongt:
-			script.autoStart = true;
-			break;
-		case Op_onevent: {
-			char *evt = (char *)(_bytecode + *(uint64_t *)ptr);
-			ptr += sizeof(uint64_t);
-			_messageListeners[evt].push_back(&script);
-			break;
-		}
-		case Op_onclone:
-			// TODO: support
-			break;
-		}
-	}
-
-	SDL_Window *window = _render->GetWindow();
-	SDL_SetWindowTitle(window, "Scratch 3");
-
-	_flagClicked = false;
-	_toSend.clear();
-	_askQueue = std::queue<std::pair<Script *, std::string>>();
-	_asker = nullptr;
-	_question.clear();
-	memset(_inputBuf, 0, sizeof(_inputBuf));
-
-	_timerStart = 0.0;
-	_deltaExecution = 0.0;
-
-	_running = true;
-
-	_epoch = ls_time64();
-
-	// Run initialization scripts
-	//
-	// These scripts are run only once and set the initial values
-	// for a sprite's variables. Anything may be done here, but
-	// if an initialization script ever yields, the VM will panic.
-	// The only way a script should return control is by terminating.
-	for (Script &script : _initScripts)
-	{
-		script.Start();
-		_current = &script;
-		ls_fiber_switch(script.fiber);
-
-		_current = nullptr;
-
-		if (_panicing)
-			longjmp(_panicJmp, 1);
-	
-		if (script.except != Exception_None)
-			Panic("Initialization script raised an exception");
-
-		if (script.state != TERMINATED)
-			Panic("Initialization script did not terminate");
-	}
-	
-	SendFlagClicked();
-
-	double lastExecution = GetTime();
-
-	for (;;)
-	{
-		_io.PollEvents();
-
-		if (_shouldStop)
-			break;
-
-		DispatchEvents();
-
-		if (!_suspend)
-		{
-			double start = GetTime();
-
-			_deltaExecution = start - lastExecution;
-			lastExecution = start;
-
-			Scheduler();
-
-			_interpreterTime = GetTime() - start;
-		}
-
-		Render();
-	}
-
-	ShutdownThread();
-}
-
-int VirtualMachine::ThreadProc(void *data)
-{
-	VirtualMachine *vm = (VirtualMachine *)data;
-	vm->Main();
-	return 0;
 }

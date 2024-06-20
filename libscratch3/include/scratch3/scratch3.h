@@ -101,10 +101,10 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT const void *Scratch3GetProgram(Scratch3 *S, si
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMInit(Scratch3 *S, const Scratch3VMOptions *options);
 
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMRun(Scratch3 *S);
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMStart(Scratch3 *S);
+
+SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMUpdate(Scratch3 *S);
 
 SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMTerminate(Scratch3 *S);
-
-SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3VMWait(Scratch3 *S, unsigned long timeout);
 
 #endif // _SCRATCH3_H_
