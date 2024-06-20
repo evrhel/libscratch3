@@ -2,9 +2,17 @@
 
 #include <cassert>
 
+#include <sndfile.h>
 #include <mutil/mutil.h>
 
 using namespace mutil;
+
+struct SoundMemoryFile
+{
+	const uint8_t *data; // Pointer to the data
+	sf_count_t size; // Size of the data
+	sf_count_t pos; // Current position
+};
 
 static sf_count_t mem_get_filelen(void *user_data)
 {
@@ -73,28 +81,42 @@ void DSPController::SetPitch(double pitch)
 void Sound::Init(const SoundInfo *info, DSPController *dsp)
 {
 	SetString(_name, info->name);
-	_dataFormat = info->dataFormat;
-	_rate = info->rate;
-	_sampleCount = info->sampleCount;
-
-	_data.data = info->data;
-	_data.size = info->dataSize;
-	_data.pos = 0;
-
+	_data = info->data;
+	_dataSize = info->dataSize;
 	_dsp = dsp;
 }
 
 void Sound::Load()
 {
-	_file = sf_open_virtual(&_sfVirtualIo, SFM_READ, &_info, &_data);
-	if (!_file)
+	SoundMemoryFile fileData;
+	fileData.data = _data;
+	fileData.size = _dataSize;
+	fileData.pos = 0;
+
+	SF_INFO info = {};
+	SNDFILE *file = sf_open_virtual(&_sfVirtualIo, SFM_READ, &info, &fileData);
+	if (!file)
 	{
 		printf("Sound::Load: sf_open_virtual failed\n");
 		Cleanup();
 		return;
 	}
 
-	// defer stream creation until Play is called
+	_frameCount = info.frames;
+	_nChannels = info.channels;
+	_sampleRate = info.samplerate;
+
+	_audioStream = new float[_frameCount];
+	sf_count_t read = sf_readf_float(file, _audioStream, _frameCount);
+
+	if (read != _frameCount)
+	{
+		printf("Sound::Load: sf_readf_float failed\n");
+		Cleanup();
+		return;
+	}
+
+	sf_close(file);
 }
 
 void Sound::Play()
@@ -106,9 +128,9 @@ void Sound::Play()
 		err = Pa_OpenDefaultStream(
 			&_stream,
 			0,
-			_info.channels,
+			_nChannels,
 			paFloat32,
-			_info.samplerate,
+			_sampleRate,
 			BUFFER_LENGTH,
 			paCallback,
 			this);
@@ -123,7 +145,7 @@ void Sound::Play()
 	if (_isPlaying)
 		(void)Pa_StopStream(_stream);
 
-	_data.pos = 0;
+	_streamPos = 0;
 	_isPlaying = true;
 
 	PaError err = Pa_StartStream(_stream);
@@ -140,18 +162,17 @@ void Sound::Stop()
 	if (err != paNoError)
 		printf("Sound::Stop: Pa_StopStream failed: %s\n", Pa_GetErrorText(err));
 
-	_data.pos = 0;
+	_streamPos = 0;
 	_isPlaying = false;
 }
 
 Sound::Sound() :
 	_stream(nullptr),
 	_isPlaying(false),
-	_rate(0),
-	_sampleCount(0),
-	_data({}),
-	_file(nullptr),
-	_info({}),
+	_data(nullptr), _dataSize(0),
+	_audioStream(nullptr),
+	_streamPos(0), _frameCount(0),
+	_nChannels(0), _sampleRate(0),
 	_dsp(nullptr)
 {
 	InitializeValue(_name);
@@ -167,8 +188,8 @@ void Sound::Cleanup()
 	if (_stream)
 		Pa_CloseStream(_stream), _stream = nullptr;
 
-	if (_file)
-		sf_close(_file), _file = nullptr;
+	if (_audioStream)
+		delete[] _audioStream, _audioStream = nullptr;
 
 	ReleaseValue(_name);
 }
@@ -187,7 +208,7 @@ int Sound::paCallback(
 	const float volume = dsp->GetVolumeMultiplier();
 	const float resampleRatio = dsp->GetResampleRatio();
 	const float panFactor = dsp->GetPanFactor();
-	sf_count_t read;
+	unsigned long read;
 	float tmp[BUFFER_LENGTH];
 
 	(void)panFactor; // TODO: implement pan
@@ -199,7 +220,7 @@ int Sound::paCallback(
 	if (resampleRatio == 1.0f)
 	{
 		// no resampling, just copy
-		read = sf_readf_float(sound->_file, out, BUFFER_LENGTH);
+		read = sound->ReadSamples(out, BUFFER_LENGTH);
 		if (read == 0)
 		{
 			sound->_isPlaying = false;
@@ -209,11 +230,11 @@ int Sound::paCallback(
 	else if (resampleRatio > 1.0f)
 	{
 		float srcPos = 0.0f;
-		sf_count_t offset = 0;
-		sf_count_t outIdx = 0;
+		unsigned long offset = 0;
+		unsigned long outIdx = 0;
 
 		// total number of samples needed
-		sf_count_t needed = static_cast<sf_count_t>(mutil::ceil(framesPerBuffer * resampleRatio));
+		unsigned long needed = static_cast<unsigned long>(mutil::ceil(framesPerBuffer * resampleRatio));
 
 		for (;;)
 		{
@@ -222,7 +243,7 @@ int Sound::paCallback(
 			if (toRead > BUFFER_LENGTH)
 				toRead = BUFFER_LENGTH;
 
-			read = sf_readf_float(sound->_file, tmp, toRead);
+			read = sound->ReadSamples(tmp, toRead);
 			if (read == 0)
 			{
 				sound->_isPlaying = false;
@@ -263,7 +284,7 @@ int Sound::paCallback(
 		// number of samples needed
 		sf_count_t floatsNeeded = static_cast<sf_count_t>(mutil::round(framesPerBuffer * resampleRatio));
 
-		read = sf_readf_float(sound->_file, tmp, floatsNeeded);
+		read = sound->ReadSamples(tmp, floatsNeeded);
 		if (read == 0)
 		{
 			sound->_isPlaying = false;

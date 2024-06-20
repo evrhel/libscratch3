@@ -3,19 +3,11 @@
 #include <list>
 
 #include <portaudio.h>
-#include <sndfile.h>
 
 #include "preload.hpp"
 #include "memory.hpp"
 
 #define BUFFER_LENGTH 512
-
-struct SoundMemoryFile
-{
-	const uint8_t *data; // Pointer to the data
-	sf_count_t size; // Size of the data
-	sf_count_t pos; // Current position
-};
 
 //! \brief Handles DSP effects.
 //!
@@ -132,13 +124,11 @@ public:
 	// used by debuggers
 	constexpr PaStream *GetStream() const { return _stream; }
 
-	constexpr const SoundMemoryFile &GetData() const { return _data; }
-
-	constexpr const std::string &GetFormat() const { return _dataFormat; }
-
-	constexpr double GetRate() const { return _rate; }
-	constexpr unsigned int GetSampleCount() const { return _sampleCount; }
-	constexpr double GetDuration() const { return static_cast<double>(_sampleCount) / _rate; }
+	constexpr unsigned long GetStreamPos() const { return _streamPos; }
+	constexpr unsigned long GetSampleCount() const { return _frameCount; }
+	constexpr double GetDuration() const { return static_cast<double>(_frameCount) / _sampleRate; }
+	constexpr int GetChannelCount() const { return _nChannels; }
+	constexpr int GetSampleRate() const { return _sampleRate; }
 
 	Sound &operator=(const Sound &) = delete;
 	Sound &operator=(Sound &&) = delete;
@@ -154,16 +144,38 @@ private:
 	bool _isPlaying; // true if the sound is currently playing
 
 	// data
-	std::string _dataFormat; // "wav", "mp3", etc.
-	double _rate; // sample rate, in Hz
-	unsigned int _sampleCount; // number of samples (duration = sampleCount / rate)
-	SoundMemoryFile _data; // audio data
+	uint8_t *_data; // full audio data
+	uint64_t _dataSize; // size of the data
 
-	// for libsndfile
-	SNDFILE *_file;
-	SF_INFO _info;
+	// stream
+	float *_audioStream; // full audio stream
+	unsigned long _streamPos; // current position in the stream
+	unsigned long _frameCount; // number of frames
+	int _nChannels; // number of channels
+	int _sampleRate; // sample rate
 
 	DSPController *_dsp;
+
+	//! \brief Read samples from the audio stream.
+	//! 
+	//! \param buffer The buffer to read into.
+	//! \param frames The number of frames to read.
+	//! 
+	//! \return The number of frames read.
+	constexpr unsigned long ReadSamples(float *buffer, unsigned long frames)
+	{
+		unsigned long read = frames;
+		if (_streamPos + read > _frameCount)
+			read = _frameCount - _streamPos;
+
+		if (read > 0)
+		{
+			memcpy(buffer, _audioStream + _streamPos * _nChannels, read * _nChannels * sizeof(float));
+			_streamPos += read;
+		}
+
+		return read;
+	}
 
 	//! \brief Release resources.
 	void Cleanup();

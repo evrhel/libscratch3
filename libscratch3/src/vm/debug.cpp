@@ -357,13 +357,16 @@ void Debugger::Render()
 
 					if (ImGui::CollapsingHeader(name))
 					{
-						const SoundMemoryFile &data = s->GetData();
+						unsigned long pos = s->GetStreamPos();
+						unsigned long size = s->GetSampleCount();
+						int rate = s->GetSampleRate();
+
 						double duration = s->GetDuration();
-						double location = duration * data.pos / data.size;
+						double location = duration * pos / size;
 
 						ImGui::LabelText("Name", "%s", s->GetNameString());
 
-						ImGui::LabelText("Rate", "%.0f Hz", s->GetRate());
+						ImGui::LabelText("Rate", "%d Hz", rate);
 
 						int min = static_cast<int>(duration / 60);
 						int sec = duration - min * 60;
@@ -373,7 +376,7 @@ void Debugger::Render()
 						sec = location - min * 60;
 						ImGui::LabelText("Position", "%d:%02d (%.2f sec)", min, sec, location);
 
-						ImGui::LabelText("Format", "%s", s->GetFormat().c_str());
+						ImGui::LabelText("Channels", "%d", s->GetChannelCount());
 
 						ImGui::LabelText("Loaded", s->IsLoaded() ? "true" : "false");
 						if (s->IsLoaded())

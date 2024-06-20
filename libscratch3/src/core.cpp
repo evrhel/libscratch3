@@ -154,7 +154,8 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Load(Scratch3 *S, const char *name
 			return SCRATCH3_ERROR_INVALID_PROGRAM;
 	}
 
-	S->programName = name;
+	memset(S->programName, 0, sizeof(S->programName));
+	strncpy(S->programName, name, sizeof(S->programName) - 1);
 
 	return SCRATCH3_ERROR_SUCCESS;
 }

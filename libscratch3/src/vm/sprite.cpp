@@ -363,11 +363,10 @@ void Sprite::DebugUI() const
     {
         Sound &s = _sounds[i];
 
-        ImGui::Text("[%d]: '%s' (%s), rate: %.2f, length: %.2f, playing: %s",
+        ImGui::Text("[%d]: '%s', rate: %d, length: %.2f, playing: %s",
 			(int)i+1,
 			s.GetNameString(),
-			s.GetFormat().c_str(),
-            s.GetRate(),
+            s.GetSampleRate(),
             s.GetDuration(),
             s.IsPlaying() ? "true" : "false");
     }
