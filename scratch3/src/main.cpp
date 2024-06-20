@@ -347,12 +347,6 @@ int main(int argc, char *argv[])
 
 	while ((rc = Scratch3VMUpdate(S) == 0)); // loop until VM terminates
 
-	if (rc != 1)
-	{
-		printf("VM terminated abnormally\n");
-		exit(1);
-	}
-
 	Scratch3Destroy(S);
 
 	return 0;

@@ -279,10 +279,10 @@ int VirtualMachine::VMUpdate()
 		}
 	}
 
-	_io.PollEvents();
-
 	if (_shouldStop)
 		return 1;
+
+	_io.PollEvents();
 
 	DispatchEvents();
 
@@ -738,6 +738,8 @@ void VirtualMachine::Scheduler()
 					waitingScripts++;
 					continue;
 				}
+
+				script.waitSound = nullptr;
 			}
 			else if (script.waitInput || script.askInput || script.sleepUntil > time)
 			{

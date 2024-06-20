@@ -637,6 +637,8 @@ void Script::Main()
 				break;
 			}
 
+			printf("[%.2f] %s: Playing and waiting for sound \"%s\"\n", vm->GetTime(), sprite->GetNameString(), v.u.string->str);
+
 			vm->PlaySound(sound);
 			WaitForSound(sound);
 
@@ -777,6 +779,7 @@ void Script::Main()
 		case Op_findevent:
 			Raise(NotImplemented, "findevent");
 		case Op_waitsecs:
+			printf("[%.2f] %s: Sleeping for %g seconds\n", vm->GetTime(), sprite->GetNameString(), ToReal(StackAt(0)));
 			Sleep(ToReal(StackAt(0)));
 			Pop();
 			break;

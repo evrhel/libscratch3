@@ -289,9 +289,10 @@ void Debugger::Render()
 
 						ImGui::LabelText("State", "%s", GetStateName(script.state));
 						ImGui::LabelText("Sprite", "%s", script.sprite->GetNameString());
-						ImGui::LabelText("Wakeup", "%.2g", wakeup);
+						ImGui::LabelText("Wakeup", "%.2f", wakeup);
 						ImGui::LabelText("Wait Input", script.waitInput ? "true" : "false");
 						ImGui::LabelText("Ask Input", script.askInput ? "true" : "false");
+						ImGui::LabelText("Sound Wait", script.waitSound ? script.waitSound->GetNameString() : "(none)");
 					}
 				}
 
