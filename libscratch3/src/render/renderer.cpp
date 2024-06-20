@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_opengl3.h>
+#include <implot.h>
 
 #include "shader.hpp"
 
@@ -319,6 +320,7 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
     SDL_GL_SetSwapInterval(1);
 
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGui_ImplSDL2_InitForOpenGL(_window, _context);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
@@ -372,6 +374,7 @@ void GLRenderer::Cleanup()
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
     _frame = 0;

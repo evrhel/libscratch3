@@ -102,8 +102,15 @@ void Sound::Load()
 		return;
 	}
 
-	_frameCount = info.frames;
 	_nChannels = info.channels;
+	if (_nChannels != 1)
+	{
+		printf("Sound::Load: only mono sounds are supported\n");
+		Cleanup();
+		return;
+	}
+
+	_frameCount = info.frames;
 	_sampleRate = info.samplerate;
 
 	_audioStream = new float[_frameCount];
@@ -147,6 +154,7 @@ void Sound::Play()
 
 	_streamPos = 0;
 	_isPlaying = true;
+	_currentSample = 0.0f;
 
 	PaError err = Pa_StartStream(_stream);
 	if (err != paNoError)
@@ -164,6 +172,7 @@ void Sound::Stop()
 
 	_streamPos = 0;
 	_isPlaying = false;
+	_currentSample = 0.0f;
 }
 
 Sound::Sound() :
@@ -173,6 +182,7 @@ Sound::Sound() :
 	_audioStream(nullptr),
 	_streamPos(0), _frameCount(0),
 	_nChannels(0), _sampleRate(0),
+	_currentSample(0.0f),
 	_dsp(nullptr)
 {
 	InitializeValue(_name);
@@ -306,6 +316,12 @@ int Sound::paCallback(
 				out[i] = mutil::lerp(tmp[pos], tmp[pos + 1], frac);
 		}
 	}
+
+	// apply volume
+	for (unsigned long i = 0; i < BUFFER_LENGTH; i++)
+		out[i] *= volume;
+
+	sound->_currentSample = out[0];
 
 	return paContinue;
 }

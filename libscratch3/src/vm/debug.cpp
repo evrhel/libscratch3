@@ -1,6 +1,7 @@
 #include "debug.hpp"
 
 #include <imgui.h>
+#include <implot.h>
 
 #include "vm.hpp"
 #include "io.hpp"
@@ -320,14 +321,74 @@ void Debugger::Render()
 					ImGui::LabelText("Output Device", "(none)");
 				}
 
+				float sample = 0.0f;
 				int loaded = 0;
 				for (Sound *sound : _vm->GetSounds())
 				{
 					if (sound->IsLoaded())
 						loaded++;
+					sample += sound->GetCurrentSample();
 				}
 
 				ImGui::LabelText("Sounds Loaded", "%d/%zu", loaded, _vm->GetSounds().size());
+
+				float oldMax = _audioHistogramMax;
+				float oldMin = _audioHistogramMin;
+
+				// shift histogram
+				if (_nextSampleTime < _vm->GetTime())
+				{
+					_nextSampleTime = _vm->GetTime() + (1.0 / 60.0);
+
+					_audioHistogramMax = -INFINITY;
+					_audioHistogramMin = INFINITY;
+					for (int i = 0; i < HISTOGRAM_SIZE - 1; i++)
+					{
+						float tmp = _audioHistogram[i] = _audioHistogram[i + 1];
+						if (tmp > _audioHistogramMax)
+							_audioHistogramMax = tmp;
+						else if (tmp < _audioHistogramMin)
+							_audioHistogramMin = tmp;
+					}
+
+					_audioHistogram[HISTOGRAM_SIZE - 1] = sample;
+					if (sample > _audioHistogramMax)
+						_audioHistogramMax = sample;
+					else if (sample < _audioHistogramMin)
+						_audioHistogramMin = sample;
+				}
+				
+				if (_audioHistogramMax < oldMax)
+					_audioHistogramMax = oldMax * 0.99f;
+
+				if (_audioHistogramMin > oldMin)
+					_audioHistogramMin = oldMin * 0.99f;
+
+				if (ImPlot::BeginPlot("Visualizer", ImVec2(-1, 0), ImPlotFlags_None))
+				{
+					ImPlot::SetupAxisLimits(ImAxis_X1, -HISTOGRAM_SIZE, 0, ImGuiCond_Always);
+					ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
+
+					ImPlot::SetupAxisTicks(ImAxis_X1, -HISTOGRAM_SIZE, 0, 9);
+
+					ImPlot::SetupFinish();
+
+					ImPlot::PlotLine("##histogram", _histogramTimes, _audioHistogram, HISTOGRAM_SIZE);
+
+					const float xs[] = { -HISTOGRAM_SIZE, 0.0f };
+					const float hi[] = { _audioHistogramMax, _audioHistogramMax };
+					const float lo[] = { _audioHistogramMin, _audioHistogramMin };
+
+					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(255, 0, 0, 255));
+					ImPlot::PlotLine("##max", xs, hi, 2);
+					ImPlot::PopStyleColor();
+
+					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(0, 255, 0, 255));
+					ImPlot::PlotLine("##min", xs, lo, 2);
+					ImPlot::PopStyleColor();
+
+					ImPlot::EndPlot();
+				}
 
 				ImGui::SeparatorText("Sounds");
 
@@ -397,7 +458,18 @@ void Debugger::Render()
 }
 
 Debugger::Debugger(VirtualMachine *vm) :
-	_vm(vm) {}
+	_vm(vm)
+{
+	memset(_histogramTimes, 0, sizeof(_histogramTimes));
+	for (int i = 0; i < HISTOGRAM_SIZE; i++)
+		_histogramTimes[i] = i - HISTOGRAM_SIZE + 1;
+
+	memset(_audioHistogram, 0, sizeof(_audioHistogram));
+	_audioHistogramMax = 0.0f;
+	_audioHistogramMin = 0.0f;
+
+	_nextSampleTime = 0.0;
+}
 
 Debugger::~Debugger()
 {

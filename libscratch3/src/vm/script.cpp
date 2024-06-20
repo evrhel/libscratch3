@@ -364,7 +364,7 @@ void Script::Main()
 
 			double dir = (sprite->GetDirection() - 90.0) * DEG2RAD;
 			double dx = steps * cos(dir);
-			double dy = steps * sin(dir);
+			double dy = steps * sin(-dir); // y-axis is flipped
 
 			sprite->SetXY(sprite->GetX() + dx, sprite->GetY() + dy);
 

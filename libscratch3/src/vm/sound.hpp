@@ -130,6 +130,8 @@ public:
 	constexpr int GetChannelCount() const { return _nChannels; }
 	constexpr int GetSampleRate() const { return _sampleRate; }
 
+	constexpr float GetCurrentSample() const { return _currentSample; }
+
 	Sound &operator=(const Sound &) = delete;
 	Sound &operator=(Sound &&) = delete;
 
@@ -153,6 +155,8 @@ private:
 	unsigned long _frameCount; // number of frames
 	int _nChannels; // number of channels
 	int _sampleRate; // sample rate
+
+	float _currentSample; // current sample value (used for debugging)
 
 	DSPController *_dsp;
 
