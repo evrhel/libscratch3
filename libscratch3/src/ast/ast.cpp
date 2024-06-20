@@ -1095,6 +1095,36 @@ private:
 				id.c_str(), opcode.GetString());
 		}
 
+		// Parse the mutation member (custom blocks)
+		if (block.HasMember("mutation"))
+		{
+			// mutations are in the format:
+			// "proccode": proccode
+
+			ProcProto *proto = n->As<ProcProto>();
+			if (proto == nullptr)
+			{
+				Error("Expected procedures_prototype parsing mutation in block `%s` (%s)",
+										id.c_str(), opcode.GetString());
+				delete n;
+				return nullptr;
+			}
+
+			rapidjson::Value &mutation = block["mutation"];
+			if (!mutation.IsObject())
+			{
+				Error("Expected object parsing mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
+				delete n;
+				return nullptr;
+			}
+
+			// iterate over all inputs in the block
+			for (auto it = mutation.MemberBegin(); it != mutation.MemberEnd(); ++it)
+			{
+				// TODO: parse mutation
+			}
+		}
+
 		assert(block.HasMember("topLevel")); // should have been checked in ParseTargets
 		
 		rapidjson::Value &topLevel = block["topLevel"];

@@ -201,6 +201,5 @@ struct Program : public ASTNode
 	AST_ACCEPTOR;
 
 	AutoRelease<SpriteDefList> sprites;
-	AutoRelease<StageDef> stage;
 	AutoRelease<ValMonitorList> monitors;
 };

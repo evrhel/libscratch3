@@ -1727,6 +1727,7 @@ struct ProcProto : public Statement
 		//   1,
 		//   "argument reporter block id"
 		// ]
+		arguments.emplace_back(key, val);
 		return true;
 	}
 
@@ -1734,9 +1735,7 @@ struct ProcProto : public Statement
 
 	std::string proccode;
 
-	std::vector<std::string> argumentIds;
-	std::vector<std::string> argumentNames;
-	std::vector<std::string> argumentDefaults;
+	std::vector<std::pair<std::string, AutoRelease<Reporter>>> arguments;
 
 	bool warp = false;
 };
