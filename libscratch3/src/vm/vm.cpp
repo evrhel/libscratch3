@@ -282,6 +282,14 @@ void VirtualMachine::OnKeyDown(int scancode)
 
 	for (Script *script : it->second)
 		script->Start();
+
+	// "any" key
+	it = _keyListeners.find((SDL_Scancode)-1);
+	if (it != _keyListeners.end())
+	{
+		for (Script *script : it->second)
+			script->Start();
+	}
 }
 
 void VirtualMachine::OnResize()
@@ -537,7 +545,11 @@ void VirtualMachine::Scheduler()
 			continue; // cannot be scheduled
 
 		if (script.state == EMBRYO || script.state == TERMINATED)
-			continue; // not active
+		{
+			if (!script.autoStart)
+				continue; // not active
+			script.Start();
+		}
 
 		_current = &script;
 
@@ -706,10 +718,10 @@ void VirtualMachine::Main()
 			// Handled by the sprite
 			break;
 		case Op_onbackdropswitch:
-			// TODO: support
+			script.autoStart = true;
 			break;
 		case Op_ongt:
-			// TODO: support
+			script.autoStart = true;
 			break;
 		case Op_onevent: {
 			char *evt = (char *)(_bytecode + *(uint64_t *)ptr);

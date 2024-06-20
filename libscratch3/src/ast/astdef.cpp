@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "../vm/memory.hpp"
+
 const char *const RotationStyleStrings[RotationStyle_Count] = {
 	"unknown",
 	"left-right",
@@ -12,13 +14,13 @@ const char *const RotationStyleStrings[RotationStyle_Count] = {
 RotationStyle RotationStyleFromString(const std::string &str)
 {
 	for (int i = 0; i < RotationStyle_Count; i++)
-		if (str == RotationStyleStrings[i])
+		if (StringEqualsRaw(str.c_str(), RotationStyleStrings[i]))
 			return (RotationStyle)i;
 	return RotationStyle_Unknown;
 }
 
 const char *const GraphicEffectStrings[GraphicEffect_Count] = {
-	"unknown",
+	"UNKNOWN",
 	"COLOR",
 	"FISHEYE",
 	"WHIRL",
@@ -30,29 +32,26 @@ const char *const GraphicEffectStrings[GraphicEffect_Count] = {
 
 GraphicEffect GraphicEffectFromString(const std::string &str)
 {
-	std::string cap(str);
-	std::transform(cap.begin(), cap.end(), cap.begin(), ::toupper);
-
 	for (int i = 0; i < GraphicEffect_Count; i++)
-		if (cap == GraphicEffectStrings[i])
+		if (StringEqualsRaw(str.c_str(), GraphicEffectStrings[i]))
 			return (GraphicEffect)i;
 	return GraphicEffect_Unknown;
 }
 
 const char *const LayerTypeStrings[LayerType_Count] = {
-	"unknown",
+	"UNKNOWN",
 	"front",
 	"back"
 };
 
 const char *const LayerDirStrings[LayerDir_Count] = {
-	"unknown",
+	"UNKNOWN",
 	"forward",
 	"backward"
 };
 
 const char *const PropGetTypeStrings[PropGetType_Count] = {
-	"unknown",
+	"UNKNOWN",
 	"number",
 	"name"
 };
@@ -66,21 +65,21 @@ const char *const SoundEffectStrings[] = {
 SoundEffect SoundEffectFromString(const std::string &str)
 {
 	for (int i = 0; i < SoundEffect_Count; i++)
-		if (str == SoundEffectStrings[i])
+		if (StringEqualsRaw(str.c_str(), SoundEffectStrings[i]))
 			return (SoundEffect)i;
 	return SoundEffect_Unknown;
 }
 
 const char *const ListenValueTypeStrings[ListenValueType_Count] = {
-	"unknown",
-	"loudness",
-	"timer"
+	"UNKNOWN",
+	"LOUDNESS",
+	"TIMER"
 };
 
 ListenValueType ListenValueTypeFromString(const std::string &str)
 {
 	for (int i = 0; i < ListenValueType_Count; i++)
-		if (str == ListenValueTypeStrings[i])
+		if (StringEqualsRaw(str.c_str(), ListenValueTypeStrings[i]))
 			return (ListenValueType)i;
 	return ListenValueType_Unknown;
 }
@@ -95,7 +94,7 @@ const char *const StopModeStrings[StopMode_Count] = {
 StopMode StopModeFromString(const std::string &str)
 {
 	for (int i = 0; i < StopMode_Count; i++)
-		if (str == StopModeStrings[i])
+		if (StringEqualsRaw(str.c_str(), StopModeStrings[i]))
 			return (StopMode)i;
 	return StopMode_Unknown;
 }
@@ -109,7 +108,7 @@ const char *const DragModeStrings[DragMode_Count] = {
 DragMode DragModeFromString(const std::string &str)
 {
 	for (int i = 0; i < DragMode_Count; i++)
-		if (str == DragModeStrings[i])
+		if (StringEqualsRaw(str.c_str(), DragModeStrings[i]))
 			return (DragMode)i;
 	return DragMode_Unknown;
 }
@@ -160,7 +159,7 @@ const char *const MathFuncStrings[MathFuncType_Count] = {
 MathFuncType MathFuncFromString(const std::string &str)
 {
 	for (int i = 0; i < MathFuncType_Count; i++)
-		if (str == MathFuncStrings[i])
+		if (StringEqualsRaw(str.c_str(), MathFuncStrings[i]))
 			return (MathFuncType)i;
 	return MathFuncType_Unknown;
 }

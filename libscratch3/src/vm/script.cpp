@@ -46,13 +46,16 @@ void Script::Init(const ScriptInfo *info)
 	entry = info->loc;
 	pc = entry;
 	isReset = false;
+	autoStart = false;
 	stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
 
 	// fill stack with garbage
 	if (stack)
 	{
 		sp = stack + STACK_SIZE;
+#if _DEBUG
 		memset(stack, 0xab, STACK_SIZE * sizeof(Value));
+#endif // _DEBUG
 	}
 	else
 		sp = nullptr; // out of memory
@@ -361,7 +364,7 @@ void Script::Main()
 
 			double dir = (sprite->GetDirection() - 90.0) * DEG2RAD;
 			double dx = steps * cos(dir);
-			double dy = -steps * sin(dir); // y-axis is inverted
+			double dy = steps * sin(dir);
 
 			sprite->SetXY(sprite->GetX() + dx, sprite->GetY() + dy);
 
@@ -421,11 +424,11 @@ void Script::Main()
 			SetReal(Push(), sprite->GetDirection());
 			break;
 		case Op_say:
-			sprite->SetMessage(StackAt(0), MESSAGE_STATE_SAY);
+			sprite->SetMessage(StackAt(0), MessageState_Say);
 			Pop();
 			break;
 		case Op_think:
-			sprite->SetMessage(StackAt(0), MESSAGE_STATE_THINK);
+			sprite->SetMessage(StackAt(0), MessageState_Think);
 			Pop();
 			break;
 		case Op_setcostume: {
@@ -726,11 +729,34 @@ void Script::Main()
 		case Op_onclick:
 			// do nothing
 			break;
-		case Op_onbackdropswitch:
-			// do nothing
+		case Op_onbackdropswitch: {
+			Sprite *stage = vm->GetStage();
+			char *targetName = (char *)(bytecode + *(uint64_t *)pc);
+			pc += sizeof(uint64_t);
+
+			int64_t lastBackdrop = stage->GetCostume();
+			for (;;)
+			{
+				// check if backdrop has changed
+				int64_t currentBackdrop = stage->GetCostume();
+				if (lastBackdrop == currentBackdrop)
+				{
+					Sched();
+					continue;
+				}
+
+				lastBackdrop = currentBackdrop;
+
+				// if matching target, break
+				const Value &name = stage->GetCostumeName();
+				if (!strcmp(name.u.string->str, targetName))
+					break;
+			}
 			break;
+		}
 		case Op_ongt:
-			Raise(NotImplemented, "ongt");
+			// do nothing (handled in bytecode, see compiler.cpp)
+			break;
 		case Op_onevent:
 			pc += sizeof(uint64_t); // skip event
 			break;
@@ -963,11 +989,9 @@ void Script::Main()
 			break;
 		}
 		case Op_varshow:
-			//Raise(NotImplemented, "varshow");
 			Pop();
 			break;
 		case Op_varhide:
-			//Raise(NotImplemented, "varhide");
 			Pop();
 			break;
 		case Op_listadd:
@@ -1033,7 +1057,9 @@ void Script::Pop()
 	if (sp >= stack + STACK_SIZE)
 		Raise(StackUnderflow, "Stack underflow");
 	ReleaseValue(*sp);
+#if _DEBUG
 	memset(sp, 0xab, sizeof(Value)); // fill with garbage
+#endif // _DEBUG
 	sp++;
 }
 

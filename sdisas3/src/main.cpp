@@ -20,6 +20,16 @@ struct CostumeInfo
 	uint64_t size;
 };
 
+struct SoundInfo
+{
+	char *name;
+	char *format;
+	double rate;
+	uint32_t sampleCount;
+	uint64_t offset;
+	uint64_t size;
+};
+
 struct ScriptInfo
 {
 	uint64_t offset;
@@ -40,6 +50,7 @@ struct SpriteTableEntry
 	uint64_t initializer;
 	std::vector<ScriptInfo> scripts;
 	std::vector<CostumeInfo> costumes;
+	std::vector<SoundInfo> sounds;
 };
 
 struct InstructionInfo
@@ -543,9 +554,6 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTabl
 		case Op_playsound:
 			printf("playsound\n");
 			break;
-		case Op_findsound:
-			printf("findsound\n");
-			break;
 		case Op_stopsound:
 			printf("stopsound\n");
 			break;
@@ -580,6 +588,13 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTabl
 			break;
 		case Op_onclick:
 			printf("onclick\n");
+			break;
+		case Op_onbackdropswitch:
+			printf("onbackdropswitch %s\n", (char *)(fileData + *(uint64_t *)ptr));
+			ptr += sizeof(uint64_t);
+			break;
+		case Op_ongt:
+			printf("ongt\n");
 			break;
 		case Op_onevent:
 			s = (char *)(fileData + *(uint64_t *)ptr);
@@ -812,6 +827,7 @@ static void ShowTable(const SpriteTable &st)
 		printf("    %8llX  Initializer\n", entry.initializer);
 		printf("    %8zu  Scripts\n", entry.scripts.size());
 		// Don't display additional information about scripts
+
 		printf("    %8zu  Costumes\n", entry.costumes.size());
 		for (size_t j = 0; j < entry.costumes.size(); j++)
 		{
@@ -824,6 +840,19 @@ static void ShowTable(const SpriteTable &st)
 			printf("              %8lg  Rotation Center Y\n", costume.rotationCenterY);
 			printf("              %8llX  Offset\n", costume.offset);
 			printf("              %8llu  Size\n", costume.size);
+		}
+
+		printf("    %8zu  Sounds\n", entry.sounds.size());
+		for (size_t j = 0; j < entry.sounds.size(); j++)
+		{
+			const SoundInfo &sound = entry.sounds[j];
+
+			printf("              %s\n", sound.name);
+			printf("              %8s  Format\n", sound.format);
+			printf("              %8lg  Rate\n", sound.rate);
+			printf("              %8u  Sample Count\n", sound.sampleCount);
+			printf("              %8llX  Offset\n", sound.offset);
+			printf("              %8llu  Size\n", sound.size);
 		}
 
 		printf("\n");
@@ -919,6 +948,32 @@ static uint8_t *ParseTableEntry(uint8_t *fileData, size_t fileSize, uint8_t *ptr
 		ptr += sizeof(uint64_t);
 
 		costume.size = *(uint64_t *)ptr;
+		ptr += sizeof(uint64_t);
+	}
+
+	entry->sounds.resize(*(uint64_t *)ptr);
+	ptr += sizeof(uint64_t);
+
+	for (size_t j = 0; j < entry->sounds.size(); j++)
+	{
+		SoundInfo &sound = entry->sounds[j];
+
+		sound.name = (char *)(fileData + *(uint64_t *)ptr);
+		ptr += sizeof(uint64_t);
+
+		sound.format = (char *)(fileData + *(uint64_t *)ptr);
+		ptr += sizeof(uint64_t);
+
+		sound.rate = *(double *)ptr;
+		ptr += sizeof(double);
+
+		sound.sampleCount = *(uint32_t *)ptr;
+		ptr += sizeof(uint32_t);
+
+		sound.offset = *(uint64_t *)ptr;
+		ptr += sizeof(uint64_t);
+
+		sound.size = *(uint64_t *)ptr;
 		ptr += sizeof(uint64_t);
 	}
 

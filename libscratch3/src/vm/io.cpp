@@ -63,7 +63,7 @@ void IOHandler::PollEvents()
 			keyEvents[keyEventCount++] = evt.key.keysym.scancode;
 			break;
 		case SDL_KEYUP:
-			if (!_keyStates[evt.key.keysym.scancode])
+			if (_keyStates[evt.key.keysym.scancode])
 				_keysPressed--;
 			_keyStates[evt.key.keysym.scancode] = false;
 			break;

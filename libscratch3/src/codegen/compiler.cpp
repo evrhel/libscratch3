@@ -653,7 +653,30 @@ public:
 
 	virtual void Visit(OnKeyPressed *node)
 	{
-		uint16_t scancode = SDL_GetScancodeFromName(node->key.c_str());
+		uint16_t scancode = 0;
+		if (node->key.size() == 1)
+		{
+			char c = node->key[0];
+			if (c >= 'a' && c <= 'z')
+				scancode = SDL_SCANCODE_A + c - 'a';
+			else if (c >= 'A' && c <= 'Z')
+				scancode = SDL_SCANCODE_A + c - 'A';
+			else if (c >= '0' && c <= '9')
+				scancode = SDL_SCANCODE_0 + c - '0';
+		}
+		else if (StringEqualsRaw(node->key.c_str(), "space"))
+			scancode = SDL_SCANCODE_SPACE;
+		else if (StringEqualsRaw(node->key.c_str(), "left arrow"))
+			scancode = SDL_SCANCODE_LEFT;
+		else if (StringEqualsRaw(node->key.c_str(), "right arrow"))
+			scancode = SDL_SCANCODE_RIGHT;
+		else if (StringEqualsRaw(node->key.c_str(), "up arrow"))
+			scancode = SDL_SCANCODE_UP;
+		else if (StringEqualsRaw(node->key.c_str(), "down arrow"))
+			scancode = SDL_SCANCODE_DOWN;
+		else if (StringEqualsRaw(node->key.c_str(), "any"))
+			scancode = -1;
+
 		cp.WriteOpcode(Op_onkey);
 		cp.WriteText(scancode);
 	}
@@ -676,8 +699,60 @@ public:
 
 	virtual void Visit(OnGreaterThan *node)
 	{
-		cp.WriteText<uint8_t>(node->value);
-		node->e->Accept(this); // expression to test
+		// semantics:
+		//  (entry)
+		//  wait until condition is false
+		//  wait until condition is true
+
+		cp.WriteOpcode(Op_ongt);
+
+		uint64_t waitFalseTop = cp._text.size();
+		switch (node->value)
+		{
+		default:
+			abort();
+			break;
+		case ListenValueType_Loudness:
+			cp.WriteOpcode(Op_getloudness);
+			break;
+		case ListenValueType_Timer:
+			cp.WriteOpcode(Op_gettimer);
+			break;
+		}
+
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_gt);
+
+		cp.WriteOpcode(Op_yield);
+
+		// loop until condition is false
+		cp.WriteOpcode(Op_jnz);
+		cp.WriteText<int64_t>(waitFalseTop);
+
+		uint64_t waitTrueTop = cp._text.size();
+		switch (node->value)
+		{
+		default:
+			abort();
+			break;
+		case ListenValueType_Loudness:
+			cp.WriteOpcode(Op_getloudness);
+			break;
+		case ListenValueType_Timer:
+			cp.WriteOpcode(Op_gettimer);
+			break;
+		}
+
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_gt);
+
+		cp.WriteOpcode(Op_yield);
+
+		// loop until condition is true
+		cp.WriteOpcode(Op_jz);
+		cp.WriteText<int64_t>(waitTrueTop);
+
+		// done
 	}
 
 	virtual void Visit(OnEvent *node)

@@ -63,6 +63,8 @@ struct Script
 	jmp_buf scriptMain; // Jump buffer for script main loop
 	bool isReset;  // Reset flag
 
+	bool autoStart;  // Auto-start flag
+
 	ExceptionType except; // Exception type
 	const char *exceptMessage; // Exception message
 
