@@ -1102,12 +1102,16 @@ private:
 			// "proccode": proccode
 
 			ProcProto *proto = n->As<ProcProto>();
+			Call *call = n->As<Call>();
 			if (proto == nullptr)
 			{
-				Error("Expected procedures_prototype parsing mutation in block `%s` (%s)",
-										id.c_str(), opcode.GetString());
-				delete n;
-				return nullptr;
+				if (call == nullptr)
+				{
+					Error("Expected procedures_prototype or procedures_call parsing mutation in block `%s` (%s)",
+						id.c_str(), opcode.GetString());
+					delete n;
+					return nullptr;
+				}
 			}
 
 			rapidjson::Value &mutation = block["mutation"];
@@ -1118,11 +1122,25 @@ private:
 				return nullptr;
 			}
 
-			// iterate over all inputs in the block
-			for (auto it = mutation.MemberBegin(); it != mutation.MemberEnd(); ++it)
+			if (!mutation.HasMember("proccode"))
 			{
-				// TODO: parse mutation
+				Error("Missing `proccode` member in mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
+				delete n;
+				return nullptr;
 			}
+
+			rapidjson::Value &proccode = mutation["proccode"];
+			if (!proccode.IsString())
+			{
+				Error("Expected string parsing proccode in mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
+				delete n;
+				return nullptr;
+			}
+
+			if (proto)
+				proto->proccode = proccode.GetString();
+			else if (call)
+				call->proccode = proccode.GetString();
 		}
 
 		assert(block.HasMember("topLevel")); // should have been checked in ParseTargets

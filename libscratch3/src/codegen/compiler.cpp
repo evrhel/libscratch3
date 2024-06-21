@@ -1080,9 +1080,36 @@ public:
 		cp.WriteOpcode(Op_varhide);
 	}
 
-	virtual void Visit(ProcProto *node) {}
-	virtual void Visit(DefineProc *node) {}
-	virtual void Visit(Call *node) {}
+	virtual void Visit(ProcProto *node)
+	{
+	}
+
+	virtual void Visit(DefineProc *node)
+	{
+		std::string proccode = currentSprite + node->proto->proccode;
+		auto it = procedureTable.find(proccode);
+		if (it != procedureTable.end())
+		{
+			printf("Error: Duplicate procedure definition\n");
+			abort();
+		}
+
+		procedureTable[proccode] = cp._text.size();
+	}
+
+	virtual void Visit(Call *node)
+	{
+		cp.WriteOpcode(Op_call);
+
+		auto it = procedureTable.find(currentSprite + node->proccode);
+		if (it == procedureTable.end())
+		{
+			printf("Error: Undefined procedure %s\n", node->proccode.c_str());
+			abort();
+		}
+
+		cp.WriteText<uint64_t>(it->second);
+	}
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -1214,12 +1241,30 @@ public:
 
 	virtual void Visit(StatementListList *node)
 	{
-		cp.WriteStable<int64_t>(node->sll.size());
+		uint64_t count = node->sll.size();
+
 		for (AutoRelease<StatementList> &sl : node->sll)
 		{
 			topLevel = true;
-			cp.WriteReference(Segment_stable, Segment_text, cp._text.size()); // offset
-			sl->Accept(this);
+			DefineProc *proc = sl->sl[0]->As<DefineProc>();
+			if (proc != nullptr)
+			{
+				count--;
+				proc->Accept(this);
+			}
+		}
+
+		cp.WriteStable<uint64_t>(count);
+
+		for (AutoRelease<StatementList> &sl : node->sll)
+		{
+			topLevel = true;
+			DefineProc *proc = sl->sl[0]->As<DefineProc>();
+			if (proc == nullptr)
+			{
+				cp.WriteReference(Segment_stable, Segment_text, cp._text.size());
+				sl->Accept(this);
+			}
 		}
 	}
 
@@ -1272,6 +1317,8 @@ public:
 
 	virtual void Visit(SpriteDef *node)
 	{
+		currentSprite = node->name;
+
 		cp.WriteString(Segment_stable, node->name);
 		cp.WriteStable<double>(node->x);
 		cp.WriteStable<double>(node->y);
@@ -1298,6 +1345,8 @@ public:
 
 		node->costumes->Accept(this);
 		node->sounds->Accept(this);
+
+		currentSprite.clear();
 	}
 
 	virtual void Visit(SpriteDefList *node)
@@ -1344,8 +1393,8 @@ public:
 
 		for (AutoRelease<VariableDef> &vd : vars)
 		{
-			printf("%s -> %zu\n", vd->id.c_str(), _staticVariables.size());
-			_staticVariables[vd->id] = _staticVariables.size();
+			printf("%s -> %zu\n", vd->id.c_str(), staticVariables.size());
+			staticVariables[vd->id] = staticVariables.size();
 
 			Value v;
 			InitializeValue(v);
@@ -1366,7 +1415,11 @@ public:
 	const Scratch3CompilerOptions &options;
 	bool topLevel = false;
 
-	std::unordered_map<std::string, uint64_t> _staticVariables; // name -> index
+	std::string currentSprite;
+
+	std::unordered_map<std::string, uint64_t> staticVariables; // name -> index
+
+	std::unordered_map<std::string, uint64_t> procedureTable; // name -> offset
 
 	Compiler(CompiledProgram *cp, Loader *loader, const Scratch3CompilerOptions *options) :
 		cp(*cp), loader(*loader), options(*options) {}

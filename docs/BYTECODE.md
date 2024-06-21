@@ -96,6 +96,8 @@ Offset | Name | Type | Description |
 
 ## Structure
 
+The bytecode is laid out as a header followed by a series of segments, each with a specific purpose. The header contains offsets to each segment, which are stored in the order they are listed below.
+
 ### Header
 
 | Offset | Name | Type | Description |

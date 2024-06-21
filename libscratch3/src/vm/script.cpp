@@ -151,6 +151,10 @@ void Script::Main()
 		case Op_varget:
 			Assign(StackAt(0), vm->GetVariableRef(StackAt(0)));
 			break;
+		case Op_setstatic:
+			Raise(NotImplemented, "setstatic");
+		case Op_getstatic:
+			Raise(NotImplemented, "getstatic");
 		case Op_listcreate:
 			i64 = *(int64_t *)pc;
 			pc += sizeof(int64_t);
@@ -180,6 +184,14 @@ void Script::Main()
 			else
 				pc += sizeof(uint64_t);
 			break;
+		case Op_call:
+			Raise(NotImplemented, "call");
+		case Op_ret:
+			Raise(NotImplemented, "ret");
+		case Op_enter:
+			Raise(NotImplemented, "enter");
+		case Op_leave:
+			Raise(NotImplemented, "leave");
 		case Op_yield:
 			Sched();
 			break;
@@ -1038,8 +1050,6 @@ void Script::Main()
 			SetBool(StackAt(1), ListContainsValue(StackAt(0), StackAt(1)));
 			Pop();
 			break;
-		case Op_invoke:
-			Raise(NotImplemented, "invoke");
 		case Op_ext:
 			Raise(VMError, "Extensions are not supported");
 		}

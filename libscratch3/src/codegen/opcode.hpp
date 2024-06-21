@@ -177,8 +177,6 @@ enum Opcode : uint8_t
 	Op_listlen,
 	Op_listcontains,
 
-	Op_invoke,
-
 	Op_ext = 0xff // Extension operation, check next 2 byte (extension id, extension opcode)
 };
 
