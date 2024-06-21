@@ -12,6 +12,8 @@
 #include <rapidjson/document.h>
 #include <rapidjson/error/en.h>
 
+#include "../vm/memory.hpp"
+
 //! \brief Check whether an opcode is an event handler.
 //! 
 //! \param opcode The opcode to check. This is the value of the "opcode"
@@ -1137,10 +1139,31 @@ private:
 				return nullptr;
 			}
 
+			bool warp = false;
+			if (mutation.HasMember("warp"))
+			{
+				rapidjson::Value &warpv = mutation["warp"];
+				if (warpv.IsBool())
+				{
+					warp = warpv.GetBool();
+				}
+				else if (warpv.IsString())
+				{
+					if (StringEqualsRaw(warpv.GetString(), "true"))
+						warp = true;
+				}
+			}
+
 			if (proto)
+			{
 				proto->proccode = proccode.GetString();
+				proto->warp = true;
+			}
 			else if (call)
+			{
 				call->proccode = proccode.GetString();
+				call->warp = true;
+			}
 		}
 
 		assert(block.HasMember("topLevel")); // should have been checked in ParseTargets

@@ -6,6 +6,12 @@
 
 #include <SDL.h>
 
+struct ProcInfo
+{
+	uint64_t offset;
+	ProcProto *proto;
+};
+
 class Compiler : public Visitor
 {
 public:
@@ -1094,13 +1100,12 @@ public:
 			abort();
 		}
 
-		procedureTable[proccode] = cp._text.size();
+		procedureTable[proccode] = ProcInfo{ cp._text.size(), node->proto.get() };
 	}
 
 	virtual void Visit(Call *node)
 	{
-		cp.WriteOpcode(Op_call);
-
+		// lookup procedure
 		auto it = procedureTable.find(currentSprite + node->proccode);
 		if (it == procedureTable.end())
 		{
@@ -1108,7 +1113,31 @@ public:
 			abort();
 		}
 
-		cp.WriteText<uint64_t>(it->second);
+		// argument count check
+		size_t formalargc = it->second.proto->arguments.size();
+		size_t actualargc = node->args.size();
+		if (formalargc != actualargc)
+		{
+			printf("Error: Argument count mismatch in procedure call %s\n", node->proccode.c_str());
+			abort();
+		}
+
+		// push arguments
+		for (auto &p : it->second.proto->arguments)
+		{
+			auto it = node->args.find(p.first);
+			if (it == node->args.end())
+			{
+				printf("Error: Argument %s missing in procedure call %s\n", p.first.c_str(), node->proccode.c_str());
+				abort();
+			}
+
+			it->second->Accept(this);
+		}
+
+		cp.WriteOpcode(Op_call);
+		cp.WriteText<uint64_t>(it->second.offset);
+		cp.WriteText<uint64_t>(formalargc);
 	}
 
 	//
@@ -1419,7 +1448,7 @@ public:
 
 	std::unordered_map<std::string, uint64_t> staticVariables; // name -> index
 
-	std::unordered_map<std::string, uint64_t> procedureTable; // name -> offset
+	std::unordered_map<std::string, ProcInfo> procedureTable; // name -> ProcInfo
 
 	Compiler(CompiledProgram *cp, Loader *loader, const Scratch3CompilerOptions *options) :
 		cp(*cp), loader(*loader), options(*options) {}

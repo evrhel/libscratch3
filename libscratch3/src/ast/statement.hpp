@@ -1731,8 +1731,6 @@ struct ProcProto : public Statement
 		return true;
 	}
 
-	// TODO: accept mutation
-
 	std::string proccode;
 
 	std::vector<std::pair<std::string, AutoRelease<Reporter>>> arguments;
@@ -1793,12 +1791,15 @@ struct Call : public Statement
 		if (!expr)
 			return false;
 
-		args.emplace_back(key, expr);
+		auto it = args.find(key);
+		if (it != args.end())
+			return false;
+
+		args[key] = expr;
 		return true;
 	}
-
-	// TODO: accept mutation
-
+	
 	std::string proccode; // proccode
-	std::vector<std::pair<std::string, AutoRelease<Expression>>> args;
+	std::unordered_map<std::string, AutoRelease<Expression>> args;
+	bool warp = false;
 };
