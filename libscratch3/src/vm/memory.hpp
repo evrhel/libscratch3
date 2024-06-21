@@ -214,9 +214,6 @@ Value &AllocList(Value &v, int64_t len);
 //! 
 //! Only call this function on a value that has not been initialized.
 //! Doing so may cause a memory leak.
-//!
-//! If allocation fails, the function will assign a None value to the
-//! given value.
 //! 
 //! \param v Value to initialize
 //! 

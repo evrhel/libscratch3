@@ -54,6 +54,53 @@ struct ProgramHeader
 	uint32_t debug_size; // Size of debug segment
 };
 
+struct CostumeEntry
+{
+	uint64_t name;
+	uint64_t format;
+	uint32_t bitmapResolution;
+	double rotationCenterX;
+	double rotationCenterY;
+	uint64_t data;
+	uint64_t size;
+};
+
+struct SoundEntry
+{
+	uint64_t name;
+	uint64_t format;
+	double rate;
+	uint32_t sampleCount;
+	uint64_t data;
+	uint64_t size;
+};
+
+struct ScriptEntry
+{
+	uint64_t offset;
+};
+
+struct SpriteEntry
+{
+	uint64_t name;
+	double x, y;
+	double size;
+	double direction;
+	int64_t currentCostume;
+	int64_t layer;
+	uint8_t visible;
+	uint8_t isStage;
+	uint8_t draggable;
+	uint8_t rotationStyle;
+	
+	uint64_t initializer;
+	uint64_t scripts;
+
+	uint64_t costumes;
+
+	uint64_t sounds;
+};
+
 enum
 {
 	DebugEntryType_variable,

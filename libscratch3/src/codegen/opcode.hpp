@@ -12,13 +12,22 @@ enum Opcode : uint8_t
 	Op_varadd,
 	Op_varget,
 
+	Op_setstatic,
+	Op_getstatic,
+
 	Op_listcreate, // Create list
 
 	Op_jmp, // Relative jump
 	Op_jz, // Relative jump if false
 	Op_jnz, // Relative jump if true
 
-	Op_yield, // Auto yield on backwards jump (loops)
+	Op_call, // Push return address and jump
+	Op_ret, // Pop return address and jump
+
+	Op_enter, // Enter function
+	Op_leave, // Leave function
+
+	Op_yield, // Yield to scheduler
 
 	Op_pop,
 	Op_pushnone,

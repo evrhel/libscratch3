@@ -1320,8 +1320,44 @@ public:
 
 	}
 
+	void MapStaticVariables(Program *node)
+	{
+		SpriteDef *stage = nullptr;
+		for (AutoRelease<SpriteDef> &sprite : node->sprites->sprites)
+		{
+			if (sprite->isStage)
+			{
+				stage = sprite.get();
+				break;
+			}
+		}
+
+		if (!stage)
+			return;
+
+		uint64_t offset = cp._data.size();
+
+		auto &vars = stage->variables->variables;
+
+		cp.WriteRdata<uint64_t>(offset);
+		cp.WriteRdata<uint64_t>(vars.size());
+
+		for (AutoRelease<VariableDef> &vd : vars)
+		{
+			printf("%s -> %zu\n", vd->id.c_str(), _staticVariables.size());
+			_staticVariables[vd->id] = _staticVariables.size();
+
+			Value v;
+			InitializeValue(v);
+
+			cp.WriteData(v);
+		}
+	}
+
 	virtual void Visit(Program *node)
 	{
+		MapStaticVariables(node);
+
 		node->sprites->Accept(this);
 	}
 
@@ -1329,6 +1365,8 @@ public:
 	Loader &loader;
 	const Scratch3CompilerOptions &options;
 	bool topLevel = false;
+
+	std::unordered_map<std::string, uint64_t> _staticVariables; // name -> index
 
 	Compiler(CompiledProgram *cp, Loader *loader, const Scratch3CompilerOptions *options) :
 		cp(*cp), loader(*loader), options(*options) {}
@@ -1524,18 +1562,18 @@ void CompiledProgram::PushString(const std::string &str)
 	uint64_t off = _data.size();
 
 	size_t size = offsetof(String, str) + str.size() + 1;
-	AllocData(size);
+	AllocRdata(size);
 
-	String *s = (String *)(_data.data() + off);
+	String *s = (String *)(_rdata.data() + off);
 	s->ref.count = 1;
 	s->ref.flags = VALUE_STATIC;
 	s->len = str.size();
 	s->hash = HashString(str.c_str());
 	memcpy(s->str, str.c_str(), str.size() + 1);
 
-	WriteReference(Segment_text, Segment_data, off);
+	WriteReference(Segment_text, Segment_rdata, off);
 
-	_managedStrings[str] = DataReference{ Segment_data, off };
+	_managedStrings[str] = DataReference{ Segment_rdata, off };
 }
 
 void CompiledProgram::PushValue(const Value &value)
