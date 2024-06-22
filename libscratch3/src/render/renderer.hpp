@@ -7,6 +7,8 @@
 #include <glad/glad.h>
 #include <mutil/mutil.h>
 
+#include <scratch3/scratch3.h>
+
 #define VIEWPORT_WIDTH 480
 #define VIEWPORT_HEIGHT 360
 
@@ -128,13 +130,22 @@ public:
 
     //! \brief Create a new renderer
     //!
+    //! If both width and height are <= 0, the renderer will use a
+    //! size dependent on the monitor's resolution. Either one of
+    //! width or height are <= 0, the renderer will choose the other
+    //! based on the aspect ratio of the viewport. Otherwise, the
+    //! renderer will use the specified width and height.
+    //! 
     //! \param spriteCount The maximum number of sprites to render,
     //! excluding the stage sprite
-    GLRenderer(int64_t spriteCount);
+    //! \param options The options to create the renderer with
+    GLRenderer(int64_t spriteCount, const Scratch3VMOptions &options);
     ~GLRenderer();
 private:
     SDL_Window *_window;
     SDL_GLContext _context;
+
+    Scratch3VMOptions _options;
 
     int _left, _right;
     int _bottom, _top;

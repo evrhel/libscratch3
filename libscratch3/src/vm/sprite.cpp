@@ -358,7 +358,13 @@ void Sprite::DebugUI() const
             {
                 if (ImGui::BeginTooltip())
                 {
-                    ImGui::Image(tex, ImVec2(c->GetSize().x, c->GetSize().y), ImVec2(0, 1), ImVec2(1, 0));
+                    constexpr float height = kImageHeight * 2;
+                    float width = imageWidth * 2;
+                    scale = height / size.y;
+
+                    tex = (void *)(intptr_t)c->GetTexture(Vector2(scale));
+
+                    ImGui::Image(tex, ImVec2(width, height), ImVec2(0, 1), ImVec2(1, 0));
                     ImGui::EndTooltip();
                 }
             }

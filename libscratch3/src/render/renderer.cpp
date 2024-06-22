@@ -18,11 +18,17 @@ namespace // shaders
 static SpriteShader *CreateSpriteShader()
 {
     SpriteShader *ss = new SpriteShader();
-    ss->Load(
+    bool r = ss->Load(
         sprite_vert_source,
         sizeof(sprite_vert_source) - 1,
         sprite_frag_source,
         sizeof(sprite_frag_source) - 1);
+
+    if (!r)
+    {
+        delete ss;
+        return nullptr;
+    }
 
     return ss;
 }
@@ -217,8 +223,23 @@ void GLRenderer::BeginRender()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glViewport(0, 0, width, height);
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    if (_options.forceAspectRatio)
+    {
+        if (width * VIEWPORT_HEIGHT > height * VIEWPORT_WIDTH)
+        {
+            int newWidth = height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
+            glViewport((width - newWidth) / 2, 0, newWidth, height);
+        }
+        else
+        {
+            int newHeight = width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
+            glViewport(0, (height - newHeight) / 2, width, newHeight);
+        }
+    }
+    else
+        glViewport(0, 0, width, height);
+
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
@@ -266,9 +287,10 @@ void GLRenderer::Resize()
     _scale = std::max(width / viewWidth, height / viewHeight);
 }
 
-GLRenderer::GLRenderer(int64_t spriteCount) :
+GLRenderer::GLRenderer(int64_t spriteCount, const Scratch3VMOptions &options) :
     _window(nullptr),
     _context(nullptr),
+    _options(options),
     _left(0), _right(0),
     _bottom(0), _top(0),
     _frame(0),
@@ -279,7 +301,8 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
     _spriteShader(nullptr),
     _sprites(nullptr), _spriteCount(0)
 {
-    SDL_Init(SDL_INIT_VIDEO);
+    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+        return;
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
@@ -288,15 +311,71 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
 
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    
+    // Determine window size
+    int width, height;
+    if (options.width <= 0 && options.height > 0)
+    {
+        height = options.height;
+        width = options.height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
+    }
+    else if (options.width > 0 && options.height <= 0)
+    {
+        width = options.width;
+        height = options.width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
+    }
+    else if (options.width > 0 && options.height > 0)
+    {
+        width = options.width;
+        height = options.height;
+    }
+    else
+    {
+        width = VIEWPORT_WIDTH;
+        height = VIEWPORT_HEIGHT;
+        
+        SDL_DisplayMode displayMode;
+        if (SDL_GetCurrentDisplayMode(0, &displayMode) == 0)
+        {
+            if (options.fullscreen)
+            {
+                width = displayMode.w;
+                height = displayMode.h;
+            }
+            else
+            {
+                height = displayMode.h * 2 / 3;
+                width = height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
+            }
+        }
+    }
 
+    Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN;
+
+    if (options.fullscreen)
+    {
+        if (options.borderless)
+            flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+        else
+            flags |= SDL_WINDOW_FULLSCREEN;
+    }
+    else if (options.borderless)
+        flags |= SDL_WINDOW_BORDERLESS;
+
+#if LS_DARWIN
+    flags |= SDL_WINDOW_ALLOW_HIGHDPI; // Retina display
+#endif // LS_DARWIN
+
+    // Create window
     _window = SDL_CreateWindow("Scratch 3", SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED, VIEWPORT_WIDTH * 2, VIEWPORT_HEIGHT * 2,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+        SDL_WINDOWPOS_CENTERED, width, height, flags);
     if (!_window)
     {
         Cleanup();
         return;
     }
+
+    // Initialize OpenGL
 
     _context = SDL_GL_CreateContext(_window);
     if (!_context)
@@ -319,16 +398,22 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
 
     SDL_GL_SetSwapInterval(1);
 
+    // Initialize ImGui
+
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGui_ImplSDL2_InitForOpenGL(_window, _context);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
+    // Create quad for rendering sprites
     memset(&_quad, 0, sizeof(_quad));
     CreateQuad();
 
+    // Load shaders
+    printf("Loading shaders\n");
     _spriteShader = CreateSpriteShader();
 
+    // Draw list
     _spriteCount = spriteCount + 1; // +1 for stage
     _sprites = new SpriteRenderInfo[_spriteCount];
     _renderOrder = new int64_t[_spriteCount];
@@ -341,9 +426,12 @@ GLRenderer::GLRenderer(int64_t spriteCount) :
     _renderOrder[0] = 0;
     _sprites[0]._layer = 0;
 
+    // Set viewport
     SetLogicalSize(-VIEWPORT_WIDTH / 2, VIEWPORT_WIDTH / 2,
         -VIEWPORT_HEIGHT / 2, VIEWPORT_HEIGHT / 2);
     Resize();
+
+    SDL_ShowWindow(_window);
 
     _startTime = ls_time64();
 }
@@ -394,7 +482,7 @@ void GLRenderer::CreateQuad()
         Vector4(-0.5f, 0.5f, 0.0f, 1.0f)
     };
 
-    const uint32_t indices[] = {
+    const uint8_t indices[] = {
         0, 1, 2,
         2, 3, 0
     };
@@ -421,19 +509,19 @@ void GLRenderer::CreateQuad()
 void GLRenderer::DrawQuad()
 {
     glBindVertexArray(_quad.vao);
-    glDrawElements(GL_TRIANGLES, _quad.indexCount, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, _quad.indexCount, GL_UNSIGNED_BYTE, 0);
 }
 
 void GLRenderer::DestroyQuad()
 {
     if (_quad.vao)
-        glDeleteVertexArrays(1, &_quad.vao);
+        glDeleteVertexArrays(1, &_quad.vao), _quad.vao = 0;
 
     if (_quad.vbo)
-        glDeleteBuffers(1, &_quad.vbo);
+        glDeleteBuffers(1, &_quad.vbo), _quad.vbo = 0;
 
     if (_quad.ebo)
-        glDeleteBuffers(1, &_quad.ebo);
+        glDeleteBuffers(1, &_quad.ebo), _quad.ebo = 0;
 
     memset(&_quad, 0, sizeof(_quad));
 }

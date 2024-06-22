@@ -713,8 +713,6 @@ void Script::Main()
 				break;
 			}
 
-			printf("[%.2f] %s: Playing and waiting for sound \"%s\"\n", vm->GetTime(), sprite->GetNameString(), v.u.string->str);
-
 			vm->PlaySound(sound);
 			WaitForSound(sound);
 

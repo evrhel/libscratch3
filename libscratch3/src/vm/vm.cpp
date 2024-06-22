@@ -158,7 +158,8 @@ int VirtualMachine::VMStart()
 	}
 
 	// initialize graphics
-	_render = new GLRenderer(_spritesEnd - _sprites - 1); // exclude the stage
+	int64_t nSprites = _spritesEnd - _sprites - 1; // exclude the stage
+	_render = new GLRenderer(nSprites, _options);
 	if (_render->HasError())
 		Panic("Failed to initialize graphics");
 
@@ -574,7 +575,8 @@ void VirtualMachine::Render()
 		drawList->AddText(position, textColor, text);
 	}
 
-	_debug.Render();
+	if (_options.debug)
+		_debug.Render();
 
 	_render->EndRender();
 }

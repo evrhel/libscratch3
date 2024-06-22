@@ -80,7 +80,7 @@ void DSPController::SetPitch(double pitch)
 
 void Sound::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, DSPController *dsp)
 {
-	SetString(_name, (char *)(bytecode +info->name));
+	SetString(_name, (char *)(bytecode + info->name));
 	_data = bytecode + info->data;
 	_dataSize = info->dataSize;
 	_dsp = dsp;
@@ -128,6 +128,9 @@ void Sound::Load()
 
 void Sound::Play()
 {
+	if (!_audioStream)
+		return;
+
 	if (!_stream)
 	{
 		PaError err;
@@ -317,11 +320,18 @@ int Sound::paCallback(
 		}
 	}
 
+	float max = 0.0f;
+
 	// apply volume
 	for (unsigned long i = 0; i < BUFFER_LENGTH; i++)
+	{
 		out[i] *= volume;
+		
+		if (mutil::abs(out[i]) > mutil::abs(max))
+			max = out[i]; // sample with largest amplitude
+	}
 
-	sound->_currentSample = out[0];
+	sound->_currentSample = max;
 
 	return paContinue;
 }

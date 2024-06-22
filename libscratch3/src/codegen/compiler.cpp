@@ -1598,7 +1598,7 @@ public:
 
 		cp.CreateReference(&currentSprite->sounds, Segment_rdata);
 
-		uint64_t arrayStart = cp._stable.size();
+		uint64_t arrayStart = cp._rdata.size();
 
 		// Write array of sound definitions
 		for (AutoRelease<SoundDef> &sd : node->sounds)
@@ -1636,6 +1636,8 @@ public:
 			sound.dataSize = size;
 			cp.CreateReference(&sound.data, Segment_rdata);
 			cp.WriteRdata(data, size);
+
+			i++;
 		}
 	}
 
@@ -1725,18 +1727,37 @@ public:
 		uint64_t offset = cp._data.size();
 
 		auto &vars = stage->variables->variables;
+		auto &lists = stage->lists->lists;
 
-		cp.WriteRdata<bc::uint64>(vars.size());
+		size_t numVars = vars.size() + lists.size();
 
+		cp.WriteRdata<bc::uint64>(numVars);
+
+		size_t id = 0;
 		for (AutoRelease<VariableDef> &vd : vars)
 		{
-			printf("%s -> %zu\n", vd->id.c_str(), staticVariables.size());
-			staticVariables[vd->id] = staticVariables.size();
+			printf("%s -> %zu\n", vd->id.c_str(), id);
+			staticVariables[vd->id] = id++;
 
 			Value v;
 			InitializeValue(v);
 
 			cp.WriteData(v);
+
+			ReleaseValue(v);
+		}
+
+		for (AutoRelease<ListDef> &ld : lists)
+		{
+			printf("%s -> %zu\n", ld->id.c_str(), id);
+			staticVariables[ld->id] = id++;
+
+			Value v;
+			InitializeValue(v);
+
+			cp.WriteData(v);
+
+			ReleaseValue(v);
 		}
 	}
 

@@ -69,6 +69,9 @@ static void Usage()
 	printf("  -H, --height <height> Set window height\n");
 	printf("  -r, --resizable       Set window resizable\n");
 	printf("  -p, --preload         Preload assets before running\n");
+	printf("  -f, --fullscreen      Set fullscreen\n");
+	printf("  -b, --borderless      Set borderless\n");
+	printf("  -a, --force-aspect    Force viewport aspect ratio\n");
 }
 
 static void Version()
@@ -89,6 +92,9 @@ struct Options
 	int height = -1;
 	bool resizable = false;
 	bool preload = false;
+	bool fullscreen = false;
+	bool borderless = false;
+	bool forceAspectRatio = false;
 
 	void Parse(int argc, char *argv[])
 	{
@@ -149,6 +155,12 @@ struct Options
 				resizable = true;
 			else if (!strcmp(arg, "--preload"))
 				preload = true;
+			else if (!strcmp(arg, "--fullscreen"))
+				fullscreen = true;
+			else if (!strcmp(arg, "--borderless"))
+				borderless = true;
+			else if (!strcmp(arg, "--force-aspect"))
+				forceAspectRatio = true;
 			else if (!strcmp(arg, "-Og"))
 			{
 				optimization = 0;
@@ -185,6 +197,15 @@ struct Options
 						break;
 					case 'p':
 						preload = true;
+						break;
+					case 'f':
+						fullscreen = true;
+						break;
+					case 'b':
+						borderless = true;
+						break;
+					case 'a':
+						forceAspectRatio = true;
 						break;
 					case 'o':
 					case 'F':
@@ -325,11 +346,14 @@ int main(int argc, char *argv[])
 
 	Scratch3VMOptions vmOptions;
 	memset(&vmOptions, 0, sizeof(vmOptions));
-	vmOptions.debug = opts.liveDebug ? 1 : 0;
+	vmOptions.debug = opts.liveDebug;
 	vmOptions.framerate = opts.framerate;
 	vmOptions.width = opts.width;
 	vmOptions.height = opts.height;
-	vmOptions.resizable = opts.resizable ? 1 : 0;
+	vmOptions.resizable = opts.resizable;
+	vmOptions.fullscreen = opts.fullscreen;
+	vmOptions.borderless = opts.borderless;
+	vmOptions.forceAspectRatio = opts.forceAspectRatio;
 
 	rc = Scratch3VMInit(S, &vmOptions);
 	if (rc != SCRATCH3_ERROR_SUCCESS)

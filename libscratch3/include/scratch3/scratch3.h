@@ -73,6 +73,10 @@ typedef struct _Scratch3VMOptions
 	int resizable;
 
 	int preload;
+
+	int fullscreen;
+	int borderless;
+	int forceAspectRatio;
 } Scratch3VMOptions;
 
 typedef void (*Scratch3LogFn)(Scratch3 *S, const char *message, size_t len, int severity, void *up);
