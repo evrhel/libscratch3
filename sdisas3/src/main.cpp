@@ -5,62 +5,17 @@
 
 #include <codegen/opcode.hpp>
 #include <codegen/compiler.hpp>
+#include <codegen/util.hpp>
 #include <ast/ast.hpp>
 
 #include <SDL.h>
 
-struct CostumeInfo
-{
-	char *name;
-	char *format;
-	int32_t bitmapResolution;
-	double rotationCenterX;
-	double rotationCenterY;
-	uint64_t offset;
-	uint64_t size;
-};
-
-struct SoundInfo
-{
-	char *name;
-	char *format;
-	double rate;
-	uint32_t sampleCount;
-	uint64_t offset;
-	uint64_t size;
-};
-
-struct ScriptInfo
-{
-	uint64_t offset;
-};
-
-struct SpriteTableEntry
-{
-	char *name;
-	double x, y;
-	double size;
-	double direction;
-	uint64_t currentCostume;
-	uint64_t layer;
-	bool visible;
-	bool isStage;
-	bool draggable;
-	const char *rotationStyle;
-	uint64_t initializer;
-	std::vector<ScriptInfo> scripts;
-	std::vector<CostumeInfo> costumes;
-	std::vector<SoundInfo> sounds;
-};
-
 struct InstructionInfo
 {
-	const SpriteTableEntry *sprite;
+	const bc::Sprite *sprite;
 	uint64_t index;
 	bool isInitializer;
 };
-
-using SpriteTable = std::vector<SpriteTableEntry>;
 
 static void usage()
 {
@@ -72,13 +27,10 @@ static void usage()
 	printf("  -t, --table        Show the sprite table\n");
 }
 
-static void ShowSummary(uint8_t *fileData, size_t fileSize, const SpriteTable &st);
-static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTable &st);
-static void ShowTable(const SpriteTable &st);
-
-static void ParseSpriteTable(uint8_t *fileData, size_t fileSize, SpriteTable *table);
-static uint8_t *ParseTableEntry(uint8_t *fileData, size_t fileSize, uint8_t *ptr, SpriteTableEntry *entry);
-static InstructionInfo *GetInstructionInfo(const SpriteTable &st, uint64_t offset);
+static InstructionInfo *GetInstructionInfo(uint8_t *fileData, size_t fileSize, uint64_t offset);
+static void ShowSummary(uint8_t *fileData, size_t fileSize);
+static void ShowDissasembly(uint8_t *fileData, size_t fileSize);
+static void ShowTable(uint8_t *fileData, size_t fileSize);
 
 int main(int argc, char *argv[])
 {
@@ -144,25 +96,23 @@ int main(int argc, char *argv[])
 
 	printf("Dump of file `%s`\n", file);
 
-	SpriteTable st;
-	ParseSpriteTable(fileData, size, &st);
 
 	if (summarize)
 	{
 		printf("\n");
-		ShowSummary(fileData, size, st);
+		ShowSummary(fileData, size);
 	}
 
 	if (disas)
 	{
 		printf("\n");
-		ShowDissasembly(fileData, size, st);
+		ShowDissasembly(fileData, size);
 	}
 
 	if (table)
 	{
 		printf("\n");
-		ShowTable(st);
+		ShowTable(fileData, size);
 	}
 
 	return 0;
@@ -183,23 +133,35 @@ static const char *GetRotationStyle(uint8_t style)
 	}
 }
 
-static void ShowSummary(uint8_t *fileData, size_t fileSize, const SpriteTable &st)
+static void ShowSummary(uint8_t *fileData, size_t fileSize)
 {
-	ProgramHeader *header = (ProgramHeader *)fileData;
+	bc::Header *header = (bc::Header *)fileData;
 
 	printf("  Summary\n\n");
 
-	printf("    %8X .text\n", header->text);
-	printf("    %8X .stable\n", header->stable);
-	printf("    %8X .data\n", header->data);
-	printf("    %8X .rdata\n", header->rdata);
+	printf("    %8X  Version\n", header->version);
+
+	if (header->text_size)
+		printf("    %8llX .text\n", header->text);
+
+	if (header->stable_size)
+		printf("    %8llX .stable\n", header->stable);
+
+	if (header->data_size)
+		printf("    %8llX .data\n", header->data);
+
+	if (header->rdata_size)
+		printf("    %8llX .rdata\n", header->rdata);
+
+	if (header->debug_size)
+		printf("    %8llX .debug\n", header->debug);
 }
 
-static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTable &st)
+static void ShowDissasembly(uint8_t *fileData, size_t fileSize)
 {
 	printf("  Disassembly\n\n");
 
-	ProgramHeader *header = (ProgramHeader *)fileData;
+	bc::Header *header = (bc::Header *)fileData;
 	uint8_t *text, *stable, *data, *rdata;
 
 	text = fileData + header->text;
@@ -216,22 +178,26 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTabl
 	uint8_t *ptr = text;
 	while (ptr < textEnd)
 	{
-		const InstructionInfo *info = GetInstructionInfo(st, ptr - fileData);
+		Opcode opcode = (Opcode)*ptr;
+
+		const InstructionInfo *info = GetInstructionInfo(fileData, fileSize, ptr - fileData);
 		if (info)
 		{
 			if (ptr != text)
 				printf("\n");
 
-			printf("    %8s  ", info->sprite->name);
+			printf("    %8s  ", (char *)(fileData + info->sprite->name));
 			if (info->isInitializer)
 				printf("<init>\n");
 			else
 				printf("script %llu\n", info->index);
 		}
+		else if (opcode == Op_enter)
+		{
+			printf("\n              <proc>\n");
+		}
 
-		uint8_t opcode = *ptr;
-
-		printf("    %8X  ", (uint32_t)(ptr - text));
+		printf("    %8X  ", (uint32_t)(ptr - fileData));
 
 		ptr++;
 		switch (opcode)
@@ -245,14 +211,17 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTabl
 		case Op_int:
 			printf("int\n");
 			break;
-		case Op_varset:
-			printf("varset\n");
+		case Op_setstatic:
+			printf("setstatic %u\n", ((bc::VarId *)ptr)->ToInt());
+			ptr += sizeof(bc::VarId);
 			break;
-		case Op_varadd:
-			printf("varadd\n");
+		case Op_getstatic:
+			printf("getstatic %u\n", ((bc::VarId *)ptr)->ToInt());
+			ptr += sizeof(bc::VarId);
 			break;
-		case Op_varget:
-			printf("varget\n");
+		case Op_addstatic:
+			printf("addstatic %u\n", ((bc::VarId *)ptr)->ToInt());
+			ptr += sizeof(bc::VarId);
 			break;
 		case Op_listcreate:
 			printf("listcreate %llu\n", *(uint64_t *)ptr);
@@ -269,6 +238,28 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTabl
 		case Op_jnz:
 			printf("jnz %llX\n", *(int64_t *)ptr);
 			ptr += sizeof(int64_t);
+			break;
+		case Op_call: {
+			uint8_t warp = *ptr;
+			ptr += sizeof(uint8_t);
+
+			uint16_t argc = *(uint16_t *)ptr;
+			ptr += sizeof(uint16_t);
+
+			uint64_t offset = *(uint64_t *)ptr;
+			ptr += sizeof(uint64_t);
+
+			printf("call %llX (argc=%hX warp=%s)\n", offset, argc, warp ? "true" : "false");
+			break;
+		}
+		case Op_ret:
+			printf("ret\n");
+			break;
+		case Op_enter:
+			printf("enter\n");
+			break;
+		case Op_leave:
+			printf("leave\n");
 			break;
 		case Op_yield:
 			printf("yield\n");
@@ -298,9 +289,12 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTabl
 			printf("pushstring %08llX -> %s\n", *(uint64_t *)ptr, str->str);
 			ptr += sizeof(uint64_t);
 			break;
-		case Op_dup:
-			printf("dup\n");
+		case Op_push: {
+			int16_t idx = *(int16_t *)ptr;
+			ptr += sizeof(int16_t);
+			printf("push %hd\n", idx);
 			break;
+		}
 		case Op_eq:
 			printf("eq\n");
 			break;
@@ -803,184 +797,70 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize, const SpriteTabl
 	}
 }
 
-static void ShowTable(const SpriteTable &st)
+static void ShowTable(uint8_t *fileData, size_t fileSize)
 {
+	bc::Header *header = (bc::Header *)fileData;
+	bc::SpriteTable *st = (bc::SpriteTable *)(fileData + header->stable);
+
 	printf("  Sprite Table\n\n");
 
-	printf("    %8zu  Sprite Count\n\n", st.size());
+	printf("    %8llu  Sprite Count\n\n", st->count);
 
-	for (size_t i = 0; i < st.size(); i++)
+	for (bc::uint64 i = 0; i < st->count; i++)
 	{
-		const SpriteTableEntry &entry = st[i];
+		bc::Sprite &sprite = st->sprites[i];
 
-		printf("    %8s\n", entry.name);
-		printf("    %8lg  X\n", entry.x);
-		printf("    %8lg  Y\n", entry.y);
-		printf("    %8lg  Size\n", entry.size);
-		printf("    %8lg  Direction\n", entry.direction);
-		printf("    %8llu  Current Costume\n", entry.currentCostume);
-		printf("    %8llu  Layer\n", entry.layer);
-		printf("    %8s  Visible\n", entry.visible ? "true" : "false");
-		printf("    %8s  Is Stage\n", entry.isStage ? "true" : "false");
-		printf("    %8s  Draggable\n", entry.draggable ? "true" : "false");
-		printf("    %8s  Rotation Style\n", entry.rotationStyle);
-		printf("    %8llX  Initializer\n", entry.initializer);
-		printf("    %8zu  Scripts\n", entry.scripts.size());
+		printf("    %8s\n", (char *)(fileData + sprite.name));
+		printf("    %8lg  X\n", sprite.x);
+		printf("    %8lg  Y\n", sprite.y);
+		printf("    %8lg  Size\n", sprite.size);
+		printf("    %8lg  Direction\n", sprite.direction);
+		printf("    %8llu  Current Costume\n", sprite.currentCostume);
+		printf("    %8llu  Layer\n", sprite.layer);
+		printf("    %8s  Visible\n", sprite.visible ? "true" : "false");
+		printf("    %8s  Is Stage\n", sprite.isStage ? "true" : "false");
+		printf("    %8s  Draggable\n", sprite.draggable ? "true" : "false");
+		printf("    %8s  Rotation Style\n", GetRotationStyle(sprite.rotationStyle));
+		printf("    %8llX  Initializer\n", sprite.initializer.offset);
+		printf("    %8llu  Scripts\n", sprite.numScripts);
 		// Don't display additional information about scripts
 
-		printf("    %8zu  Costumes\n", entry.costumes.size());
-		for (size_t j = 0; j < entry.costumes.size(); j++)
-		{
-			const CostumeInfo &costume = entry.costumes[j];
+		printf("    %8llu  Costumes\n", sprite.numCostumes);
 
-			printf("              %s\n", costume.name);
-			printf("              %8s  Format\n", costume.format);
+		bc::Costume *costumes = (bc::Costume *)(fileData + sprite.costumes);
+		for (size_t j = 0; j < sprite.numCostumes; j++)
+		{
+			bc::Costume &costume = costumes[j];
+
+			printf("              %s\n", (char *)(fileData + costume.name));
+			printf("              %8s  Format\n", (char *)(fileData + costume.format));
 			printf("              %8d  Bitmap Resolution\n", costume.bitmapResolution);
 			printf("              %8lg  Rotation Center X\n", costume.rotationCenterX);
 			printf("              %8lg  Rotation Center Y\n", costume.rotationCenterY);
-			printf("              %8llX  Offset\n", costume.offset);
-			printf("              %8llu  Size\n", costume.size);
+			printf("              %8llu  Size\n", costume.dataSize);
+			printf("              %8llX  Offset\n", costume.data);
 		}
 
-		printf("    %8zu  Sounds\n", entry.sounds.size());
-		for (size_t j = 0; j < entry.sounds.size(); j++)
-		{
-			const SoundInfo &sound = entry.sounds[j];
+		printf("    %8llu  Sounds\n", sprite.numSounds);
 
-			printf("              %s\n", sound.name);
-			printf("              %8s  Format\n", sound.format);
+		bc::Sound *sounds = (bc::Sound *)(fileData + sprite.sounds);
+		for (size_t j = 0; j < sprite.numSounds; j++)
+		{
+			bc::Sound &sound = sounds[j];
+
+			printf("              %s\n", (char *)(fileData + sound.name));
+			printf("              %8s  Format\n", (char *)(fileData + sound.format));
 			printf("              %8lg  Rate\n", sound.rate);
-			printf("              %8u  Sample Count\n", sound.sampleCount);
-			printf("              %8llX  Offset\n", sound.offset);
-			printf("              %8llu  Size\n", sound.size);
+			printf("              %8llu  Sample Count\n", sound.sampleCount);
+			printf("              %8llu  Size\n", sound.dataSize);
+			printf("              %8llX  Offset\n", sound.data);
 		}
 
 		printf("\n");
 	}
 }
 
-static void ParseSpriteTable(uint8_t *fileData, size_t fileSize, SpriteTable *table)
-{
-	ProgramHeader *header = (ProgramHeader *)fileData;
-	uint8_t *ptr = fileData + header->stable;
-
-	table->resize(*(uint64_t *)ptr);
-	ptr += sizeof(uint64_t);
-
-	for (size_t i = 0; i < table->size(); i++)
-	{
-		SpriteTableEntry &entry = (*table)[i];
-		ptr = ParseTableEntry(fileData, fileSize, ptr, &entry);
-	}
-}
-
-static uint8_t *ParseTableEntry(uint8_t *fileData, size_t fileSize, uint8_t *ptr, SpriteTableEntry *entry)
-{
-	entry->name = (char *)(fileData + *(uint64_t *)ptr);
-	ptr += sizeof(uint64_t);
-
-	entry->x = *(double *)ptr;
-	ptr += sizeof(double);
-
-	entry->y = *(double *)ptr;
-	ptr += sizeof(double);
-
-	entry->size = *(double *)ptr;
-	ptr += sizeof(double);
-
-	entry->direction = *(double *)ptr;
-	ptr += sizeof(double);
-
-	entry->currentCostume = *(int64_t *)ptr;
-	ptr += sizeof(int64_t);
-
-	entry->layer = *(int64_t *)ptr;
-	ptr += sizeof(int64_t);
-
-	entry->visible = *ptr;
-	ptr++;
-
-	entry->isStage = *ptr;
-	ptr++;
-
-	entry->draggable = *ptr;
-	ptr++;
-
-	entry->rotationStyle = GetRotationStyle(*ptr);
-	ptr++;
-
-	entry->initializer = *(uint64_t *)ptr;
-	ptr += sizeof(uint64_t);
-
-	entry->scripts.resize(*(uint64_t *)ptr);
-	ptr += sizeof(uint64_t);
-
-	for (size_t j = 0; j < entry->scripts.size(); j++)
-	{
-		ScriptInfo &script = entry->scripts[j];
-		script.offset = *(uint64_t *)ptr;
-		ptr += sizeof(uint64_t);
-	}
-
-	entry->costumes.resize(*(uint64_t *)ptr);
-	ptr += sizeof(uint64_t);
-
-	for (size_t j = 0; j < entry->costumes.size(); j++)
-	{
-		CostumeInfo &costume = entry->costumes[j];
-
-		costume.name = (char *)(fileData + *(uint64_t *)ptr);
-		ptr += sizeof(uint64_t);
-
-		costume.format = (char *)(fileData + *(uint64_t *)ptr);
-		ptr += sizeof(uint64_t);
-
-		costume.bitmapResolution = *(int32_t *)ptr;
-		ptr += sizeof(int32_t);
-
-		costume.rotationCenterX = *(double *)ptr;
-		ptr += sizeof(double);
-
-		costume.rotationCenterY = *(double *)ptr;
-		ptr += sizeof(double);
-
-		costume.offset = *(uint64_t *)ptr;
-		ptr += sizeof(uint64_t);
-
-		costume.size = *(uint64_t *)ptr;
-		ptr += sizeof(uint64_t);
-	}
-
-	entry->sounds.resize(*(uint64_t *)ptr);
-	ptr += sizeof(uint64_t);
-
-	for (size_t j = 0; j < entry->sounds.size(); j++)
-	{
-		SoundInfo &sound = entry->sounds[j];
-
-		sound.name = (char *)(fileData + *(uint64_t *)ptr);
-		ptr += sizeof(uint64_t);
-
-		sound.format = (char *)(fileData + *(uint64_t *)ptr);
-		ptr += sizeof(uint64_t);
-
-		sound.rate = *(double *)ptr;
-		ptr += sizeof(double);
-
-		sound.sampleCount = *(uint32_t *)ptr;
-		ptr += sizeof(uint32_t);
-
-		sound.offset = *(uint64_t *)ptr;
-		ptr += sizeof(uint64_t);
-
-		sound.size = *(uint64_t *)ptr;
-		ptr += sizeof(uint64_t);
-	}
-
-	return ptr;
-}
-
-static InstructionInfo *GetInstructionInfo(const SpriteTable &st, uint64_t offset)
+static InstructionInfo *GetInstructionInfo(uint8_t *fileData, size_t fileSize, uint64_t offset)
 {
 	static InstructionInfo info;
 
@@ -988,9 +868,14 @@ static InstructionInfo *GetInstructionInfo(const SpriteTable &st, uint64_t offse
 	info.index = 0;
 	info.isInitializer = false;
 
-	for (const SpriteTableEntry &ste : st)
+	bc::Header *header = (bc::Header *)fileData;
+	bc::SpriteTable *st = (bc::SpriteTable *)(fileData + header->stable);
+
+	for (bc::uint64 i = 0; i < st->count; i++)
 	{
-		if (ste.initializer == offset)
+		bc::Sprite &ste = st->sprites[i];
+
+		if (ste.initializer.offset == offset)
 		{
 			info.sprite = &ste;
 			info.index = 0;
@@ -998,9 +883,10 @@ static InstructionInfo *GetInstructionInfo(const SpriteTable &st, uint64_t offse
 			return &info;
 		}
 
-		for (size_t i = 0; i < ste.scripts.size(); i++)
+		bc::Script *scripts = (bc::Script *)(fileData + ste.scripts);
+		for (bc::uint64 j = 0; j < ste.numScripts; j++)
 		{
-			const ScriptInfo &si = ste.scripts[i];
+			bc::Script &si = scripts[j];
 			if (si.offset == offset)
 			{
 				info.sprite = &ste;

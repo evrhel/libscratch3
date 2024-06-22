@@ -8,12 +8,9 @@ enum Opcode : uint8_t
 
 	Op_int = 0x01,
 
-	Op_varset,
-	Op_varadd,
-	Op_varget,
-
 	Op_setstatic,
 	Op_getstatic,
+	Op_addstatic,
 
 	Op_listcreate, // Create list
 
@@ -37,7 +34,7 @@ enum Opcode : uint8_t
 	Op_pushfalse,
 	Op_pushstring,
 
-	Op_dup, // Duplicate top of stack
+	Op_push, // Push value from stack
 
 	Op_eq,
 	Op_neq,
@@ -177,7 +174,7 @@ enum Opcode : uint8_t
 	Op_listlen,
 	Op_listcontains,
 
-	Op_ext = 0xff // Extension operation, check next 2 byte (extension id, extension opcode)
+	Op_ext = 0xff // Extension operation, check next 2 bytes (extension id, extension opcode)
 };
 
 enum ExtId
@@ -191,15 +188,15 @@ enum Opcode_Pen
 {
 	Op_Pen_noop = 0x00,
 
-	Op_Pen_erase = 0x10,
-	Op_Pen_stamp = 0x11,
-	Op_Pen_pendown = 0x12,
-	Op_Pen_penup = 0x13,
-	Op_Pen_addparam = 0x14,
-	Op_Pen_setparam = 0x15,
-	Op_Pen_findparam = 0x16,
-	Op_Pen_addsize = 0x17,
-	Op_Pen_setsize = 0x18
+	Op_Pen_erase,
+	Op_Pen_stamp,
+	Op_Pen_pendown,
+	Op_Pen_penup,
+	Op_Pen_addparam,
+	Op_Pen_setparam,
+	Op_Pen_findparam,
+	Op_Pen_addsize,
+	Op_Pen_setsize
 };
 
 struct Instruction

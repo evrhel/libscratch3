@@ -219,9 +219,10 @@ void Sprite::Update()
     }
 }
 
-void Sprite::Init(const SpriteInfo *info)
+void Sprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info)
 {
-    SetString(_name, info->name);
+    // Set basic properties
+    SetString(_name, (char *)(bytecode + info->name));
     _x = info->x;
     _y = info->y;
     _size = info->size;
@@ -231,21 +232,29 @@ void Sprite::Init(const SpriteInfo *info)
     _shown = info->visible;
     _isStage = info->isStage;
     _draggable = info->draggable;
-    _rotationStyle = info->rotationStyle;
+    _rotationStyle = (RotationStyle)info->rotationStyle;
 
-    _nCostumes = info->costumes.size();
+    // Allocate costumes
+    _nCostumes = info->numCostumes;
     _costumes = new Costume[_nCostumes];
+    
+    // Initialize costumes
+    bc::Costume *costumes = (bc::Costume *)(bytecode + info->costumes);
     for (int64_t i = 0; i < _nCostumes; i++)
     {
-        _costumes[i].Init(&info->costumes[i]);
+        _costumes[i].Init(bytecode, bytecodeSize, &costumes[i]);
         _costumeNameMap[_costumes[i].GetName()] = i + 1;
     }
 
-    _nSounds = info->sounds.size();
+    // Allocate sounds
+    _nSounds = info->numSounds;
     _sounds = new Sound[_nSounds];
+
+    // Initialize sounds
+    bc::Sound *sounds = (bc::Sound *)(bytecode + info->sounds);
     for (int64_t i = 0; i < _nSounds; i++)
     {
-		_sounds[i].Init(&info->sounds[i], &_dsp);
+		_sounds[i].Init(bytecode, bytecodeSize, &sounds[i], &_dsp);
 		_soundNameMap[_sounds[i].GetName()] = i;
 	}
 }

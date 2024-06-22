@@ -1,10 +1,10 @@
-#include "preload.hpp"
+/*#include "preload.hpp"
 
-#include "../codegen/compiler.hpp"
+#include "../codegen/util.hpp"
 
 static uint8_t *ParseCostume(uint8_t *bytecode, size_t bytecodeSize, uint8_t *loc, CostumeInfo *info)
 {
-	uint8_t *ptr = loc;
+	bc::Costume *costume = (bc::Costume *)loc;
 
 	info->name = (char *)(bytecode + *(uint64_t *)ptr);
 	ptr += sizeof(uint64_t);
@@ -27,12 +27,12 @@ static uint8_t *ParseCostume(uint8_t *bytecode, size_t bytecodeSize, uint8_t *lo
 	info->dataSize = *(uint64_t *)ptr;
 	ptr += sizeof(uint64_t);
 
-	return ptr;
+	return loc + sizeof(bc::Costume);
 }
 
 static uint8_t *ParseSound(uint8_t *bytecode, size_t bytecodeSize, uint8_t *loc, SoundInfo *info)
 {
-	uint8_t *ptr = loc;
+	bc::Sound *sound = (bc::Sound *)loc;
 
 	info->name = (char *)(bytecode + *(uint64_t *)ptr);
 	ptr += sizeof(uint64_t);
@@ -52,48 +52,25 @@ static uint8_t *ParseSound(uint8_t *bytecode, size_t bytecodeSize, uint8_t *loc,
 	info->dataSize = *(uint64_t *)ptr;
 	ptr += sizeof(uint64_t);
 
-	return ptr;
+	return loc + sizeof(bc::Sound);
 }
 
 static uint8_t *ParseSprite(uint8_t *bytecode, size_t bytecodeSize, uint8_t *loc, SpriteInfo *info)
 {
-	uint8_t *ptr = loc;
+	bc::Sprite *sprite = (bc::Sprite *)loc;
 
-	info->name = (char *)(bytecode + *(uint64_t *)ptr);
-	ptr += sizeof(uint64_t);
-
-	info->x = *(double *)ptr;
-	ptr += sizeof(double);
-
-	info->y = *(double *)ptr;
-	ptr += sizeof(double);
-
-	info->size = *(double *)ptr;
-	ptr += sizeof(double);
-
+	info->name = (char *)(bytecode + sprite->name);
+	info->x = sprite->x;
+	info->y = sprite->y;
+	info->size = sprite->size;
 	info->direction = *(double *)ptr;
-	ptr += sizeof(double);
-
 	info->currentCostume = *(int64_t *)ptr;
-	ptr += sizeof(int64_t);
-
 	info->layer = *(int64_t *)ptr;
-	ptr += sizeof(int64_t);
-
 	info->visible = *(uint8_t *)ptr;
-	ptr += sizeof(uint8_t);
-
 	info->isStage = *(uint8_t *)ptr;
-	ptr += sizeof(uint8_t);
-
 	info->draggable = *(uint8_t *)ptr;
-	ptr += sizeof(uint8_t);
-
 	info->rotationStyle = (RotationStyle)*(uint8_t *)ptr;
-	ptr += sizeof(uint8_t);
-
 	info->init.loc = bytecode + *(uint64_t *)ptr;
-	ptr += sizeof(uint64_t);
 
 	info->scripts.resize(*(uint64_t *)ptr);
 	ptr += sizeof(uint64_t);
@@ -123,12 +100,12 @@ static uint8_t *ParseSprite(uint8_t *bytecode, size_t bytecodeSize, uint8_t *loc
 		ptr = ParseSound(bytecode, bytecodeSize, ptr, &sound);
 	}
 
-	return ptr;
+	return loc + sizeof(bc::Sprite);
 }
 
 void ParseSprites(uint8_t *bytecode, size_t bytecodeSize, ParsedSprites *sprites)
 {
-	ProgramHeader *header = (ProgramHeader *)bytecode;
+	bc::Header *header = (bc::Header *)bytecode;
 	uint8_t *ptr = bytecode + header->stable;
 
 	uint64_t count = *(uint64_t *)ptr;
@@ -141,3 +118,4 @@ void ParseSprites(uint8_t *bytecode, size_t bytecodeSize, ParsedSprites *sprites
 		ptr = ParseSprite(bytecode, bytecodeSize, ptr, &info);
 	}
 }
+*/

@@ -1727,13 +1727,27 @@ struct ProcProto : public Statement
 		//   1,
 		//   "argument reporter block id"
 		// ]
-		arguments.emplace_back(key, val);
-		return true;
+
+		ArgReporterStringNumber *arsn = val->As<ArgReporterStringNumber>();
+		if (arsn)
+		{
+			arguments.emplace_back(key, arsn->value);
+			return true;
+		}
+
+		ArgReporterBoolean *arb = val->As<ArgReporterBoolean>();
+		if (arb)
+		{
+			arguments.emplace_back(key, arb->value);
+			return true;
+		}
+
+		return false;
 	}
 
 	std::string proccode;
 
-	std::vector<std::pair<std::string, AutoRelease<Reporter>>> arguments;
+	std::vector<std::pair<std::string, std::string>> arguments;
 
 	bool warp = false;
 };
@@ -1775,8 +1789,6 @@ struct DefineProc : public Statement
 	}
 
 	AutoRelease<ProcProto> proto;
-
-	// StatementList *sl = nullptr;
 };
 
 // [?name ?args...]

@@ -3,13 +3,27 @@
 #include <cstdio>
 
 #include "opcode.hpp"
+#include "util.hpp"
 
 #include <SDL.h>
 
 struct ProcInfo
 {
-	uint64_t offset;
 	ProcProto *proto;
+
+	bool FindArgument(const std::string &name, bc::VarId *id) const
+	{
+		for (size_t i = 0; i < proto->arguments.size(); ++i)
+		{
+			if (proto->arguments[i].second == name)
+			{
+				*id = bc::VarId(i);
+				return true;
+			}
+		}
+
+		return false;
+	}
 };
 
 class Compiler : public Visitor
@@ -321,8 +335,15 @@ public:
 
 	virtual void Visit(VariableExpr *node)
 	{
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined variable %s\n", node->id.c_str());
+			abort();
+		}
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
 	}
 
 	virtual void Visit(BroadcastExpr *node)
@@ -332,38 +353,80 @@ public:
 
 	virtual void Visit(ListExpr *node)
 	{
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
 	}
 
 	virtual void Visit(ListAccess *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		node->e->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listat);
 	}
 
 	virtual void Visit(IndexOf *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		node->e->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listfind);
 	}
 
 	virtual void Visit(ListLength *node)
 	{
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listlen);
 	}
 
 	virtual void Visit(ListContains *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		node->e->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listcontains);
 	}
 
@@ -381,6 +444,8 @@ public:
 		{
 			// implicit stop
 			cp.WriteOpcode(Op_stopself);
+
+			cp.WriteOpcode(Op_int);
 			cp.AlignText();
 		}
 	}
@@ -733,7 +798,7 @@ public:
 
 		// loop until condition is false
 		cp.WriteOpcode(Op_jnz);
-		cp.WriteText<int64_t>(waitFalseTop);
+		cp.WriteReference(Segment_text, Segment_text, waitFalseTop);
 
 		uint64_t waitTrueTop = cp._text.size();
 		switch (node->value)
@@ -756,7 +821,7 @@ public:
 
 		// loop until condition is true
 		cp.WriteOpcode(Op_jz);
-		cp.WriteText<int64_t>(waitTrueTop);
+		cp.WriteReference(Segment_text, Segment_text, waitTrueTop);
 
 		// done
 	}
@@ -796,15 +861,15 @@ public:
 		cp.WriteOpcode(Op_round);
 
 		uint64_t top = cp._text.size();
-		uint64_t jz;
 
 		// check counter
-		cp.WriteOpcode(Op_dup);
+		cp.WriteOpcode(Op_push);
+		cp.WriteText<int16_t>(-1); // top of stack
+
 		cp.PushValue(zero);
 		cp.WriteOpcode(Op_gt);
 		cp.WriteOpcode(Op_jz);
-		jz = cp._text.size();
-		cp.WriteText<uint64_t>(0); // placeholder
+		DataReference &jz = cp.WriteReference(Segment_text, Segment_text);
 
 		if (node->sl)
 			node->sl->Accept(this);
@@ -817,7 +882,7 @@ public:
 		// jump back to top
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
-		(uint64_t &)cp._text[jz] = cp._text.size();
+		jz.off = cp._text.size(); // set jump destination
 
 		// pop counter
 		cp.WriteOpcode(Op_pop);
@@ -841,17 +906,14 @@ public:
 		if (!node->sl)
 			return; // empty if substack, discard
 
-		int64_t jz;
-
 		node->e->Accept(this);
 
 		cp.WriteOpcode(Op_jz);
-		jz = cp._text.size();
-		cp.WriteText<uint64_t>(0); // placeholder
+		DataReference &jz = cp.WriteReference(Segment_text, Segment_text);
 
 		node->sl->Accept(this);
 
-		(uint64_t &)cp._text[jz] = cp._text.size();
+		jz.off = cp._text.size(); // set jump destination
 	}
 
 	virtual void Visit(IfElse *node)
@@ -864,17 +926,14 @@ public:
 			// no true substack
 			// functionally equivalent to If with inverted condition
 
-			int64_t jnz;
-
 			node->e->Accept(this);
 
 			cp.WriteOpcode(Op_jnz);
-			jnz = cp._text.size();
-			cp.WriteText<uint64_t>(0); // placeholder
+			DataReference &jnz = cp.WriteReference(Segment_text, Segment_text);
 
 			node->sl2->Accept(this);
 
-			(uint64_t &)cp._text[jnz] = cp._text.size();
+			jnz.off = cp._text.size(); // set jump destination
 
 			return;
 		}
@@ -892,60 +951,54 @@ public:
 			return;
 		}
 
-		int64_t jz;
-		int64_t trueJmp;
-
 		node->e->Accept(this);
 
 		// conditional jump to else block
 		cp.WriteOpcode(Op_jz);
-		jz = cp._text.size();
-		cp.WriteText<uint64_t>(0); // placeholder
+		DataReference &jz = cp.WriteReference(Segment_text, Segment_text);
 
 		node->sl1->Accept(this);
 
 		// unconditional jump to end
 		cp.WriteOpcode(Op_jmp);
-		trueJmp = cp._text.size();
-		cp.WriteText<int64_t>(0); // placeholder
+		DataReference &trueJmp = cp.WriteReference(Segment_text, Segment_text);
 
 		// set jump destination for else block
-		(uint64_t &)cp._text[jz] = cp._text.size();
+		jz.off = cp._text.size();
 
 		node->sl2->Accept(this);
 
 		// set jump destination for end
-		(int64_t &)cp._text[trueJmp] = cp._text.size();
+		trueJmp.off = cp._text.size();
 	}
 
 	virtual void Visit(WaitUntil *node)
 	{
-		int64_t top, jnz;
+		uint64_t top;
 
 		top = cp._text.size();
 		node->e->Accept(this);
 
 		cp.WriteOpcode(Op_jnz);
-		jnz = cp._text.size();
+		DataReference &jnz = cp.WriteReference(Segment_text, Segment_text);
 		cp.WriteText<int64_t>(0); // placeholder
 
 		cp.WriteOpcode(Op_yield);
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
 		// set jump destination for condition
-		(int64_t &)cp._text[jnz] = cp._text.size();
+		jnz.off = cp._text.size();
 	}
 
 	virtual void Visit(RepeatUntil *node)
 	{
-		int64_t top, jnz;
+		int64_t top;
 
 		top = cp._text.size();
 		node->e->Accept(this);
 
 		cp.WriteOpcode(Op_jnz);
-		jnz = cp._text.size();
-		cp.WriteText<int64_t>(0); // placeholder
+		DataReference &jnz = cp.WriteReference(Segment_text, Segment_text);
 
 		if (node->sl)
 			node->sl->Accept(this);
@@ -954,7 +1007,7 @@ public:
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
 		// set jump destination for condition
-		(int64_t &)cp._text[jnz] = cp._text.size();
+		jnz.off = cp._text.size();
 	}
 
 	virtual void Visit(Stop *node)
@@ -1008,16 +1061,32 @@ public:
 
 	virtual void Visit(SetVariable *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Undefined variable %s\n", node->id.c_str());
+			abort();
+		}
+
 		node->e->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varset);
+
+		cp.WriteOpcode(Op_setstatic);
+		cp.WriteText<bc::VarId>(it->second);
 	}
 
 	virtual void Visit(ChangeVariable *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Undefined variable %s\n", node->id.c_str());
+			abort();
+		}
+
 		node->e->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varadd);
+
+		cp.WriteOpcode(Op_addstatic);
+		cp.WriteText<bc::VarId>(it->second);
 	}
 
 	virtual void Visit(ShowVariable *node)
@@ -1034,43 +1103,89 @@ public:
 
 	virtual void Visit(AppendToList *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		node->e->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listadd);
 	}
 
 	virtual void Visit(DeleteFromList *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		node->e->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listremove);
 	}
 
 	virtual void Visit(DeleteAllList *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listclear);
 	}
 
 	virtual void Visit(InsertInList *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		node->e1->Accept(this);
 		node->e2->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listinsert);
 	}
 
 	virtual void Visit(ReplaceInList *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		// flip to be more consistent with other list operations
 		node->e2->Accept(this);
 		node->e1->Accept(this);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varget);
+
+		cp.WriteOpcode(Op_getstatic);
+		cp.WriteText<bc::VarId>(it->second);
+
 		cp.WriteOpcode(Op_listreplace);
 	}
 
@@ -1086,13 +1201,11 @@ public:
 		cp.WriteOpcode(Op_varhide);
 	}
 
-	virtual void Visit(ProcProto *node)
-	{
-	}
+	virtual void Visit(ProcProto *node) {}
 
 	virtual void Visit(DefineProc *node)
 	{
-		std::string proccode = currentSprite + node->proto->proccode;
+		std::string proccode = currentSpriteName + node->proto->proccode;
 		auto it = procedureTable.find(proccode);
 		if (it != procedureTable.end())
 		{
@@ -1100,13 +1213,13 @@ public:
 			abort();
 		}
 
-		procedureTable[proccode] = ProcInfo{ cp._text.size(), node->proto.get() };
+		procedureTable[proccode] = ProcInfo{ node->proto.get() };
 	}
 
 	virtual void Visit(Call *node)
 	{
 		// lookup procedure
-		auto it = procedureTable.find(currentSprite + node->proccode);
+		auto it = procedureTable.find(currentSpriteName + node->proccode);
 		if (it == procedureTable.end())
 		{
 			printf("Error: Undefined procedure %s\n", node->proccode.c_str());
@@ -1123,12 +1236,13 @@ public:
 		}
 
 		// push arguments
-		for (auto &p : it->second.proto->arguments)
+		for (auto &arg : it->second.proto->arguments)
 		{
-			auto it = node->args.find(p.first);
+			auto it = node->args.find(arg.first);
 			if (it == node->args.end())
 			{
-				printf("Error: Argument %s missing in procedure call %s\n", p.first.c_str(), node->proccode.c_str());
+				printf("Error: Argument %s (%s) missing in procedure call %s\n",
+					arg.first.c_str(), arg.second.c_str(), node->proccode.c_str());
 				abort();
 			}
 
@@ -1136,8 +1250,13 @@ public:
 		}
 
 		cp.WriteOpcode(Op_call);
-		cp.WriteText<uint64_t>(it->second.offset);
-		cp.WriteText<uint64_t>(formalargc);
+		cp.WriteText<uint8_t>(it->second.proto->warp);
+		cp.WriteText<uint16_t>(actualargc);
+
+		// import symbol
+		uint64_t offset = cp._text.size();
+		cp._importSymbols.emplace_back(offset, currentSpriteName + it->second.proto->proccode);
+		cp.WriteText<uint64_t>(0);
 	}
 
 	//
@@ -1207,23 +1326,69 @@ public:
 
 	virtual void Visit(ArgReporterStringNumber *node)
 	{
-		cp.PushString(node->value);
+		if (currentProc == nullptr)
+		{
+			// not in a procedure, push null
+			Value v;
+			InitializeValue(v);
+			cp.PushValue(v);
+			ReleaseValue(v);
+			return;
+		}
+
+		bc::VarId var;
+		if (!currentProc->FindArgument(node->value, &var))
+		{
+			printf("Error: Undefined argument %s\n", node->value.c_str());
+			abort();
+		}
+
+		// push argument
+		cp.WriteOpcode(Op_push);
+		cp.WriteText<bc::VarId>(var);
 	}
 
 	virtual void Visit(ArgReporterBoolean *node)
 	{
-		cp.PushString(node->value);
+		if (currentProc == nullptr)
+		{
+			// not in a procedure, push null
+			Value v;
+			InitializeValue(v);
+			cp.PushValue(v);
+			ReleaseValue(v);
+			return;
+		}
+
+		bc::VarId var;
+		if (!currentProc->FindArgument(node->value, &var))
+		{
+			printf("Error: Undefined argument %s\n", node->value.c_str());
+			abort();
+		}
+
+		// push argument
+		cp.WriteOpcode(Op_push);
+		cp.WriteText<bc::VarId>(var);
 	}
 
 	virtual void Visit(VariableDef *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined variable %s\n", node->id.c_str());
+			abort();
+		}
+
 		Value v;
 		InitializeValue(v);
 		SetParsedString(v, node->value->value);
 
 		cp.PushValue(v);
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varset);
+
+		cp.WriteOpcode(Op_setstatic);
+		cp.WriteText<bc::VarId>(it->second);
 
 		ReleaseValue(v);
 	}
@@ -1239,6 +1404,13 @@ public:
 
 	virtual void Visit(ListDef *node)
 	{
+		auto it = staticVariables.find(node->id);
+		if (it == staticVariables.end())
+		{
+			printf("Error: Undefined list %s\n", node->id.c_str());
+			abort();
+		}
+
 		Value v;
 		InitializeValue(v);
 
@@ -1253,8 +1425,8 @@ public:
 		cp.WriteOpcode(Op_listcreate);
 		cp.WriteText<int64_t>(size);
 
-		cp.PushString(node->id);
-		cp.WriteOpcode(Op_varset);
+		cp.WriteOpcode(Op_setstatic);
+		cp.WriteText<bc::VarId>(it->second);
 
 		ReleaseValue(v);
 	}
@@ -1272,110 +1444,245 @@ public:
 	{
 		uint64_t count = node->sll.size();
 
+		// Define procedures
 		for (AutoRelease<StatementList> &sl : node->sll)
 		{
-			topLevel = true;
 			DefineProc *proc = sl->sl[0]->As<DefineProc>();
 			if (proc != nullptr)
 			{
 				count--;
+				topLevel = true;
 				proc->Accept(this);
 			}
 		}
 
-		cp.WriteStable<uint64_t>(count);
-
+		// Generate code for procedures
 		for (AutoRelease<StatementList> &sl : node->sll)
 		{
-			topLevel = true;
+			DefineProc *proc = sl->sl[0]->As<DefineProc>();
+			if (proc != nullptr)
+			{
+				topLevel = true;
+
+				std::string name = currentSpriteName + proc->proto->proccode;
+
+				auto it = cp._exportSymbols.find(name);
+				if (it != cp._exportSymbols.end())
+				{
+					printf("Error: Duplicate procedure definition\n");
+					abort();
+				}
+
+				// export symbol
+				cp._exportSymbols[name] = cp._text.size();
+
+				currentProc = &procedureTable[name];
+
+				cp.WriteOpcode(Op_enter);
+
+				auto &statements = sl->sl;
+				for (size_t i = 1; i < statements.size(); i++)
+					statements[i]->Accept(this);
+
+				cp.WriteOpcode(Op_leave);
+				cp.WriteOpcode(Op_ret);
+
+				cp.WriteOpcode(Op_int);
+				cp.AlignText();
+
+				currentProc = nullptr;
+			}
+		}
+
+		currentSprite->numScripts = count;
+		if (count == 0)
+		{
+			// dont write empty script array
+			currentSprite->scripts = 0;
+			return;
+		}
+
+		uint64_t arrayStart = cp._rdata.size();
+
+		// Generate code for top-level statements
+		for (AutoRelease<StatementList> &sl : node->sll)
+		{
 			DefineProc *proc = sl->sl[0]->As<DefineProc>();
 			if (proc == nullptr)
 			{
-				cp.WriteReference(Segment_stable, Segment_text, cp._text.size());
+				topLevel = true;
+
+				bc::Script *script = (bc::Script *)cp.AllocRdata(sizeof(bc::Script));
+				cp.CreateReference(&script->offset, Segment_text);
+
 				sl->Accept(this);
 			}
 		}
+
+		// Create reference to script array
+		cp.CreateReference(&currentSprite->scripts, Segment_rdata, arrayStart);
 	}
 
-	virtual void Visit(CostumeDef *node)
-	{
-		Resource *rsrc = loader.Find(node->md5ext);
-		const uint8_t *data = rsrc->Data();
-		size_t size = rsrc->Size();
-
-		cp.WriteString(Segment_stable, node->name);
-		cp.WriteString(Segment_stable, node->dataFormat);
-		cp.WriteStable<int32_t>(node->bitmapResolution);
-		cp.WriteStable<double>(node->rotationCenterX);
-		cp.WriteStable<double>(node->rotationCenterY);
-		cp.WriteReference(Segment_stable, Segment_rdata, cp._rdata.size());
-		cp.WriteStable<uint64_t>(size);
-
-		cp.WriteRdata(data, size);
-	}
+	virtual void Visit(CostumeDef *node) {}
 
 	virtual void Visit(CostumeDefList *node)
 	{
-		cp.WriteStable<int64_t>(node->costumes.size());
-		for (AutoRelease<CostumeDef> &costume : node->costumes)
-			costume->Accept(this);
+		currentSprite->numCostumes = node->costumes.size();
+		if (currentSprite->numCostumes == 0)
+		{
+			// dont write empty costume array
+			currentSprite->costumes = 0;
+			return;
+		}
+
+		cp.CreateReference(&currentSprite->costumes, Segment_rdata);
+
+		uint64_t arrayStart = cp._rdata.size();
+
+		// Write array of costume definitions
+		for (AutoRelease<CostumeDef> &cd : node->costumes)
+		{
+			bc::Costume *costume = (bc::Costume *)cp.AllocRdata(sizeof(bc::Costume));
+			cp.CreateString(&costume->name, cd->name);
+			cp.CreateString(&costume->format, cd->dataFormat);
+			costume->bitmapResolution = cd->bitmapResolution;
+			costume->reserved = 0;
+			costume->rotationCenterX = cd->rotationCenterX;
+			costume->rotationCenterY = cd->rotationCenterY;
+
+			// Filled below
+			costume->dataSize = 0;
+			costume->data = 0;
+		}
+
+		// Write costume data
+		uint64_t i = 0;
+		for (AutoRelease<CostumeDef> &cd : node->costumes)
+		{
+			// do this every time, as the array might have been reallocated
+			bc::Costume *costumes = (bc::Costume *)(cp._rdata.data() + arrayStart);
+
+			Resource *rsrc = loader.Find(cd->md5ext);
+			if (!rsrc)
+			{
+				printf("Error: Missing resource %s\n", cd->md5ext.c_str());
+				abort();
+			}
+
+			const uint8_t *data = rsrc->Data();
+			size_t size = rsrc->Size();
+
+			// Write data and store reference in definition
+			bc::Costume &costume = costumes[i];
+			costume.dataSize = size;
+			cp.CreateReference(&costume.data, Segment_rdata);
+			cp.WriteRdata(data, size);
+
+			i++;
+		}
 	}
 
-	virtual void Visit(SoundDef *node)
-	{
-		Resource *rsrc = loader.Find(node->md5ext);
-		const uint8_t *data = rsrc->Data();
-		size_t size = rsrc->Size();
-
-		cp.WriteString(Segment_stable, node->name);
-		cp.WriteString(Segment_stable, node->dataFormat);
-		cp.WriteStable<double>(node->rate);
-		cp.WriteStable<uint32_t>(node->sampleCount);
-		cp.WriteReference(Segment_stable, Segment_rdata, cp._rdata.size());
-		cp.WriteStable<uint64_t>(size);
-
-		cp.WriteRdata(data, size);
-	}
+	virtual void Visit(SoundDef *node) {}
 
 	virtual void Visit(SoundDefList *node)
 	{
-		cp.WriteStable<int64_t>(node->sounds.size());
-		for (AutoRelease<SoundDef> &sound : node->sounds)
-			sound->Accept(this);
+		currentSprite->numSounds = node->sounds.size();
+		if (currentSprite->numSounds == 0)
+		{
+			// dont write empty sound array
+			currentSprite->sounds = 0;
+			return;
+		}
+
+		cp.CreateReference(&currentSprite->sounds, Segment_rdata);
+
+		uint64_t arrayStart = cp._stable.size();
+
+		// Write array of sound definitions
+		for (AutoRelease<SoundDef> &sd : node->sounds)
+		{
+			bc::Sound *sound = (bc::Sound *)cp.AllocRdata(sizeof(bc::Sound));
+			cp.CreateString(&sound->name, sd->name);
+			cp.CreateString(&sound->format, sd->dataFormat);
+			sound->rate = sd->rate;
+			sound->sampleCount = sd->sampleCount;
+
+			// Filled below
+			sound->dataSize = 0;
+			sound->data = 0;
+		}
+
+		// Write sound data
+		uint64_t i = 0;
+		for (AutoRelease<SoundDef> &sd : node->sounds)
+		{
+			// do this every time, as the array might have been reallocated
+			bc::Sound *sounds = (bc::Sound *)(cp._rdata.data() + arrayStart);
+
+			Resource *rsrc = loader.Find(sd->md5ext);
+			if (!rsrc)
+			{
+				printf("Error: Missing resource %s\n", sd->md5ext.c_str());
+				abort();
+			}
+
+			const uint8_t *data = rsrc->Data();
+			size_t size = rsrc->Size();
+
+			// Write data and store reference in definition
+			bc::Sound &sound = sounds[i];
+			sound.dataSize = size;
+			cp.CreateReference(&sound.data, Segment_rdata);
+			cp.WriteRdata(data, size);
+		}
 	}
 
 	virtual void Visit(SpriteDef *node)
 	{
-		currentSprite = node->name;
+		bc::Sprite *sprite = (bc::Sprite *)cp.AllocStable(sizeof(bc::Sprite));
 
-		cp.WriteString(Segment_stable, node->name);
-		cp.WriteStable<double>(node->x);
-		cp.WriteStable<double>(node->y);
-		cp.WriteStable<double>(node->size);
-		cp.WriteStable<double>(node->direction);
-		cp.WriteStable<int64_t>(node->currentCostume);
-		cp.WriteStable<int64_t>(node->layer);
+		currentSpriteName = node->name;
+		currentSprite = sprite;
 
-		cp.WriteStable<uint8_t>(node->visible);
-		cp.WriteStable<uint8_t>(node->isStage);
-		cp.WriteStable<uint8_t>(node->draggable);
-		cp.WriteStable<uint8_t>(RotationStyleFromString(node->rotationStyle));
+		// Basic data
+		cp.CreateString(&sprite->name, node->name);
+		sprite->x = node->x;
+		sprite->y = node->y;
+		sprite->direction = node->direction;
+		sprite->size = node->size;
+		sprite->currentCostume = node->currentCostume;
+		sprite->layer = node->layer;
+		sprite->visible = node->visible;
+		sprite->isStage = node->isStage;
+		sprite->draggable = node->draggable;
+		sprite->rotationStyle = RotationStyleFromString(node->rotationStyle);
 
-		// Reference to initializer
-		cp.WriteReference(Segment_stable, Segment_text, cp._text.size());
+		if (node->variables->variables.size() + node->lists->lists.size() > 0)
+		{
+			// Reference to initializer
+			cp.CreateReference(&sprite->initializer.offset, Segment_text);
 
-		// Write initializer to text segment
-		node->variables->Accept(this);
-		node->lists->Accept(this);
-		cp.WriteOpcode(Op_stopself);
-		cp.AlignText();
+			// Write initializer to text segment
+			node->variables->Accept(this);
+			node->lists->Accept(this);
+			cp.WriteOpcode(Op_stopself);
+			cp.AlignText();
+		}
+		else
+		{
+			// No initializer needed
+			sprite->initializer.offset = 0;
+		}
 
+		// Write scripts
 		node->scripts->Accept(this);
 
+		// Write costumes and sounds
 		node->costumes->Accept(this);
 		node->sounds->Accept(this);
 
-		currentSprite.clear();
+		currentSprite = nullptr;
+		currentSpriteName.clear();
 	}
 
 	virtual void Visit(SpriteDefList *node)
@@ -1437,6 +1744,9 @@ public:
 		MapStaticVariables(node);
 
 		node->sprites->Accept(this);
+
+		cp.FlushStringPool();
+		cp.Link();
 	}
 
 	CompiledProgram &cp;
@@ -1444,9 +1754,11 @@ public:
 	const Scratch3CompilerOptions &options;
 	bool topLevel = false;
 
-	std::string currentSprite;
+	std::string currentSpriteName;
+	bc::Sprite *currentSprite = nullptr;
+	ProcInfo *currentProc = nullptr;
 
-	std::unordered_map<std::string, uint64_t> staticVariables; // name -> index
+	std::unordered_map<std::string, bc::VarId> staticVariables; // name -> VarId
 
 	std::unordered_map<std::string, ProcInfo> procedureTable; // name -> ProcInfo
 
@@ -1456,14 +1768,14 @@ public:
 
 uint8_t *CompiledProgram::Export(size_t *outSize) const
 {
-	size_t size = sizeof(ProgramHeader) + _stable.size() + _text.size() + _data.size() + _rdata.size() + _debug.size();
+	size_t size = sizeof(bc::Header) + _stable.size() + _text.size() + _data.size() + _rdata.size() + _debug.size();
 	uint8_t *data = new uint8_t[size];
 
 	// write header
-	ProgramHeader *header = (ProgramHeader *)data;
+	bc::Header *header = (bc::Header *)data;
 	header->magic = PROGRAM_MAGIC;
 	header->version = PROGRAM_VERSION;
-	header->text = sizeof(ProgramHeader);
+	header->text = sizeof(bc::Header);
 	header->text_size = _text.size();
 	header->stable = header->text + header->text_size;
 	header->stable_size = _stable.size();
@@ -1472,7 +1784,7 @@ uint8_t *CompiledProgram::Export(size_t *outSize) const
 	header->rdata = header->data + header->data_size;
 	header->rdata_size = _rdata.size();
 	header->debug = header->rdata + header->rdata_size;
-	header->debug = _debug.size();
+	header->debug_size = _debug.size();
 
 	// write text segment
 	memcpy(data + header->text, _text.data(), _text.size());
@@ -1551,13 +1863,11 @@ void CompiledProgram::Write(SegmentType seg, const void *data, size_t size)
 {
 	switch (seg)
 	{
-	default:
+	case Segment_text:
+		WriteText(data, size);
 		break;
 	case Segment_stable:
 		WriteStable(data, size);
-		break;
-	case Segment_text:
-		WriteText(data, size);
 		break;
 	case Segment_data:
 		WriteData(data, size);
@@ -1565,7 +1875,16 @@ void CompiledProgram::Write(SegmentType seg, const void *data, size_t size)
 	case Segment_rdata:
 		WriteRdata(data, size);
 		break;
+	default:
+		printf("Internal error: Invalid segment type\n");
+		abort();
 	}
+}
+
+void *CompiledProgram::AllocText(size_t size)
+{
+	_text.resize(_text.size() + size);
+	return _text.data() + _text.size() - size;
 }
 
 void CompiledProgram::WriteText(const void *data, size_t size)
@@ -1576,51 +1895,98 @@ void CompiledProgram::WriteText(const void *data, size_t size)
 
 void CompiledProgram::WriteString(SegmentType seg, const std::string &str)
 {
-	auto it = _plainStrings.find(str);
-	if (it != _plainStrings.end())
-	{
-		uint64_t off;
-		switch (seg)
-		{
-		default:
-			off = 0;
-			break;
-		case Segment_stable:
-			off = _stable.size();
-			WriteStable<uint64_t>(0); // placeholder
-			break;
-		case Segment_text:
-			off = _text.size();
-			WriteText<uint64_t>(0); // placeholder
-			break;
-		case Segment_data:
-			off = _data.size();
-			WriteData<uint64_t>(0); // placeholder
-			break;
-		case Segment_rdata:
-			abort(); // cannot write strings to rdata
-			break;
-		case Segment_debug:
-			off = _debug.size();
-			WriteDebug<uint64_t>(0); // placeholder
-			break;
-		}
+	void *ptr;
 
-		_references.emplace_back(DataReference{ seg, off }, it->second);
-		return;
+	switch (seg)
+	{
+	case Segment_text:
+		ptr = AllocText(sizeof(bc::ptr<bc::string>));
+		break;
+	case Segment_stable:
+		ptr = AllocStable(sizeof(bc::ptr<bc::string>));
+		break;
+	case Segment_data:
+		ptr = AllocData(sizeof(bc::ptr<bc::string>));
+		break;
+	case Segment_rdata:
+		ptr = AllocRdata(sizeof(bc::ptr<bc::string>));
+		break;
+	case Segment_debug:
+		ptr = AllocDebug(sizeof(bc::ptr<bc::string>));
+		break;
+	default:
+		printf("Internal error: Invalid segment type\n");
+		abort();
 	}
 
-	uint64_t rdoff = _rdata.size();
-	WriteRdata(str.c_str(), str.size() + 1);
+	CreateString(ptr, str);
+}
 
-	_plainStrings[str] = DataReference{ Segment_rdata, rdoff };
-	WriteString(seg, str); // recurse
+void CompiledProgram::CreateString(void *dst, const std::string &str)
+{
+	uint8_t *ptr = (uint8_t *)dst;
+
+	SegmentType seg;
+	uint64_t off;
+
+	ResolvePointer(ptr, &seg, &off);
+
+	// fill with garbage
+	memset(ptr, 0xbb, sizeof(bc::ptr<bc::string>));
+
+	_plainStrings[str].push_back(DataReference{ seg, off });
+}
+
+void CompiledProgram::FlushStringPool()
+{
+	for (auto &p : _managedStrings)
+	{
+		const std::string &str = p.first;
+		const auto &refs = p.second;
+
+		bc::uint64 off = _rdata.size();
+
+		DataReference to{ Segment_rdata, off };
+
+		// write the string
+		size_t size = offsetof(String, str) + str.size() + 1;
+		String *s = (String *)AllocRdata(size);
+
+		s->ref.count = 1;
+		s->ref.flags = VALUE_STATIC;
+		s->len = str.size();
+		s->hash = HashString(str.c_str());
+		memcpy(s->str, str.c_str(), str.size() + 1);
+
+		// create references
+		for (const DataReference &ref : refs)
+			_references.emplace_back(ref, to);
+	}
+	_managedStrings.clear();
+
+	for (auto &p : _plainStrings)
+	{
+		const std::string &str = p.first;
+		const auto &refs = p.second;
+
+		bc::uint64 off = _rdata.size();
+
+		DataReference to{ Segment_rdata, off };
+
+		// write the string
+		WriteRdata(str.c_str(), str.size() + 1);
+
+		// create references
+		for (const DataReference &ref : refs)
+			_references.emplace_back(ref, to);
+	}
+	_plainStrings.clear();
 }
 
 void CompiledProgram::WriteAbsoluteJump(uint8_t opcode, uint64_t off)
 {
 	WriteOpcode(opcode);
-	WriteText<uint64_t>(off);
+	WriteReference(Segment_text, Segment_text, off);
 }
 
 void CompiledProgram::WriteRelativeJump(uint8_t opcode, int64_t off)
@@ -1632,30 +1998,12 @@ void CompiledProgram::WriteRelativeJump(uint8_t opcode, int64_t off)
 void CompiledProgram::PushString(const std::string &str)
 {
 	WriteOpcode(Op_pushstring);
+	uint8_t *ptr = (uint8_t *)AllocText(sizeof(bc::ptr<String>));
 
-	auto it = _managedStrings.find(str);
-	if (it != _managedStrings.end())
-	{
-		DataReference &dr = it->second;
-		WriteReference(Segment_text, dr.seg, dr.off);
-		return;
-	}
+	// fill with garbage
+	memset(ptr, 0xdd, sizeof(bc::ptr<String>));
 
-	uint64_t off = _data.size();
-
-	size_t size = offsetof(String, str) + str.size() + 1;
-	AllocRdata(size);
-
-	String *s = (String *)(_rdata.data() + off);
-	s->ref.count = 1;
-	s->ref.flags = VALUE_STATIC;
-	s->len = str.size();
-	s->hash = HashString(str.c_str());
-	memcpy(s->str, str.c_str(), str.size() + 1);
-
-	WriteReference(Segment_text, Segment_rdata, off);
-
-	_managedStrings[str] = DataReference{ Segment_rdata, off };
+	_managedStrings[str].push_back(DataReference{ Segment_text, (uint64_t)(ptr - _text.data()) });
 }
 
 void CompiledProgram::PushValue(const Value &value)
@@ -1668,11 +2016,11 @@ void CompiledProgram::PushValue(const Value &value)
 		break;
 	case ValueType_Integer:
 		WriteOpcode(Op_pushint);
-		WriteText(value.u.integer);
+		WriteText<bc::int64>(value.u.integer);
 		break;
 	case ValueType_Real:
 		WriteOpcode(Op_pushreal);
-		WriteText(value.u.real);
+		WriteText<bc::float64>(value.u.real);
 		break;
 	case ValueType_Bool:
 		WriteOpcode(value.u.boolean ? Op_pushtrue : Op_pushfalse);
@@ -1695,15 +2043,23 @@ void CompiledProgram::AlignText()
 		WriteOpcode(Op_int);
 }
 
+void *CompiledProgram::AllocStable(size_t size)
+{
+	size_t off = _stable.size();
+	_stable.resize(off + size);
+	return _stable.data() + off;
+}
+
 void CompiledProgram::WriteStable(const void *data, size_t size)
 {
 	_stable.resize(_stable.size() + size);
 	memcpy(_stable.data() + _stable.size() - size, data, size);
 }
 
-void CompiledProgram::AllocData(size_t size)
+void *CompiledProgram::AllocData(size_t size)
 {
 	_data.resize(_data.size() + size);
+	return _data.data() + _data.size() - size;
 }
 
 void CompiledProgram::WriteData(const void *data, size_t size)
@@ -1712,9 +2068,10 @@ void CompiledProgram::WriteData(const void *data, size_t size)
 	memcpy(_data.data() + _data.size() - size, data, size);
 }
 
-void CompiledProgram::AllocRdata(size_t size)
+void *CompiledProgram::AllocRdata(size_t size)
 {
 	_rdata.resize(_rdata.size() + size);
+	return _rdata.data() + _rdata.size() - size;
 }
 
 void CompiledProgram::WriteRdata(const void *data, size_t size)
@@ -1723,53 +2080,144 @@ void CompiledProgram::WriteRdata(const void *data, size_t size)
 	memcpy(_rdata.data() + _rdata.size() - size, data, size);
 }
 
+void *CompiledProgram::AllocDebug(size_t size)
+{
+	_debug.resize(_debug.size() + size);
+	return _debug.data() + _debug.size() - size;
+}
+
 void CompiledProgram::WriteDebug(const void *data, size_t size)
 {
 	_debug.resize(_debug.size() + size);
 	memcpy(_debug.data() + _debug.size() - size, data, size);
 }
 
-void CompiledProgram::WriteReference(SegmentType seg, const DataReference &dst)
+DataReference &CompiledProgram::WriteReference(SegmentType from, SegmentType to, uint64_t off)
 {
-	DataReference from;
-	from.seg = seg;
+	uint8_t *ptr;
+
+	switch (from)
+	{
+	case Segment_text:
+		ptr = (uint8_t *)AllocText(sizeof(bc::ptr<void>));
+		break;
+	case Segment_stable:
+		ptr = (uint8_t *)AllocStable(sizeof(bc::ptr<void>));
+		break;
+	case Segment_data:
+		ptr = (uint8_t *)AllocData(sizeof(bc::ptr<void>));
+		break;
+	case Segment_rdata:
+		ptr = (uint8_t *)AllocRdata(sizeof(bc::ptr<void>));
+		break;
+	case Segment_debug:
+		ptr = (uint8_t *)AllocDebug(sizeof(bc::ptr<void>));
+		break;
+	default:
+		printf("Internal error: Invalid segment type\n");
+		abort();
+	}
+
+	return CreateReference(ptr, to, off);
+}
+
+DataReference &CompiledProgram::CreateReference(void *dst, SegmentType seg, uint64_t off)
+{
+	SegmentType fromSeg;
+	uint64_t fromOff;
 
 	switch (seg)
 	{
-	default:
-		return;
-	case Segment_stable:
-		from.off = _stable.size();
-		break;
 	case Segment_text:
-		from.off = _text.size();
+		if (off == -1)
+			off = _text.size();
+		break;
+	case Segment_stable:
+		if (off == -1)
+			off = _stable.size();
 		break;
 	case Segment_data:
-		from.off = _data.size();
+		if (off == -1)
+			off = _data.size();
 		break;
 	case Segment_rdata:
-		from.off = _rdata.size();
+		if (off == -1)
+			off = _rdata.size();
 		break;
 	case Segment_debug:
-		from.off = _debug.size();
+		if (off == -1)
+			off = _debug.size();
 		break;
+	default:
+		printf("Internal error: Invalid segment type\n");
+		abort();
 	}
 
-	_references.emplace_back(from, dst);
+	ResolvePointer(dst, &fromSeg, &fromOff);
 
-	// write dummy reference
-	const int64_t dummy = 0;
-	Write(seg, &dummy, sizeof(dummy));
+	// fill with garbage
+	memset(dst, 0xef, sizeof(bc::ptr<void>));
+
+	_references.emplace_back(DataReference{ fromSeg, fromOff }, DataReference{ seg, off });
+
+	return _references.back().second;
 }
 
-void CompiledProgram::WriteReference(SegmentType seg, SegmentType dst, uint64_t dstoff)
+void CompiledProgram::ResolvePointer(void *dst, SegmentType *seg, uint64_t *off)
 {
-	DataReference target;
-	target.seg = dst;
-	target.off = dstoff;
+	uint8_t *ptr = (uint8_t *)dst;
 
-	WriteReference(seg, target);
+	if (ptr >= _stable.data() && ptr + sizeof(bc::ptr<bc::string>) <= _stable.data() + _stable.size())
+	{
+		*seg = Segment_stable;
+		*off = ptr - _stable.data();
+	}
+	else if (ptr >= _text.data() && ptr + sizeof(bc::ptr<bc::string>) <= _text.data() + _text.size())
+	{
+		*seg = Segment_text;
+		*off = ptr - _text.data();
+	}
+	else if (ptr >= _rdata.data() && ptr + sizeof(bc::ptr<bc::string>) <= _rdata.data() + _rdata.size())
+	{
+		*seg = Segment_rdata;
+		*off = ptr - _rdata.data();
+	}
+	else if (ptr >= _data.data() && ptr + sizeof(bc::ptr<bc::string>) <= _data.data() + _data.size())
+	{
+		*seg = Segment_data;
+		*off = ptr - _data.data();
+	}
+	else if (ptr >= _debug.data() && ptr + sizeof(bc::ptr<bc::string>) <= _debug.data() + _debug.size())
+	{
+		*seg = Segment_debug;
+		*off = ptr - _debug.data();
+	}
+	else
+	{
+		printf("Internal error: Invalid pointer\n");
+		abort();
+	}
 }
+
+void CompiledProgram::Link()
+{
+	for (auto &p : _importSymbols)
+	{
+		uint64_t off = p.first;
+		const std::string &name = p.second;
+
+		auto it = _exportSymbols.find(name);
+		if (it == _exportSymbols.end())
+		{
+			printf("Link error: Unresolved symbol %s\n", name.c_str());
+			abort();
+		}
+
+		// create reference
+		_references.emplace_back(DataReference{ Segment_text, off }, DataReference{ Segment_text, it->second });
+	}
+}
+
 CompiledProgram *CompileProgram(Program *p, Loader *loader, const Scratch3CompilerOptions *options)
 {
 	CompiledProgram *cp = new CompiledProgram();

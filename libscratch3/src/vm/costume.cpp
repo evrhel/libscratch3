@@ -3,16 +3,18 @@
 #include <cstdio>
 #include <cmath>
 
+#include <cairo/cairo.h>
+
 #include "stb_image.h"
 
-void Costume::Init(const CostumeInfo *info)
+void Costume::Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info)
 {
-	SetString(_name, info->name);
-	_dataFormat = info->dataFormat;
+	SetString(_name, (char *)(bytecode + info->name));
+	_dataFormat = (char *)(bytecode + info->format);
 	_bitmapResolution = info->bitmapResolution;
 	_center.x = info->rotationCenterX;
 	_center.y = info->rotationCenterY;
-	_data = info->data;
+	_data = bytecode + info->data;
 	_dataSize = info->dataSize;
 }
 

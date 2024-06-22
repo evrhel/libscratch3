@@ -1,24 +1,19 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 
 #include <glad/glad.h>
-
 #include <librsvg/rsvg.h>
-#include <cairo/cairo.h>
-
 #include <mutil/mutil.h>
 
-#include "preload.hpp"
 #include "memory.hpp"
+#include "../codegen/util.hpp"
 
 // threshold for the collision mask's alpha channel
 #define MASK_THRESHOLD 128
 
 using namespace mutil;
-
-class Loader;
-class CostumeDef;
 
 //! \brief A costume (skin) for a sprite
 class Costume
@@ -68,8 +63,10 @@ public:
 	//! Sets up basic information about the costume, such as the name and the
 	//! center and size of the costume.
 	//!
-	//! \param info The information about the costume
-	void Init(const CostumeInfo *info);
+	//! \param bytecode The program bytecode
+	//! \param bytecodeSize The size of the bytecode
+	//! \param info The costume information
+	void Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info);
 
 	//! \brief Load the costumes
 	//!

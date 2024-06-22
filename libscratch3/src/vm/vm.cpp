@@ -12,6 +12,7 @@
 #include "../resource.hpp"
 #include "../render/renderer.hpp"
 #include "../codegen/compiler.hpp"
+#include "../codegen/util.hpp"
 
 #include "sprite.hpp"
 #include "io.hpp"
@@ -37,17 +38,18 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 	_bytecodeSize = size;
 	_progName = name;
 
-	ParsedSprites sprites;
-	ParseSprites(bytecode, size, &sprites);
+	bc::Header *header = (bc::Header *)bytecode;
+	bc::SpriteTable *st = (bc::SpriteTable *)(bytecode + header->stable);
 
-	_sprites = new Sprite[sprites.size()];
-	_spritesEnd = _sprites + sprites.size();
+	_sprites = new Sprite[st->count];
+	_spritesEnd = _sprites + st->count;
 
 	// load sprites
 	bool foundStage = false;
-	size_t i = 0;
-	for (SpriteInfo &si : sprites)
+	for (bc::uint64 i = 0; i < st->count; i++)
 	{
+		bc::Sprite &si = st->sprites[i];
+
 		if (si.isStage)
 		{
 			if (foundStage)
@@ -62,23 +64,26 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 
 		// create sprite
 		Sprite &sprite = _sprites[i];
-		sprite.Init(&si);
+		sprite.Init(bytecode, size, &si);
 
 		_spriteNames[sprite.GetName()] = i + 1;
 
 		// create initializer
 		_initScripts.emplace_back();
 		Script &init = _initScripts.back();
-		init.Init(&si.init);
+		init.Init(bytecode, size, &si.initializer);
 		init.sprite = &sprite;
 		init.vm = this;
 
 		// load scripts
-		for (ScriptInfo &ri : si.scripts)
+		bc::Script *scripts = (bc::Script *)(bytecode + si.scripts);
+		for (bc::uint64 j = 0; j < si.numScripts; j++)
 		{
+			bc::Script &sci = scripts[j];
+
 			_scripts.emplace_back();
 			Script &s = _scripts.back();
-			s.Init(&ri);
+			s.Init(bytecode, size, &sci);
 
 			s.sprite = &sprite;
 			s.vm = this;

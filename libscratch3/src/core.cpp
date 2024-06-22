@@ -8,6 +8,7 @@
 #include "ast/ast.hpp"
 #include "vm/vm.hpp"
 #include "codegen/compiler.hpp"
+#include "codegen/util.hpp"
 
 static void StdOutLogger(Scratch3 *S, const char *msg, size_t len, int severity, void *up)
 {
@@ -135,7 +136,7 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Load(Scratch3 *S, const char *name
 	if (S->bytecode)
 		return SCRATCH3_ERROR_ALREADY_LOADED;
 
-	const ProgramHeader *header = (const ProgramHeader *)data;
+	const bc::Header *header = (const bc::Header *)data;
 	if (header->magic == PROGRAM_MAGIC)
 	{
 		// Program is compiled bytecode

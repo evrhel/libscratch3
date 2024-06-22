@@ -9,14 +9,12 @@
 #include "costume.hpp"
 #include "sound.hpp"
 #include "script.hpp"
-#include "preload.hpp"
 #include "memory.hpp"
+
+#include "../codegen/util.hpp"
 
 using namespace mutil;
 
-class SpriteDef;
-class Loader;
-class GLRenderer;
 class VirtualMachine;
 
 //! \brief Axis-aligned bounding box
@@ -205,9 +203,11 @@ public:
     //! Sets up basic information about the sprite, such as the name
     //! and the initial position and size.
     //!
+    //! \param bytecode The program bytecode.
+    //! \param bytecodeSize The size of the bytecode.
     //! \param info The information about the sprite, as loaded from
     //! the bytecode
-    void Init(const SpriteInfo *info);
+    void Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info);
 
     //! \brief Load the sprite data
     //!

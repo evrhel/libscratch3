@@ -3,8 +3,6 @@
 #include <cstdint>
 #include <string>
 
-#include <lysys/lysys.hpp>
-
 // initial capacity for lists
 #define INITIAL_CAPACITY 8
 

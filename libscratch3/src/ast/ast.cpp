@@ -863,6 +863,8 @@ private:
 			if (!node)
 				break;
 
+			node->nodeid = id;
+
 			s = node->As<Statement>();
 			if (!s)
 			{
@@ -966,6 +968,8 @@ private:
 			Error("Unknown opcode `%s` in target `%s`", opcode.GetString(), id.c_str());
 			return nullptr;
 		}
+
+		n->nodeid = id;
 
 		// Create a StatementList object if requested
 		if (createList)

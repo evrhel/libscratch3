@@ -6,6 +6,7 @@
 #include "vm.hpp"
 #include "sprite.hpp"
 #include "../codegen/compiler.hpp"
+#include "../codegen/util.hpp"
 
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
@@ -31,10 +32,12 @@ const char *GetStateName(int state)
 	}
 }
 
-void Script::Init(const ScriptInfo *info)
+void Script::Init(uint8_t *bytecode, size_t bytecodeSize, bc::Script *info)
 {
 	if (stack)
 		abort();
+
+	bc::Header *header = (bc::Header *)bytecode;
 
 	state = EMBRYO;
 	sprite = nullptr;
@@ -43,7 +46,7 @@ void Script::Init(const ScriptInfo *info)
 	waitInput = false;
 	askInput = false;
 	ticks = 0;
-	entry = info->loc;
+	entry = bytecode + header->text + info->offset;
 	pc = entry;
 	isReset = false;
 	autoStart = false;
@@ -93,6 +96,8 @@ void Script::Reset()
 	}
 
 	assert(sp == stackEnd);
+
+	bp = nullptr;
 }
 
 void Script::Start()
@@ -109,7 +114,7 @@ void Script::Main()
 	assert(sp == stack + STACK_SIZE);
 
 	uint8_t *bytecode = vm->GetBytecode();
-	ProgramHeader *header = (ProgramHeader *)bytecode;
+	bc::Header *header = (bc::Header *)bytecode;
 	uint8_t *textBegin = bytecode + header->text;
 	uint8_t *textEnd = textBegin + header->text_size;
 
@@ -136,7 +141,7 @@ void Script::Main()
 			break;
 		case Op_int:
 			Raise(VMError, "Software interrupt");
-		case Op_varset:
+		/*case Op_varset:
 			Assign(vm->GetVariableRef(StackAt(0)), StackAt(1));
 			Pop();
 			Pop();
@@ -150,7 +155,7 @@ void Script::Main()
 		}
 		case Op_varget:
 			Assign(StackAt(0), vm->GetVariableRef(StackAt(0)));
-			break;
+			break;*/
 		case Op_setstatic:
 			Raise(NotImplemented, "setstatic");
 		case Op_getstatic:
@@ -166,7 +171,7 @@ void Script::Main()
 			break;
 		case Op_jz:
 			ui64 = *(uint64_t *)pc;
-			b = Truth(StackAt(0));
+			b = Truth(StackAt(-1));
 			Pop();
 
 			if (!b)
@@ -176,7 +181,7 @@ void Script::Main()
 			break;
 		case Op_jnz:
 			ui64 = *(uint64_t *)pc;
-			b = Truth(StackAt(0));
+			b = Truth(StackAt(-1));
 			Pop();
 
 			if (b)
@@ -223,155 +228,158 @@ void Script::Main()
 			pc += sizeof(uint64_t);
 			SetStaticString(Push(), str);
 			break;
-		case Op_dup:
+		case Op_push: {
+			int16_t index = *(int16_t *)pc;
+			Value &v = StackAt(index);
 			Push();
-			Assign(StackAt(0), StackAt(1));
+			Assign(StackAt(-1), StackAt(-2));
 			break;
+		}
 		case Op_eq:
-			SetBool(StackAt(1), Equals(StackAt(1), StackAt(0)));
+			SetBool(StackAt(-2), Equals(StackAt(-2), StackAt(-1)));
 			Pop();
 			break;
 		case Op_neq:
-			SetBool(StackAt(1), !Equals(StackAt(1), StackAt(0)));
+			SetBool(StackAt(-2), !Equals(StackAt(-2), StackAt(-1)));
 			Pop();
 			break;
 		case Op_gt:
-			SetBool(StackAt(1), ToReal(StackAt(1)) > ToReal(StackAt(0)));
+			SetBool(StackAt(-2), ToReal(StackAt(-2)) > ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_ge:
-			SetBool(StackAt(1), ToReal(StackAt(1)) >= ToReal(StackAt(0)));
+			SetBool(StackAt(-2), ToReal(StackAt(-2)) >= ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_lt:
-			SetBool(StackAt(1), ToReal(StackAt(1)) < ToReal(StackAt(0)));
+			SetBool(StackAt(-2), ToReal(StackAt(-2)) < ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_le:
-			SetBool(StackAt(1), ToReal(StackAt(1)) <= ToReal(StackAt(0)));
+			SetBool(StackAt(-2), ToReal(StackAt(-2)) <= ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_land:
-			SetBool(StackAt(1), Truth(StackAt(1)) && Truth(StackAt(0)));
+			SetBool(StackAt(-2), Truth(StackAt(-2)) && Truth(StackAt(-1)));
 			Pop();
 			break;
 		case Op_lor:
-			SetBool(StackAt(1), Truth(StackAt(1)) || Truth(StackAt(0)));
+			SetBool(StackAt(-2), Truth(StackAt(-2)) || Truth(StackAt(-1)));
 			Pop();
 			break;
 		case Op_lnot:
-			SetBool(StackAt(0), !Truth(StackAt(0)));
+			SetBool(StackAt(-1), !Truth(StackAt(-1)));
 			break;
 		case Op_add:
-			lhs = &StackAt(1);
-			rhs = &StackAt(0);
+			lhs = &StackAt(-2);
+			rhs = &StackAt(-1);
 			real = ToReal(*lhs) + ToReal(*rhs);
 			Pop();
 			SetReal(*lhs, real);
 			break;
 		case Op_sub:
-			lhs = &StackAt(1);
-			rhs = &StackAt(0);
+			lhs = &StackAt(-2);
+			rhs = &StackAt(-1);
 			real = ToReal(*lhs) - ToReal(*rhs);
 			Pop();
 			SetReal(*lhs, real);
 			break;
 		case Op_mul:
-			lhs = &StackAt(1);
-			rhs = &StackAt(0);
+			lhs = &StackAt(-2);
+			rhs = &StackAt(-1);
 			real = ToReal(*lhs) * ToReal(*rhs);
 			Pop();
 			SetReal(*lhs, real);
 			break;
 		case Op_div:
-			lhs = &StackAt(1);
-			rhs = &StackAt(0);
+			lhs = &StackAt(-2);
+			rhs = &StackAt(-1);
 			real = ToReal(*lhs) / ToReal(*rhs);
 			Pop();
 			SetReal(*lhs, real);
 			break;
 		case Op_mod:
-			lhs = &StackAt(1);
-			rhs = &StackAt(0);
+			lhs = &StackAt(-2);
+			rhs = &StackAt(-1);
 			real = fmod(ToReal(*lhs), ToReal(*rhs));
 			Pop();
 			SetReal(*lhs, real);
 			break;
 		case Op_neg:
-			SetReal(StackAt(0), -ToReal(StackAt(0)));
+			SetReal(StackAt(-1), -ToReal(StackAt(-1)));
 			break;
 		case Op_round:
-			SetReal(StackAt(0), round(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), round(ToReal(StackAt(-1))));
 			break;
 		case Op_abs:
-			SetReal(StackAt(0), fabs(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), fabs(ToReal(StackAt(-1))));
 			break;
 		case Op_floor:
-			SetReal(StackAt(0), floor(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), floor(ToReal(StackAt(-1))));
 			break;
 		case Op_ceil:
-			SetReal(StackAt(0), ceil(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), ceil(ToReal(StackAt(-1))));
 			break;
 		case Op_sqrt:
-			SetReal(StackAt(0), sqrt(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), sqrt(ToReal(StackAt(-1))));
 			break;
 		case Op_sin:
-			SetReal(StackAt(0), sin(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), sin(ToReal(StackAt(-1))));
 			break;
 		case Op_cos:
-			SetReal(StackAt(0), cos(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), cos(ToReal(StackAt(-1))));
 			break;
 		case Op_tan:
-			SetReal(StackAt(0), tan(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), tan(ToReal(StackAt(-1))));
 			break;
 		case Op_asin:
-			SetReal(StackAt(0), asin(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), asin(ToReal(StackAt(-1))));
 			break;
 		case Op_acos:
-			SetReal(StackAt(0), acos(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), acos(ToReal(StackAt(-1))));
 			break;
 		case Op_atan:
-			SetReal(StackAt(0), atan(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), atan(ToReal(StackAt(-1))));
 			break;
 		case Op_ln:
-			SetReal(StackAt(0), log(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), log(ToReal(StackAt(-1))));
 			break;
 		case Op_log10:
-			SetReal(StackAt(0), log10(ToReal(StackAt(0))));
+			SetReal(StackAt(-1), log10(ToReal(StackAt(-1))));
 			break;
 		case Op_exp:
-			SetReal(StackAt(0), exp(ToReal(StackAt(0))));
+			SetReal(StackAt(0), exp(ToReal(StackAt(-1))));
 			break;
 		case Op_exp10:
-			SetReal(StackAt(0), pow(10.0, ToReal(StackAt(0))));
+			SetReal(StackAt(-1), pow(10.0, ToReal(StackAt(-1))));
 			break;
 		case Op_strcat:
-			lhs = &StackAt(1);
-			rhs = &StackAt(0);
+			lhs = &StackAt(-2);
+			rhs = &StackAt(-1);
 			ConcatValue(*lhs, *rhs);
 			Pop();
 			break;
 		case Op_charat:
-			lhs = &StackAt(1);
-			i64 = ToInteger(StackAt(0));
+			lhs = &StackAt(-2);
+			i64 = ToInteger(StackAt(-1));
 			Pop();
 			SetChar(*lhs, ValueCharAt(*lhs, i64));
 			break;
 		case Op_strlen:
-			SetInteger(StackAt(0), ValueLength(StackAt(0)));
+			SetInteger(StackAt(-1), ValueLength(StackAt(-1)));
 			break;
 		case Op_strstr:
-			SetBool(StackAt(1), ValueContains(StackAt(0), StackAt(1)));
+			SetBool(StackAt(-2), ValueContains(StackAt(-1), StackAt(-2)));
 			Pop();
 			break;
 		case Op_inc:
-			SetReal(StackAt(0), ToReal(StackAt(0)) + 1.0);
+			SetReal(StackAt(-1), ToReal(StackAt(-1)) + 1.0);
 			break;
 		case Op_dec:
-			SetReal(StackAt(0), ToReal(StackAt(0)) - 1.0);
+			SetReal(StackAt(-1), ToReal(StackAt(-1)) - 1.0);
 			break;
 		case Op_movesteps: {
-			double steps = ToReal(StackAt(0));
+			double steps = ToReal(StackAt(-1));
 			Pop();
 
 			double dir = (sprite->GetDirection() - 90.0) * DEG2RAD;
@@ -383,41 +391,41 @@ void Script::Main()
 			break;
 		}
 		case Op_turndegrees:
-			sprite->SetDirection(ToReal(StackAt(0)) + sprite->GetDirection());
+			sprite->SetDirection(ToReal(StackAt(-1)) + sprite->GetDirection());
 			Pop();
 			break;
 		case Op_goto:
 			Raise(NotImplemented, "goto");
 		case Op_gotoxy:
-			sprite->SetXY(ToReal(StackAt(1)), ToReal(StackAt(0)));
+			sprite->SetXY(ToReal(StackAt(-2)), ToReal(StackAt(-1)));
 			Pop();
 			Pop();
 			break;
 		case Op_glide:
 			Raise(NotImplemented, "glide");
 		case Op_glidexy:
-			Glide(ToReal(StackAt(1)), ToReal(StackAt(0)), ToReal(StackAt(2)));
+			Glide(ToReal(StackAt(-2)), ToReal(StackAt(-1)), ToReal(StackAt(-3)));
 			break;
 		case Op_setdir:
-			sprite->SetDirection(ToReal(StackAt(0)));
+			sprite->SetDirection(ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_lookat:
 			Raise(NotImplemented, "lookat");
 		case Op_addx:
-			sprite->SetX(ToReal(StackAt(0)) + sprite->GetX());
+			sprite->SetX(ToReal(StackAt(-1)) + sprite->GetX());
 			Pop();
 			break;
 		case Op_setx:
-			sprite->SetX(ToReal(StackAt(0)));
+			sprite->SetX(ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_addy:
-			sprite->SetY(ToReal(StackAt(0)) + sprite->GetY());
+			sprite->SetY(ToReal(StackAt(-1)) + sprite->GetY());
 			Pop();
 			break;
 		case Op_sety:
-			sprite->SetY(ToReal(StackAt(0)));
+			sprite->SetY(ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_bounceonedge:
@@ -436,15 +444,15 @@ void Script::Main()
 			SetReal(Push(), sprite->GetDirection());
 			break;
 		case Op_say:
-			sprite->SetMessage(StackAt(0), MessageState_Say);
+			sprite->SetMessage(StackAt(-1), MessageState_Say);
 			Pop();
 			break;
 		case Op_think:
-			sprite->SetMessage(StackAt(0), MessageState_Think);
+			sprite->SetMessage(StackAt(-1), MessageState_Think);
 			Pop();
 			break;
 		case Op_setcostume: {
-			Value &v = StackAt(0);
+			Value &v = StackAt(-1);
 
 			switch (v.type)
 			{
@@ -468,7 +476,7 @@ void Script::Main()
 			sprite->SetCostume(sprite->GetCostume() + 1);
 			break;
 		case Op_setbackdrop: {
-			Value &v = StackAt(0);
+			Value &v = StackAt(-1);
 			Sprite *stage = vm->GetStage();
 
 			switch (v.type)
@@ -495,18 +503,18 @@ void Script::Main()
 			break;
 		}
 		case Op_addsize:
-			sprite->SetSize(sprite->GetSize() + ToReal(StackAt(0)));
+			sprite->SetSize(sprite->GetSize() + ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_setsize:
-			sprite->SetSize(ToReal(StackAt(0)));
+			sprite->SetSize(ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_addgraphiceffect: {
 			GraphicEffect effect = (GraphicEffect) * (uint8_t *)pc;
 			pc++;
 
-			double val = ToReal(StackAt(0));
+			double val = ToReal(StackAt(-1));
 			Pop();
 
 			switch (effect)
@@ -542,7 +550,7 @@ void Script::Main()
 			GraphicEffect effect = (GraphicEffect)*(uint8_t *)pc;
 			pc++;
 
-			double val = ToReal(StackAt(0));
+			double val = ToReal(StackAt(-1));
 			Pop();
 
 			switch (effect)
@@ -605,7 +613,7 @@ void Script::Main()
 			pc++;
 			break;
 		case Op_movelayer: {
-			int64_t amount = ToInteger(StackAt(0));
+			int64_t amount = ToInteger(StackAt(-1));
 			Pop();
 
 			switch (*(uint8_t *)pc)
@@ -635,7 +643,7 @@ void Script::Main()
 			SetReal(Push(), sprite->GetSize());
 			break;
 		case Op_playsoundandwait: {
-			Value &v = CvtString(StackAt(0));
+			Value &v = CvtString(StackAt(-1));
 			if (v.type != ValueType_String)
 			{
 				Pop();
@@ -657,7 +665,7 @@ void Script::Main()
 			break;
 		}
 		case Op_playsound: {
-			Value &v = CvtString(StackAt(0));
+			Value &v = CvtString(StackAt(-1));
 			if (v.type != ValueType_String)
 			{
 				Pop();
@@ -687,10 +695,10 @@ void Script::Main()
 			default:
 				Raise(InvalidArgument, "Invalid sound effect");
 			case SoundEffect_Pitch:
-				dsp->SetPitch(dsp->GetPitch() + ToReal(StackAt(0)));
+				dsp->SetPitch(dsp->GetPitch() + ToReal(StackAt(-1)));
 				break;
 			case SoundEffect_Pan:
-				dsp->SetPan(dsp->GetPan() + ToReal(StackAt(0)));
+				dsp->SetPan(dsp->GetPan() + ToReal(StackAt(-1)));
 				break;
 			}
 			break;
@@ -705,10 +713,10 @@ void Script::Main()
 			default:
 				Raise(InvalidArgument, "Invalid sound effect");
 			case SoundEffect_Pitch:
-				dsp->SetPitch(ToReal(StackAt(0)));
+				dsp->SetPitch(ToReal(StackAt(-1)));
 				break;
 			case SoundEffect_Pan:
-				dsp->SetPan(ToReal(StackAt(0)));
+				dsp->SetPan(ToReal(StackAt(-1)));
 				break;
 			}
 			break;
@@ -721,13 +729,13 @@ void Script::Main()
 		}
 		case Op_addvolume: {
 			DSPController *dsp = sprite->GetDSP();
-			dsp->SetVolume(dsp->GetVolume() + ToReal(StackAt(0)));
+			dsp->SetVolume(dsp->GetVolume() + ToReal(StackAt(-1)));
 			Pop();
 			break;
 		}
 		case Op_setvolume: {
 			DSPController *dsp = sprite->GetDSP();
-			dsp->SetVolume(ToReal(StackAt(0)));
+			dsp->SetVolume(ToReal(StackAt(-1)));
 			Pop();
 			break;
 		}
@@ -776,14 +784,14 @@ void Script::Main()
 			break;
 		case Op_send: {
 			int64_t len;
-			const char *message = ToString(StackAt(0), &len);
+			const char *message = ToString(StackAt(-1), &len);
 			vm->Send(std::string(message, len));
 			Pop();
 			break;
 		}
 		case Op_sendandwait: {
 			int64_t len;
-			const char *message = ToString(StackAt(0), &len);
+			const char *message = ToString(StackAt(-1), &len);
 			vm->SendAndWait(std::string(message, len));
 			Pop();
 			break;
@@ -791,8 +799,7 @@ void Script::Main()
 		case Op_findevent:
 			Raise(NotImplemented, "findevent");
 		case Op_waitsecs:
-			printf("[%.2f] %s: Sleeping for %g seconds\n", vm->GetTime(), sprite->GetNameString(), ToReal(StackAt(0)));
-			Sleep(ToReal(StackAt(0)));
+			Sleep(ToReal(StackAt(-1)));
 			Pop();
 			break;
 		case Op_stopall:
@@ -809,7 +816,7 @@ void Script::Main()
 		case Op_deleteclone:
 			Raise(NotImplemented, "deleteclone");
 		case Op_touching: {
-			Value &v = CvtString(StackAt(0)); // same as stack[0] = CvtString(stack[0]);
+			Value &v = CvtString(StackAt(-1)); // same as stack[0] = CvtString(stack[0]);
 			if (v.type != ValueType_String)
 			{
 				SetBool(v, false);
@@ -845,7 +852,7 @@ void Script::Main()
 			Assign(Push(), vm->GetIO().GetAnswer());
 			break;
 		case Op_keypressed: {
-			Value &v = CvtString(StackAt(0));
+			Value &v = CvtString(StackAt(-1));
 			if (v.type != ValueType_String)
 			{
 				SetBool(v, false);
@@ -911,7 +918,7 @@ void Script::Main()
 			PropertyTarget target = (PropertyTarget)*(uint8_t *)pc;
 			pc++;
 
-			Sprite *s = vm->FindSprite(CvtString(StackAt(0)));
+			Sprite *s = vm->FindSprite(CvtString(StackAt(-1)));
 			Pop(); // pop name
 
 			if (!s)
@@ -967,8 +974,8 @@ void Script::Main()
 			Assign(Push(), vm->GetIO().GetUsername());
 			break;
 		case Op_rand: {
-			Value &a = StackAt(1);
-			Value &b = StackAt(0);
+			Value &a = StackAt(-2);
+			Value &b = StackAt(-1);
 
 			if (a.type == ValueType_Real || b.type == ValueType_Real)
 			{
@@ -1010,44 +1017,44 @@ void Script::Main()
 			Pop();
 			break;
 		case Op_listadd:
-			ListAppend(StackAt(0), StackAt(1));
+			ListAppend(StackAt(-1), StackAt(-2));
 			Pop();
 			Pop();
 			break;
 		case Op_listremove:
-			ListDelete(StackAt(0), StackAt(1));
+			ListDelete(StackAt(-1), StackAt(-2));
 			Pop();
 			Pop();
 			break;
 		case Op_listclear:
-			ListClear(StackAt(0));
+			ListClear(StackAt(-1));
 			Pop();
 			break;
 		case Op_listinsert:
-			ListInsert(StackAt(0), ToInteger(StackAt(1)), StackAt(2));
+			ListInsert(StackAt(-1), ToInteger(StackAt(-2)), StackAt(-3));
 			Pop();
 			Pop();
 			Pop();
 			break;
 		case Op_listreplace:
-			ListSet(StackAt(0), ToInteger(StackAt(1)), StackAt(2));
+			ListSet(StackAt(-1), ToInteger(StackAt(-2)), StackAt(-3));
 			Pop();
 			Pop();
 			Pop();
 			break;
 		case Op_listat:
-			ListGet(StackAt(1), StackAt(0), ToInteger(StackAt(1)));
+			ListGet(StackAt(-2), StackAt(-1), ToInteger(StackAt(-2)));
 			Pop();
 			break;
 		case Op_listfind:
-			SetInteger(StackAt(1), ListIndexOf(StackAt(0), StackAt(1)));
+			SetInteger(StackAt(-2), ListIndexOf(StackAt(-1), StackAt(-2)));
 			Pop();
 			break;
 		case Op_listlen:
-			SetInteger(StackAt(0), ListGetLength(StackAt(0)));
+			SetInteger(StackAt(-1), ListGetLength(StackAt(-1)));
 			break;
 		case Op_listcontains:
-			SetBool(StackAt(1), ListContainsValue(StackAt(0), StackAt(1)));
+			SetBool(StackAt(-2), ListContainsValue(StackAt(-1), StackAt(-2)));
 			Pop();
 			break;
 		case Op_ext:
@@ -1076,11 +1083,23 @@ void Script::Pop()
 	sp++;
 }
 
-Value &Script::StackAt(size_t i)
+Value &Script::StackAt(int i)
 {
-	if (sp + i >= stack + STACK_SIZE)
-		Raise(StackUnderflow, "Stack underflow");
-	return sp[i];
+	Value *val;
+	if (i < 0)
+	{
+		val = sp - i - 1;
+		if (val > bp)
+			Raise(AcessViolation, "Stack index out of bounds");
+	}
+	else
+	{
+		val = bp + i;
+		if (val < sp)
+			Raise(AcessViolation, "Stack index out of bounds");
+	}
+
+	return *val;
 }
 
 void Script::Sched()

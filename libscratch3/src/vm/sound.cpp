@@ -78,10 +78,10 @@ void DSPController::SetPitch(double pitch)
 	_resampleRatio = static_cast<float>(pow(kSemitone, pitch / 10)); // 10 units = 1 semitone
 }
 
-void Sound::Init(const SoundInfo *info, DSPController *dsp)
+void Sound::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, DSPController *dsp)
 {
-	SetString(_name, info->name);
-	_data = info->data;
+	SetString(_name, (char *)(bytecode +info->name));
+	_data = bytecode + info->data;
 	_dataSize = info->dataSize;
 	_dsp = dsp;
 }

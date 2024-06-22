@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <unordered_map>
 
 #include <scratch3/scratch3.h>
 
@@ -33,110 +34,6 @@ struct DataReference
 	uint64_t off;
 };
 
-struct ProgramHeader
-{
-	uint32_t magic;
-	uint32_t version;
-
-	uint32_t text; // Offset of text segment
-	uint32_t text_size; // Size of text segment
-
-	uint32_t stable; // Offset of sprite table
-	uint32_t stable_size; // Size of sprite table
-
-	uint32_t data; // Offset of data segment
-	uint32_t data_size; // Size of data segment
-
-	uint32_t rdata; // Offset of rdata segment
-	uint32_t rdata_size; // Size of rdata segment
-
-	uint32_t debug; // Offset of debug segment
-	uint32_t debug_size; // Size of debug segment
-};
-
-struct CostumeEntry
-{
-	uint64_t name;
-	uint64_t format;
-	uint32_t bitmapResolution;
-	double rotationCenterX;
-	double rotationCenterY;
-	uint64_t data;
-	uint64_t size;
-};
-
-struct SoundEntry
-{
-	uint64_t name;
-	uint64_t format;
-	double rate;
-	uint32_t sampleCount;
-	uint64_t data;
-	uint64_t size;
-};
-
-struct ScriptEntry
-{
-	uint64_t offset;
-};
-
-struct SpriteEntry
-{
-	uint64_t name;
-	double x, y;
-	double size;
-	double direction;
-	int64_t currentCostume;
-	int64_t layer;
-	uint8_t visible;
-	uint8_t isStage;
-	uint8_t draggable;
-	uint8_t rotationStyle;
-	
-	uint64_t initializer;
-	uint64_t scripts;
-
-	uint64_t costumes;
-
-	uint64_t sounds;
-};
-
-enum
-{
-	DebugEntryType_variable,
-	DebugEntryType_broadcast,
-	DebugEntryType_proc
-};
-
-struct DebugEntry
-{
-	uint32_t type;
-
-	uint8_t _padding[4];
-
-	union
-	{
-		struct
-		{
-			uint64_t id;
-			uint64_t name;
-			uint64_t sprite;
-		} variable;
-
-		struct
-		{
-			uint64_t id;
-			uint64_t name;
-		} broadcast;
-
-		struct
-		{
-			uint64_t id;
-			uint64_t name;
-		} proc;
-	} u;
-};
-
 class CompiledProgram final
 {
 public:
@@ -155,21 +52,25 @@ private:
 	Segment _data;
 	Segment _debug;
 
-	std::unordered_map<std::string, DataReference> _managedStrings;
-	std::unordered_map<std::string, DataReference> _plainStrings;
+	std::unordered_map<std::string, std::vector<DataReference>> _managedStrings; // managed string pool (string -> references)
+	std::unordered_map<std::string, std::vector<DataReference>> _plainStrings; // plain string pool (string -> references)
+
+	std::vector<std::pair<uint64_t, std::string>> _importSymbols; // import procedure symbols (offset, name)
+	std::unordered_map<std::string, uint64_t> _exportSymbols; // export procedure symbols (name -> offset)
 
 	std::vector<std::pair<DataReference, DataReference>> _references; // (from, to)
 
 	void Write(SegmentType seg, const void *data, size_t size);
 
+	void *AllocText(size_t size);
 	void WriteText(const void *data, size_t size);
-
 	inline void WriteOpcode(uint8_t opcode) { WriteText(&opcode, 1); }
-
 	template <typename T>
 	inline void WriteText(const T &data) { WriteText(&data, sizeof(T)); }
 
 	void WriteString(SegmentType seg, const std::string &str);
+	void CreateString(void *dst, const std::string &str);
+	void FlushStringPool();
 
 	void WriteAbsoluteJump(uint8_t opcode, uint64_t off);
 	void WriteRelativeJump(uint8_t opcode, int64_t off);
@@ -179,32 +80,32 @@ private:
 
 	void AlignText();
 
+	void *AllocStable(size_t size);
 	void WriteStable(const void *data, size_t size);
-
 	template <typename T>
 	void WriteStable(const T &data) { WriteStable(&data, sizeof(T)); }
 
-	void AllocData(size_t size);
-
+	void *AllocData(size_t size);
 	void WriteData(const void *data, size_t size);
-
 	template <typename T>
 	inline void WriteData(const T &data) { WriteData(&data, sizeof(T)); }
 
-	void AllocRdata(size_t size);
-
+	void *AllocRdata(size_t size);
 	void WriteRdata(const void *data, size_t size);
-
 	template <typename T>
 	inline void WriteRdata(const T &data) { WriteRdata(&data, sizeof(T)); }
 
+	void *AllocDebug(size_t size);
 	void WriteDebug(const void *data, size_t size);
-
 	template <typename T>
 	inline void WriteDebug(const T &data) { WriteDebug(&data, sizeof(T)); }
 
-	void WriteReference(SegmentType seg, const DataReference &dst);
-	void WriteReference(SegmentType seg, SegmentType dst, uint64_t dstoff);
+	DataReference &WriteReference(SegmentType from, SegmentType to, uint64_t off = -1);
+	DataReference &CreateReference(void *dst, SegmentType seg, uint64_t off = -1);
+
+	void ResolvePointer(void *dst, SegmentType *seg, uint64_t *off);
+
+	void Link();
 
 	friend class Compiler;
 };

@@ -7,6 +7,8 @@
 #include "preload.hpp"
 #include "memory.hpp"
 
+#include "../codegen/util.hpp"
+
 #define BUFFER_LENGTH 512
 
 //! \brief Handles DSP effects.
@@ -94,9 +96,11 @@ public:
 
 	//! \brief Initialize the sound.
 	//!
+	//! \param bytecode The program bytecode.
+	//! \param bytecodeSize The size of the bytecode.
 	//! \param info The sound information, as loaded from the bytecode.
 	//! \param dsp The DSP controller.
-	void Init(const SoundInfo *info, DSPController *dsp);
+	void Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, DSPController *dsp);
 
 	//! \brief Load the sound data.
 	//!

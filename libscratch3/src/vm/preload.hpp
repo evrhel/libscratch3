@@ -1,5 +1,5 @@
 #pragma once
-
+/*
 #include <cstdint>
 #include <vector>
 
@@ -60,4 +60,4 @@ using ParsedSprites = std::vector<SpriteInfo>;
 //! \param bytecode The bytecode to parse.
 //! \param bytecodeSize The size of the bytecode.
 //! \param sprites The parsed sprites.
-void ParseSprites(uint8_t *bytecode, size_t bytecodeSize, ParsedSprites *sprites);
+void ParseSprites(uint8_t *bytecode, size_t bytecodeSize, ParsedSprites *sprites);*/

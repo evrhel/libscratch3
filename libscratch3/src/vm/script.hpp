@@ -1,12 +1,15 @@
 #pragma once
 
 #include <csetjmp>
+#include <string>
 
 #include <lysys/lysys.hpp>
 
 #include "../codegen/opcode.hpp"
+#include "../codegen/util.hpp"
 
-#include "preload.hpp"
+#include "../ast/astdef.hpp"
+
 #include "exception.hpp"
 
 enum
@@ -33,9 +36,7 @@ enum
 // Stack size for each script
 #define STACK_SIZE 512
 
-class StatementList;
 class Sprite;
-class Expression;
 class Value;
 class VirtualMachine;
 class Sound;
@@ -60,6 +61,8 @@ struct Script
 	Value *stack;  // Base of the stack (lowest address)
 	Value *sp;  // Stack pointer (highest address, grows downwards) sp - 1 is the next free slot
 
+	Value *bp;  // Base pointer (stack frame base, points to old bp)
+
 	jmp_buf scriptMain; // Jump buffer for script main loop
 	bool isReset;  // Reset flag
 
@@ -76,8 +79,10 @@ struct Script
 	//! bytecode. This will only set up the stack and zero all
 	//! the fields. Do not call multiple times.
 	//!
+	//! \param bytecode The program bytecode.
+	//! \param bytecodeSize The size of the bytecode.
 	//! \param info Script information from the bytecode.
-	void Init(const ScriptInfo *info);
+	void Init(uint8_t *bytecode, size_t bytecodeSize, bc::Script *info);
 
 	//! \brief Release resources used by the script.
 	//! 
@@ -121,11 +126,12 @@ struct Script
 	//! Raises a StackUnderflow exception if the index is out of
 	//! bounds.
 	//!
-	//! \param i The index of the value, where 0 is the top of the
-	//! stack.
+	//! \param i The index of the value, where -1 is the top of the
+	//! stack, -2 is the second value from the top, and so on. 0 is
+	//! the base of the stack in the current frame.
 	//!
 	//! \return A reference to the value.
-	Value &StackAt(size_t i);
+	Value &StackAt(int i);
 
 	//! \brief Yield control to the virtual machine.
 	void Sched();
