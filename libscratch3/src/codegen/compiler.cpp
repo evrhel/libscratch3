@@ -871,7 +871,7 @@ public:
 		cp.PushValue(zero);
 		cp.WriteOpcode(Op_gt);
 		cp.WriteOpcode(Op_jz);
-		DataReference &jz = cp.WriteReference(Segment_text, Segment_text);
+		size_t jz = cp.WriteReference(Segment_text, Segment_text);
 
 		if (node->sl)
 			node->sl->Accept(this);
@@ -884,7 +884,7 @@ public:
 		// jump back to top
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
-		jz.off = cp._text.size(); // set jump destination
+		cp.SetReference(jz, Segment_text, cp._text.size()); // set jump destination
 
 		// pop counter
 		cp.WriteOpcode(Op_pop);
@@ -911,11 +911,11 @@ public:
 		node->e->Accept(this);
 
 		cp.WriteOpcode(Op_jz);
-		DataReference &jz = cp.WriteReference(Segment_text, Segment_text);
+		size_t jz = cp.WriteReference(Segment_text, Segment_text);
 
 		node->sl->Accept(this);
 
-		jz.off = cp._text.size(); // set jump destination
+		cp.SetReference(jz, Segment_text, cp._text.size()); // set jump destination
 	}
 
 	virtual void Visit(IfElse *node)
@@ -931,11 +931,11 @@ public:
 			node->e->Accept(this);
 
 			cp.WriteOpcode(Op_jnz);
-			DataReference &jnz = cp.WriteReference(Segment_text, Segment_text);
+			size_t jnz = cp.WriteReference(Segment_text, Segment_text);
 
 			node->sl2->Accept(this);
 
-			jnz.off = cp._text.size(); // set jump destination
+			cp.SetReference(jnz, Segment_text, cp._text.size()); // set jump destination
 
 			return;
 		}
@@ -957,21 +957,21 @@ public:
 
 		// conditional jump to else block
 		cp.WriteOpcode(Op_jz);
-		DataReference &jz = cp.WriteReference(Segment_text, Segment_text);
+		size_t jz = cp.WriteReference(Segment_text, Segment_text);
 
 		node->sl1->Accept(this);
 
 		// unconditional jump to end
 		cp.WriteOpcode(Op_jmp);
-		DataReference &trueJmp = cp.WriteReference(Segment_text, Segment_text);
+		size_t trueJmp = cp.WriteReference(Segment_text, Segment_text);
 
 		// set jump destination for else block
-		jz.off = cp._text.size();
+		cp.SetReference(jz, Segment_text, cp._text.size());
 
 		node->sl2->Accept(this);
 
 		// set jump destination for end
-		trueJmp.off = cp._text.size();
+		cp.SetReference(trueJmp, Segment_text, cp._text.size());
 	}
 
 	virtual void Visit(WaitUntil *node)
@@ -982,14 +982,14 @@ public:
 		node->e->Accept(this);
 
 		cp.WriteOpcode(Op_jnz);
-		DataReference &jnz = cp.WriteReference(Segment_text, Segment_text);
+		size_t jnz = cp.WriteReference(Segment_text, Segment_text);
 		cp.WriteText<int64_t>(0); // placeholder
 
 		cp.WriteOpcode(Op_yield);
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
 		// set jump destination for condition
-		jnz.off = cp._text.size();
+		cp.SetReference(jnz, Segment_text, cp._text.size());
 	}
 
 	virtual void Visit(RepeatUntil *node)
@@ -1000,7 +1000,7 @@ public:
 		node->e->Accept(this);
 
 		cp.WriteOpcode(Op_jnz);
-		DataReference &jnz = cp.WriteReference(Segment_text, Segment_text);
+		size_t jnz = cp.WriteReference(Segment_text, Segment_text);
 
 		if (node->sl)
 			node->sl->Accept(this);
@@ -1009,7 +1009,7 @@ public:
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
 		// set jump destination for condition
-		jnz.off = cp._text.size();
+		cp.SetReference(jnz, Segment_text, cp._text.size());
 	}
 
 	virtual void Visit(Stop *node)
@@ -2114,7 +2114,7 @@ void CompiledProgram::WriteDebug(const void *data, size_t size)
 	memcpy(_debug.data() + _debug.size() - size, data, size);
 }
 
-DataReference &CompiledProgram::WriteReference(SegmentType from, SegmentType to, uint64_t off)
+size_t CompiledProgram::WriteReference(SegmentType from, SegmentType to, uint64_t off)
 {
 	uint8_t *ptr;
 
@@ -2143,7 +2143,7 @@ DataReference &CompiledProgram::WriteReference(SegmentType from, SegmentType to,
 	return CreateReference(ptr, to, off);
 }
 
-DataReference &CompiledProgram::CreateReference(void *dst, SegmentType seg, uint64_t off)
+size_t CompiledProgram::CreateReference(void *dst, SegmentType seg, uint64_t off)
 {
 	SegmentType fromSeg;
 	uint64_t fromOff;
@@ -2182,7 +2182,15 @@ DataReference &CompiledProgram::CreateReference(void *dst, SegmentType seg, uint
 
 	_references.emplace_back(DataReference{ fromSeg, fromOff }, DataReference{ seg, off });
 
-	return _references.back().second;
+	return _references.size() - 1;
+}
+
+size_t CompiledProgram::SetReference(size_t refId, SegmentType seg, uint64_t newOff)
+{
+	auto &p = _references[refId];
+	p.second.seg = seg;
+	p.second.off = newOff;
+	return refId;
 }
 
 void CompiledProgram::ResolvePointer(void *dst, SegmentType *seg, uint64_t *off)

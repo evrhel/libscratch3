@@ -100,8 +100,9 @@ private:
 	template <typename T>
 	inline void WriteDebug(const T &data) { WriteDebug(&data, sizeof(T)); }
 
-	DataReference &WriteReference(SegmentType from, SegmentType to, uint64_t off = -1);
-	DataReference &CreateReference(void *dst, SegmentType seg, uint64_t off = -1);
+	size_t WriteReference(SegmentType from, SegmentType to, uint64_t off = -1);
+	size_t CreateReference(void *dst, SegmentType seg, uint64_t off = -1);
+	size_t SetReference(size_t refId, SegmentType seg, uint64_t newOff);
 
 	void ResolvePointer(void *dst, SegmentType *seg, uint64_t *off);
 

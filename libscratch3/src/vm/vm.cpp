@@ -634,6 +634,11 @@ void VirtualMachine::DispatchEvents()
 	// Flag clicked
 	if (_flagClicked)
 	{
+		StopAllSounds();
+
+		for (Script &script : _scripts)
+			script.Reset();
+
 		for (Script *script : _flagListeners)
 			script->Start();
 		_flagClicked = false;

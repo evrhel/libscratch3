@@ -157,11 +157,18 @@ void Debugger::Render()
 				ImGui::LabelText("Waiting", "%d", _vm->_waitingScripts);
 
 				ImGui::SeparatorText("Global Variables");
-				/*for (auto &p : _vm->_variables)
-				{
-					Value &v = p.second;
-					const char *name = p.first->str;
+				uint8_t *bytecode = _vm->GetBytecode();
+				bc::Header *header = (bc::Header *)bytecode;
+				bc::uint64 count = *(bc::uint64 *)(bytecode + header->rdata);
+				Value *vars = (Value *)(bytecode + header->data);
 
+				for (bc::uint64 i = 0; i < count; i++)
+				{
+					Value &v = vars[i];
+
+					char name[32];
+					snprintf(name, sizeof(name), "[%llu]", i);
+					
 					switch (v.type)
 					{
 					default:
@@ -185,8 +192,11 @@ void Debugger::Render()
 					case ValueType_List:
 						ImGui::LabelText(name, "<list> (length: %lld)", v.u.list->len);
 						break;
+					case ValueType_IntPtr:
+						ImGui::LabelText(name, "<intptr>: 0x%X", v.u.intptr);
+						break;
 					}
-				}*/
+				}
 
 				ImGui::SeparatorText("Control");
 

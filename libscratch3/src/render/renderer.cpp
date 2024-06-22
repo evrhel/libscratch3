@@ -225,22 +225,43 @@ void GLRenderer::BeginRender()
 
     if (_options.forceAspectRatio)
     {
+        GLint x, y;
+        GLsizei w, h;
+
+
         if (width * VIEWPORT_HEIGHT > height * VIEWPORT_WIDTH)
         {
-            int newWidth = height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
-            glViewport((width - newWidth) / 2, 0, newWidth, height);
+            w = height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
+            h = height;
+            x = (width - w) / 2;
+            y = 0;
         }
         else
         {
-            int newHeight = width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
-            glViewport(0, (height - newHeight) / 2, width, newHeight);
+            w = width;
+            h = width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
+            x = 0;
+            y = (height - h) / 2;
         }
+
+        glViewport(x, y, w, h);
+
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(x, y, w, h);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(0, 0, width, height);
+        glDisable(GL_SCISSOR_TEST);
     }
     else
+    {
         glViewport(0, 0, width, height);
-
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
 }
 
 void GLRenderer::Render()
