@@ -121,14 +121,14 @@ public:
 	//! \param message The panic message
 	void LS_NORETURN Panic(const char *message = nullptr);
 
-	//! \brief Get a reference to a variable
+	//! \brief Get a reference to a static variable
 	//!
 	//! Panics if the variable does not exist.
 	//!
-	//! \param name The name of the variable
+	//! \param id The variable ID
 	//!
 	//! \return A reference to the variable
-	Value &GetVariableRef(const Value &name);
+	Value &GetStaticVariable(uint32_t id);
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -199,8 +199,6 @@ private:
 	Sprite *_stage; // Stage sprite
 
 	std::unordered_map<const String *, intptr_t, _StringHasher, _StringEqual> _spriteNames; // Sprite name lookup
-
-	std::unordered_map<String *, Value, _StringHasher, _StringEqual> _variables; // Variables
 
 	std::vector<Sound *> _sounds; // All sounds
 	std::list<Sound *> _playingSounds; // Playing sounds

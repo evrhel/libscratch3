@@ -46,7 +46,7 @@ void Script::Init(uint8_t *bytecode, size_t bytecodeSize, bc::Script *info)
 	waitInput = false;
 	askInput = false;
 	ticks = 0;
-	entry = bytecode + header->text + info->offset;
+	entry = bytecode + info->offset;
 	pc = entry;
 	isReset = false;
 	autoStart = false;
@@ -97,7 +97,7 @@ void Script::Reset()
 
 	assert(sp == stackEnd);
 
-	bp = nullptr;
+	bp = sp;
 }
 
 void Script::Start()
@@ -115,8 +115,6 @@ void Script::Main()
 
 	uint8_t *bytecode = vm->GetBytecode();
 	bc::Header *header = (bc::Header *)bytecode;
-	uint8_t *textBegin = bytecode + header->text;
-	uint8_t *textEnd = textBegin + header->text_size;
 
 	bool b, b2;
 	uint64_t ui64;
@@ -141,25 +139,28 @@ void Script::Main()
 			break;
 		case Op_int:
 			Raise(VMError, "Software interrupt");
-		/*case Op_varset:
-			Assign(vm->GetVariableRef(StackAt(0)), StackAt(1));
-			Pop();
-			Pop();
-			break;
-		case Op_varadd: {
-			Value &v = vm->GetVariableRef(StackAt(0));
-			SetReal(v, ToReal(v) + ToReal(StackAt(1)));
-			Pop();
+		case Op_setstatic: {
+			bc::VarId *id = (bc::VarId *)pc;
+			pc += sizeof(bc::VarId);
+
+			Assign(vm->GetStaticVariable(id->ToInt()), StackAt(-1));
 			Pop();
 			break;
 		}
-		case Op_varget:
-			Assign(StackAt(0), vm->GetVariableRef(StackAt(0)));
-			break;*/
-		case Op_setstatic:
-			Raise(NotImplemented, "setstatic");
-		case Op_getstatic:
-			Raise(NotImplemented, "getstatic");
+		case Op_getstatic: {
+			bc::VarId *id = (bc::VarId *)pc;
+			pc += sizeof(bc::VarId);
+			Assign(Push(), vm->GetStaticVariable(id->ToInt()));
+			break;
+		}
+		case Op_addstatic: {
+			bc::VarId *id = (bc::VarId *)pc;
+			pc += sizeof(bc::VarId);
+			Value &v = vm->GetStaticVariable(id->ToInt());
+			SetReal(v, ToReal(v) + ToReal(StackAt(-1)));
+			Pop();
+			break;
+		}
 		case Op_listcreate:
 			i64 = *(int64_t *)pc;
 			pc += sizeof(int64_t);
@@ -167,7 +168,7 @@ void Script::Main()
 			break;
 		case Op_jmp:
 			ui64 = *(uint64_t *)pc;
-			pc = textBegin + ui64;
+			pc = bytecode + ui64;
 			break;
 		case Op_jz:
 			ui64 = *(uint64_t *)pc;
@@ -175,7 +176,7 @@ void Script::Main()
 			Pop();
 
 			if (!b)
-				pc = textBegin + ui64;
+				pc = bytecode + ui64;
 			else
 				pc += sizeof(uint64_t);
 			break;
@@ -185,7 +186,7 @@ void Script::Main()
 			Pop();
 
 			if (b)
-				pc = textBegin + ui64;
+				pc = bytecode + ui64;
 			else
 				pc += sizeof(uint64_t);
 			break;

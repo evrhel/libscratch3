@@ -157,7 +157,7 @@ void Debugger::Render()
 				ImGui::LabelText("Waiting", "%d", _vm->_waitingScripts);
 
 				ImGui::SeparatorText("Global Variables");
-				for (auto &p : _vm->_variables)
+				/*for (auto &p : _vm->_variables)
 				{
 					Value &v = p.second;
 					const char *name = p.first->str;
@@ -186,7 +186,7 @@ void Debugger::Render()
 						ImGui::LabelText(name, "<list> (length: %lld)", v.u.list->len);
 						break;
 					}
-				}
+				}*/
 
 				ImGui::SeparatorText("Control");
 

@@ -239,7 +239,7 @@ void GLRenderer::Render()
     for (int64_t *it = _renderOrder + 1; it < end; it++)
     {
         SpriteRenderInfo &s = _sprites[*it];
-        if (s.shouldRender)
+        if (s.shouldRender && s.texture)
         {
             s.Prepare(_spriteShader);
             DrawQuad();

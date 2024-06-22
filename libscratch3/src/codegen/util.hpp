@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "../vm/memory.hpp"
+
 // See BYTECODE.md
 namespace bc
 {
@@ -76,14 +78,6 @@ namespace bc
 		ptr<Costume> costumes;
 		uint64 numSounds;
 		ptr<Sound> sounds;
-	};
-
-	struct Value
-	{
-		uint16 type;
-		uint16 flags;
-		uint32 padding;
-		byte data[8];
 	};
 
 	struct VarId

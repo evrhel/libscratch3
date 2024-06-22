@@ -68,12 +68,15 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 
 		_spriteNames[sprite.GetName()] = i + 1;
 
-		// create initializer
-		_initScripts.emplace_back();
-		Script &init = _initScripts.back();
-		init.Init(bytecode, size, &si.initializer);
-		init.sprite = &sprite;
-		init.vm = this;
+		// create initializer, if any
+		if (si.initializer.offset)
+		{
+			_initScripts.emplace_back();
+			Script &init = _initScripts.back();
+			init.Init(bytecode, size, &si.initializer);
+			init.sprite = &sprite;
+			init.vm = this;
+		}
 
 		// load scripts
 		bc::Script *scripts = (bc::Script *)(bytecode + si.scripts);
@@ -91,8 +94,6 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 
 		if (si.isStage)
 			_stage = &sprite;
-
-		i++;
 	}
 
 	if (!foundStage)
@@ -177,7 +178,7 @@ int VirtualMachine::VMStart()
 	for (Script &script : _scripts)
 	{
 		uint8_t *ptr = script.entry;
-		uint8_t opcode = *ptr;
+		Opcode opcode = (Opcode)*ptr;
 		ptr++;
 
 		switch (opcode)
@@ -378,24 +379,16 @@ void VirtualMachine::Panic(const char *message)
 	longjmp(_panicJmp, 1);
 }
 
-Value &VirtualMachine::GetVariableRef(const Value &name)
+Value &VirtualMachine::GetStaticVariable(uint32_t id)
 {
-	assert(_current != nullptr);
+	bc::Header *header = (bc::Header *)_bytecode;
+	bc::uint64 count = *(bc::uint64 *)(_bytecode + header->rdata);
+	Value *vars = (Value *)(_bytecode + header->data);
 
-	if (name.type != ValueType_String)
-		Panic("Variable name must be a string");
+	if (id >= count)
+		Panic("Invalid static variable ID");
 
-	auto it = _variables.find(name.u.string);
-	if (it == _variables.end())
-	{
-		// create a new variable
-		// TODO: throw an exception if the variable is not found
-		Value &v = _variables[name.u.string];
-		InitializeValue(v);
-		return v;
-	}
-
-	return it->second;
+	return vars[id];
 }
 
 Sprite *VirtualMachine::FindSprite(const Value &name)
@@ -609,10 +602,6 @@ void VirtualMachine::Cleanup()
 
 	_messageListeners.clear();
 	_keyListeners.clear();
-
-	for (auto &p : _variables)
-		ReleaseValue(p.second);
-	_variables.clear();
 
 	for (Script &script : _scripts)
 		script.Destroy();

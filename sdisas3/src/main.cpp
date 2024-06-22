@@ -890,7 +890,7 @@ static InstructionInfo *GetInstructionInfo(uint8_t *fileData, size_t fileSize, u
 			if (si.offset == offset)
 			{
 				info.sprite = &ste;
-				info.index = i;
+				info.index = j;
 				info.isInitializer = false;
 				return &info;
 			}

@@ -1724,8 +1724,7 @@ public:
 
 		auto &vars = stage->variables->variables;
 
-		cp.WriteRdata<uint64_t>(offset);
-		cp.WriteRdata<uint64_t>(vars.size());
+		cp.WriteRdata<bc::uint64>(vars.size());
 
 		for (AutoRelease<VariableDef> &vd : vars)
 		{

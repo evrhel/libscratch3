@@ -33,7 +33,7 @@ struct Value
 	uint16_t type; // Type of the value, as a ValueType
 	uint16_t flags; // Flags for the value
 
-	uint8_t __padding[4];
+	uint8_t __padding[4]; // Padding for alignment
 
 	union
 	{
@@ -219,6 +219,11 @@ Value &AllocList(Value &v, int64_t len);
 constexpr Value &InitializeValue(Value &v)
 {
 	v.type = ValueType_None;
+	v.flags = 0;
+	v.__padding[0] = 0;
+	v.__padding[1] = 0;
+	v.__padding[2] = 0;
+	v.__padding[3] = 0;
 	v.u.ref = nullptr;
 	return v;
 }

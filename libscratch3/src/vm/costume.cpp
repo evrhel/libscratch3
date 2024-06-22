@@ -87,7 +87,11 @@ void Costume::Load()
 GLuint Costume::GetTexture(const Vector2 &scale)
 {
 	if (!_handle)
+	{
+		if (!_textures)
+			return 0; // not loaded
 		return _textures[0]; // not an SVG, always use first LOD
+	}
 
 	constexpr const float kIndexOffset = 8;
 
