@@ -14,6 +14,7 @@
 		<DisplayString Condition="type == ValueType_Bool">{u.boolean}</DisplayString>
 		<DisplayString Condition="type == ValueType_String">{u.string->str,s8}</DisplayString>
 		<DisplayString Condition="type == ValueType_List">{{length = {u.list->len}}}</DisplayString>
+		<DisplayString Condition="type == ValueType_IntPtr">{u.intptr,X}</DisplayString>
 		<Expand>
 			<Item Name="[type]">(ValueType)type</Item>
 			<Item Name="[flags]">flags</Item>
@@ -22,6 +23,7 @@
 			<Item Name="[value]" Condition="type == ValueType_Bool">u.boolean</Item>
 			<Item Name="[value]" Condition="type == ValueType_String">u.string</Item>
 			<Item Name="[value]" Condition="type == ValueType_List">u.list</Item>
+			<Item Name="[value]" Condition="type == ValueType_IntPtr">u.intptr,X</Item>
 		</Expand>
 	</Type>
 	
@@ -66,6 +68,7 @@
 			<Item Name="[Exception]" Condition="except != Exception_None">except</Item>
 			<Item Name="[Exception Message]" Condition="except != Exception_None">exceptMessage</Item>
 			<Item Name="[Virtual Machine]">vm</Item>
+			<Item Name="[Base Pointer]">bp</Item>
 			<Item Name="[Stack Size]">stack + 512 - sp</Item>
 			<ArrayItems>
 				<Size>stack + 512 - sp</Size>
@@ -109,99 +112,6 @@
 			<Item Name="[Name]">_name.u.string->str,s8</Item>
 			<Item Name="[Rate]">_rate</Item>
 			<Item Name="[Sample Count]">_sampleCount</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="ASTNode">
-		<DisplayString>{_types[0]}</DisplayString>
-	</Type>
-
-	<Type Name="Constexpr">
-		<DisplayString>{value}</DisplayString>
-	</Type>
-
-	<Type Name="StatementList">
-		<DisplayString>{{Count = {sl._Mypair._Myval2._Mylast - sl._Mypair._Myval2._Myfirst}}}</DisplayString>
-		<Expand>
-			<CustomListItems>
-				<Variable Name="nElements" InitialValue="sl._Mypair._Myval2._Mylast - sl._Mypair._Myval2._Myfirst"/>
-				<Variable Name="iIndex" InitialValue="0"/>
-
-				<Size>nElements</Size>
-				<Exec>iIndex = 0</Exec>
-				<Loop>
-					<Break Condition="iIndex >= nElements"/>
-					<Item>sl[iIndex]._obj</Item>
-					<Exec>iIndex++</Exec>
-				</Loop>
-			</CustomListItems>
-		</Expand>
-	</Type>
-
-	<Type Name="StatementListList">
-		<DisplayString>{{Count = {sll._Mypair._Myval2._Mylast - sll._Mypair._Myval2._Myfirst}}}</DisplayString>
-		<Expand>
-			<CustomListItems>
-				<Variable Name="nElements" InitialValue="sll._Mypair._Myval2._Mylast - sll._Mypair._Myval2._Myfirst"/>
-				<Variable Name="iIndex" InitialValue="0"/>
-
-				<Size>nElements</Size>
-				<Exec>iIndex = 0</Exec>
-				<Loop>
-					<Break Condition="iIndex >= nElements"/>
-					<Item>sll[iIndex]._obj</Item>
-					<Exec>iIndex++</Exec>
-				</Loop>
-			</CustomListItems>
-		</Expand>
-	</Type>
-
-	<Type Name="SpriteDef">
-		<DisplayString>{name}</DisplayString>
-		<Expand>
-			<Item Name="[Name]">name</Item>			
-			<Item Name="[Variables]">*variables._obj</Item>
-			<Item Name="[Lists]">*lists._obj</Item>
-			<Item Name="[Scripts]">*scripts._obj</Item>
-			<Item Name="[Costumes]">*costumes._obj</Item>
-			<Item Name="[Sounds]">*sounds._obj</Item>
-			<Item Name="[Current Costume]">currentCostume</Item>
-			<Item Name="[Is Stage]">isStage</Item>
-			<Item Name="[Volume]">volume</Item>
-			<Item Name="[Layer]">layer</Item>
-			<Item Name="[Visible]">visible</Item>
-			<Item Name="[X]">x</Item>
-			<Item Name="[Y]">y</Item>
-			<Item Name="[Size]">size</Item>
-			<Item Name="[Direction]">direction</Item>
-			<Item Name="[Draggable]">draggable</Item>
-			<Item Name="[Rotation Style]">rotationStyle</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="SpriteDefList">
-		<DisplayString>{{Count = {sprites._Mypair._Myval2._Mylast - sprites._Mypair._Myval2._Myfirst}}}</DisplayString>
-		<Expand>
-			<CustomListItems>
-				<Variable Name="nElements" InitialValue="sprites._Mypair._Myval2._Mylast - sprites._Mypair._Myval2._Myfirst"/>
-				<Variable Name="iIndex" InitialValue="0"/>
-
-				<Size>nElements</Size>
-				<Exec>iIndex = 0</Exec>
-				<Loop>
-					<Break Condition="iIndex >= nElements"/>
-					<Item>sprites[iIndex]._obj</Item>
-					<Exec>iIndex++</Exec>
-				</Loop>
-			</CustomListItems>
-		</Expand>
-	</Type>
-
-	<Type Name="Program">
-		<DisplayString>Program</DisplayString>
-		<Expand>
-			<Item Name="[Sprites]">*sprites._obj</Item>
-			<Item Name="[Monitors]">monitors</Item>
 		</Expand>
 	</Type>
 </AutoVisualizer>

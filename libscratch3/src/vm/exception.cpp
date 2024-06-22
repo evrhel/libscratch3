@@ -22,6 +22,8 @@ const char *ExceptionString(ExceptionType type)
 		return "Invalid argument";
 	case UnsupportedOperation:
 		return "Unsupported operation";
+	case AccessViolation:
+		return "Access violation";
 	case NotImplemented:
 		return "Not implemented";
 	case VMError:

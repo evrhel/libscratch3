@@ -18,11 +18,11 @@ enum Opcode : uint8_t
 	Op_jz, // Relative jump if false
 	Op_jnz, // Relative jump if true
 
-	Op_call, // Push return address and jump
-	Op_ret, // Pop return address and jump
+	Op_call, // Call procedure
+	Op_ret, // Return from procedure
 
-	Op_enter, // Enter function
-	Op_leave, // Leave function
+	Op_enter, // Enter procedure
+	Op_leave, // Leave procedure
 
 	Op_yield, // Yield to scheduler
 

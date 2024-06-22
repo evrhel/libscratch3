@@ -11,13 +11,15 @@ struct ProcInfo
 {
 	ProcProto *proto;
 
-	bool FindArgument(const std::string &name, bc::VarId *id) const
+	bool FindArgument(const std::string &name, int16_t *arg) const
 	{
+		// TODO: check if out of uint16_t range
+
 		for (size_t i = 0; i < proto->arguments.size(); ++i)
 		{
 			if (proto->arguments[i].second == name)
 			{
-				*id = bc::VarId(i);
+				*arg = i;
 				return true;
 			}
 		}
@@ -1250,13 +1252,13 @@ public:
 		}
 
 		cp.WriteOpcode(Op_call);
-		cp.WriteText<uint8_t>(it->second.proto->warp);
-		cp.WriteText<uint16_t>(actualargc);
+		cp.WriteText<bc::_bool>(it->second.proto->warp);
+		cp.WriteText<bc::uint16>(actualargc);
 
 		// import symbol
 		uint64_t offset = cp._text.size();
 		cp._importSymbols.emplace_back(offset, currentSpriteName + it->second.proto->proccode);
-		cp.WriteText<uint64_t>(0);
+		cp.WriteText<bc::uint64>(0);
 	}
 
 	//
@@ -1336,8 +1338,8 @@ public:
 			return;
 		}
 
-		bc::VarId var;
-		if (!currentProc->FindArgument(node->value, &var))
+		int16_t arg;
+		if (!currentProc->FindArgument(node->value, &arg))
 		{
 			printf("Error: Undefined argument %s\n", node->value.c_str());
 			abort();
@@ -1345,7 +1347,7 @@ public:
 
 		// push argument
 		cp.WriteOpcode(Op_push);
-		cp.WriteText<bc::VarId>(var);
+		cp.WriteText<int16_t>(arg);
 	}
 
 	virtual void Visit(ArgReporterBoolean *node)
@@ -1360,8 +1362,8 @@ public:
 			return;
 		}
 
-		bc::VarId var;
-		if (!currentProc->FindArgument(node->value, &var))
+		int16_t arg;
+		if (!currentProc->FindArgument(node->value, &arg))
 		{
 			printf("Error: Undefined argument %s\n", node->value.c_str());
 			abort();
@@ -1369,7 +1371,7 @@ public:
 
 		// push argument
 		cp.WriteOpcode(Op_push);
-		cp.WriteText<bc::VarId>(var);
+		cp.WriteText<int16_t>(arg);
 	}
 
 	virtual void Visit(VariableDef *node)

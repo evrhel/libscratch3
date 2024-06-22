@@ -281,6 +281,14 @@ Value &SetParsedString(Value &lhs, const char *rhs)
 	return SetString(lhs, rhs);
 }
 
+Value &SetIntPtr(Value &lhs, intptr_t intptr)
+{
+	ReleaseValue(lhs);
+	lhs.type = ValueType_IntPtr;
+	lhs.u.intptr = intptr;
+	return lhs;
+}
+
 Value &SetEmpty(Value &lhs)
 {
 	ReleaseValue(lhs);

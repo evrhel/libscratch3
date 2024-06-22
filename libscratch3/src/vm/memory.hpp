@@ -21,7 +21,10 @@ enum ValueType
 	/* Reference types */
 
 	ValueType_String, // String *
-	ValueType_List // List *
+	ValueType_List, // List *
+
+	/* Internal types */
+	ValueType_IntPtr // intptr_t
 };
 
 struct Reference;
@@ -44,6 +47,8 @@ struct Value
 		Reference *ref; // (any reference type)
 		String *string; // ValueType_String
 		List *list; // ValueType_List
+
+		intptr_t intptr; // ValueType_IntPtr
 	} u;
 };
 
@@ -132,6 +137,7 @@ Value &SetString(Value &lhs, const std::string &rhs);
 Value &SetStaticString(Value &lhs, String *rhs);
 Value &SetParsedString(Value &lhs, const std::string &rhs);
 Value &SetParsedString(Value &lhs, const char *rhs);
+Value &SetIntPtr(Value &lhs, intptr_t rhs);
 Value &SetEmpty(Value &lhs);
 
 //

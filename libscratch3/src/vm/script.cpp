@@ -97,7 +97,7 @@ void Script::Reset()
 
 	assert(sp == stackEnd);
 
-	bp = sp;
+	bp = sp; // base pointer
 }
 
 void Script::Start()
@@ -190,14 +190,69 @@ void Script::Main()
 			else
 				pc += sizeof(uint64_t);
 			break;
-		case Op_call:
-			Raise(NotImplemented, "call");
-		case Op_ret:
-			Raise(NotImplemented, "ret");
+		case Op_call: {
+			bc::_bool warp = *pc;
+			pc += sizeof(bc::_bool);
+
+			int argc = static_cast<int>(*(bc::uint16 *)pc);
+			pc += sizeof(bc::uint16);
+
+			uint8_t *proc = bytecode + *(bc::uint64 *)pc;
+			pc += sizeof(bc::uint64);
+
+			// space for return address and base pointer
+			Push(), Push();
+
+			// move arguments to new stack frame
+			for (int i = 1; i <= argc; i++)
+				Assign(StackAt(-i), StackAt(-i - 2));
+
+			// store base pointer
+			SetIntPtr(StackAt(-argc - 1), (intptr_t)bp);
+
+			// store return address
+			SetIntPtr(StackAt(-argc - 2), (intptr_t)pc);
+
+			// set new base pointer
+			bp = sp + argc;
+
+			// jump to procedure
+			pc = proc;
+			break;
+		}
+		case Op_ret: {
+			if (bp == stack + STACK_SIZE)
+				Raise(StackUnderflow, "Stack underflow");
+
+			if (bp->type != ValueType_IntPtr)
+				Raise(VMError, "Corrupt stack frame");
+
+			// release stack
+			while (sp < bp)
+			{
+				ReleaseValue(*sp);
+				memset(sp, 0xab, sizeof(Value));
+				sp++;
+			}
+			
+			// restore old base pointer
+			bp = (Value *)bp->u.intptr;
+			Pop();
+
+			// pop return address and jump
+			Value &raddr = StackAt(-1);
+			if (raddr.type != ValueType_IntPtr)
+				Raise(VMError, "Corrupt stack frame");
+			pc = (uint8_t *)raddr.u.intptr;
+			Pop();
+			break;
+		}
 		case Op_enter:
-			Raise(NotImplemented, "enter");
+			// Do nothing
+			break;
 		case Op_leave:
-			Raise(NotImplemented, "leave");
+			// Do nothing
+			break;
 		case Op_yield:
 			Sched();
 			break;
@@ -231,9 +286,9 @@ void Script::Main()
 			break;
 		case Op_push: {
 			int16_t index = *(int16_t *)pc;
+			pc += sizeof(int16_t);
 			Value &v = StackAt(index);
-			Push();
-			Assign(StackAt(-1), StackAt(-2));
+			Assign(Push(), v);
 			break;
 		}
 		case Op_eq:
@@ -1090,14 +1145,14 @@ Value &Script::StackAt(int i)
 	if (i < 0)
 	{
 		val = sp - i - 1;
-		if (val > bp)
-			Raise(AcessViolation, "Stack index out of bounds");
+		if (val >= bp)
+			Raise(AccessViolation, "Stack index out of bounds");
 	}
 	else
 	{
-		val = bp + i;
+		val = bp - i - 1;
 		if (val < sp)
-			Raise(AcessViolation, "Stack index out of bounds");
+			Raise(AccessViolation, "Stack index out of bounds");
 	}
 
 	return *val;

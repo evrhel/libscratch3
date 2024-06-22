@@ -2,8 +2,6 @@
 
 #include <cstdint>
 
-#include "../vm/memory.hpp"
-
 // See BYTECODE.md
 namespace bc
 {

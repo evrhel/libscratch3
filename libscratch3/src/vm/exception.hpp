@@ -11,7 +11,7 @@ enum ExceptionType
 	IllegalOperation,
 	InvalidArgument,
 	UnsupportedOperation,
-	AcessViolation,
+	AccessViolation,
 
 	NotImplemented,
 
