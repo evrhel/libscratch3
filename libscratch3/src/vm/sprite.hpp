@@ -60,7 +60,15 @@ public:
     //! \brief Show or hide the sprite
     //!
     //! \param shown Whether to show the sprite
-    constexpr void SetShown(bool shown) { _shown = shown; }
+    constexpr void SetShown(bool shown)
+    {
+        if (shown != _shown)
+        {
+            _shown = shown;
+            _transDirty = true;
+        }
+    }
+
     constexpr bool IsShown() const { return _shown; }
 
     constexpr void SetX(double x) { _x = x, _transDirty = true; }
@@ -207,7 +215,8 @@ public:
     //! \param bytecodeSize The size of the bytecode.
     //! \param info The information about the sprite, as loaded from
     //! the bytecode
-    void Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info);
+    //! \param stream Whether the sprite and its resources are streamed
+    void Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info, bool stream);
 
     //! \brief Load the sprite data
     //!

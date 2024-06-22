@@ -66,7 +66,8 @@ public:
 	//! \param bytecode The program bytecode
 	//! \param bytecodeSize The size of the bytecode
 	//! \param info The costume information
-	void Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info);
+	//! \param streamed Whether the costume is streamed
+	void Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info, bool streamed);
 
 	//! \brief Load the costumes
 	//!
@@ -88,6 +89,10 @@ private:
 	GLuint *_textures; // texture ids for each LOD, bitmaps have only one LOD
 	GLsizei _lodCount; // number of LODs
 
+	bool _streamed; // whether the costume is streamed
+	bool _uploaded; // whether the costume is uploaded
+	bool _uploadError; // whether the costume failed to upload
+
 	// for base LOD
 	GLuint _texWidth, _texHeight;
 
@@ -103,10 +108,15 @@ private:
 	RsvgHandle *_handle;
 	int _svgWidth, _svgHeight;
 
+	// bitmap specific
+	unsigned char *_bitmapData; // only non null if not uploaded
+
 	// data
 	std::string _dataFormat; // "svg", "png", etc.
 	uint8_t *_data;
 	uint64_t _dataSize;
+
+	void Upload();
 
 	void Cleanup();
 

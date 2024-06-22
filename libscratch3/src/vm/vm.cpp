@@ -64,7 +64,7 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 
 		// create sprite
 		Sprite &sprite = _sprites[i];
-		sprite.Init(bytecode, size, &si);
+		sprite.Init(bytecode, size, &si, !_options.preload);
 
 		_spriteNames[sprite.GetName()] = i + 1;
 

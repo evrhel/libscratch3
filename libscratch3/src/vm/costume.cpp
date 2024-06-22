@@ -2,13 +2,16 @@
 
 #include <cstdio>
 #include <cmath>
+#include <cassert>
 
 #include <cairo/cairo.h>
 
 #include "stb_image.h"
 
-void Costume::Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info)
+void Costume::Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info, bool streamed)
 {
+	Cleanup();
+
 	SetString(_name, (char *)(bytecode + info->name));
 	_dataFormat = (char *)(bytecode + info->format);
 	_bitmapResolution = info->bitmapResolution;
@@ -16,6 +19,8 @@ void Costume::Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *
 	_center.y = info->rotationCenterY;
 	_data = bytecode + info->data;
 	_dataSize = info->dataSize;
+
+	_streamed = streamed;
 }
 
 void Costume::Load()
@@ -26,10 +31,10 @@ void Costume::Load()
 
 		// load image
 		int width, height, channels;
-		unsigned char *data = stbi_load_from_memory(_data, _dataSize,
+		_bitmapData = stbi_load_from_memory(_data, _dataSize,
 			&width, &height, &channels, 4);
 
-		if (!data)
+		if (!_bitmapData)
 		{
 			printf("Costume::Load: Failed to load image %s\n", GetNameString());
 			return;
@@ -39,22 +44,10 @@ void Costume::Load()
 		if (!_textures)
 		{
 			printf("Costume::Load: Failed to allocate memory for texture\n");
-			abort();
+			return;
 		}
 
 		_lodCount = 1;
-
-		// upload to gpu
-		glGenTextures(1, _textures);
-		glBindTexture(GL_TEXTURE_2D, _textures[0]);
-
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 		_texWidth = width;
 		_texHeight = height;
@@ -62,6 +55,9 @@ void Costume::Load()
 		_size = IntVector2(_texWidth, _texHeight);
 		_logicalSize = Vector2(_size) / static_cast<float>(_bitmapResolution);
 		_logicalCenter = Vector2(_center) / static_cast<float>(_bitmapResolution);
+
+		if (!_streamed)
+			Upload();
 	}
 	else if (_dataFormat == "svg")
 	{
@@ -82,14 +78,18 @@ void Costume::Load()
 		_logicalSize = Vector2(_size);
 		_logicalCenter = Vector2(_center);
 	}
+
+	printf("Costume::Load: Loaded %s\n", GetNameString());
 }
 
 GLuint Costume::GetTexture(const Vector2 &scale)
 {
 	if (!_handle)
 	{
-		if (!_textures)
-			return 0; // not loaded
+		Upload();
+		if (_uploadError)
+			return 0;
+
 		return _textures[0]; // not an SVG, always use first LOD
 	}
 
@@ -132,6 +132,7 @@ bool Costume::TestCollision(int32_t x, int32_t y) const
 
 Costume::Costume() :
 	_textures(nullptr), _lodCount(0),
+	_streamed(false), _uploaded(false), _uploadError(false),
 	_texWidth(0), _texHeight(0),
 	_bitmapResolution(0),
 	_data(nullptr), _dataSize(0)
@@ -139,12 +140,42 @@ Costume::Costume() :
 	_handle = nullptr;
 	_svgWidth = _svgHeight = 0;
 
+	_bitmapData = nullptr;
+
 	InitializeValue(_name);
 }
 
 Costume::~Costume()
 {
 	Cleanup();
+}
+
+void Costume::Upload()
+{
+	assert(_handle == nullptr);
+
+	if (_uploaded)
+		return;
+
+	assert(_bitmapData != nullptr);
+
+	printf("Costume::Upload: Uploading %s\n", GetNameString());
+
+	// upload to gpu
+	glGenTextures(1, _textures);
+	glBindTexture(GL_TEXTURE_2D, _textures[0]);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _texWidth, _texHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, _bitmapData);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+	stbi_image_free(_bitmapData), _bitmapData = nullptr;
+
+	_uploaded = true;
 }
 
 void Costume::Cleanup()
@@ -164,8 +195,15 @@ void Costume::Cleanup()
 	if (_handle)
 		g_object_unref(_handle), _handle = nullptr;
 
+	if (_bitmapData)
+		stbi_image_free(_bitmapData), _bitmapData = nullptr;
+
 	_texWidth = _texHeight = 0;
 	_svgWidth = _svgHeight = 0;
+
+	_streamed = false;
+	_uploaded = false;
+	_uploadError = false;
 
 	ReleaseValue(_name);
 }
@@ -174,6 +212,8 @@ GLuint Costume::RenderLod(double scale)
 {
 	if (!_handle)
 		return 0; // not an SVG
+
+	printf("Costume::RenderLod: Rendering %s at scale %.2f\n", GetNameString(), scale);
 
 	uint32_t width = static_cast<uint32_t>(_svgWidth * scale);
 	uint32_t height = static_cast<uint32_t>(_svgHeight * scale);

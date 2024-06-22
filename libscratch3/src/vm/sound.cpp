@@ -78,16 +78,23 @@ void DSPController::SetPitch(double pitch)
 	_resampleRatio = static_cast<float>(pow(kSemitone, pitch / 10)); // 10 units = 1 semitone
 }
 
-void Sound::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, DSPController *dsp)
+void Sound::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, bool stream, DSPController *dsp)
 {
+	Cleanup();
+
 	SetString(_name, (char *)(bytecode + info->name));
 	_data = bytecode + info->data;
 	_dataSize = info->dataSize;
 	_dsp = dsp;
+
+	_streamed = stream;
 }
 
 void Sound::Load()
 {
+	if (_audioStream)
+		return;
+
 	SoundMemoryFile fileData;
 	fileData.data = _data;
 	fileData.size = _dataSize;
@@ -98,7 +105,6 @@ void Sound::Load()
 	if (!file)
 	{
 		printf("Sound::Load: sf_open_virtual failed\n");
-		Cleanup();
 		return;
 	}
 
@@ -106,7 +112,7 @@ void Sound::Load()
 	if (_nChannels != 1)
 	{
 		printf("Sound::Load: only mono sounds are supported\n");
-		Cleanup();
+		sf_close(file);
 		return;
 	}
 
@@ -119,7 +125,8 @@ void Sound::Load()
 	if (read != _frameCount)
 	{
 		printf("Sound::Load: sf_readf_float failed\n");
-		Cleanup();
+		delete[] _audioStream, _audioStream = nullptr;
+		sf_close(file);
 		return;
 	}
 
@@ -129,7 +136,7 @@ void Sound::Load()
 void Sound::Play()
 {
 	if (!_audioStream)
-		return;
+		return; // not loaded
 
 	if (!_stream)
 	{
@@ -153,7 +160,7 @@ void Sound::Play()
 	}
 
 	if (_isPlaying)
-		(void)Pa_StopStream(_stream);
+		(void)Pa_AbortStream(_stream);
 
 	_streamPos = 0;
 	_isPlaying = true;
@@ -169,9 +176,9 @@ void Sound::Stop()
 	if (!_stream)
 		return;
 
-	PaError err = Pa_StopStream(_stream);
+	PaError err = Pa_AbortStream(_stream);
 	if (err != paNoError)
-		printf("Sound::Stop: Pa_StopStream failed: %s\n", Pa_GetErrorText(err));
+		printf("Sound::Stop: Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
 
 	_streamPos = 0;
 	_isPlaying = false;
@@ -181,6 +188,7 @@ void Sound::Stop()
 Sound::Sound() :
 	_stream(nullptr),
 	_isPlaying(false),
+	_streamed(false),
 	_data(nullptr), _dataSize(0),
 	_audioStream(nullptr),
 	_streamPos(0), _frameCount(0),
@@ -203,6 +211,8 @@ void Sound::Cleanup()
 
 	if (_audioStream)
 		delete[] _audioStream, _audioStream = nullptr;
+
+	_streamed = false;
 
 	ReleaseValue(_name);
 }

@@ -107,6 +107,8 @@ Sound *Sprite::FindSound(const String *name)
 bool Sprite::TouchingColor(int64_t color) const
 {        
     // TODO: implement
+    if (!_shown)
+        return false;
     return true;
 }
 
@@ -193,14 +195,20 @@ void Sprite::Update()
         // update sprite render info
         s->model = _model;
 
-        int fbWidth, fbHeight;
-        SDL_GL_GetDrawableSize(render->GetWindow(), &fbWidth, &fbHeight);
+        if (_shown)
+        {
+            // GetTexture may trigger a texture load, only want to do this if
+            // the sprite is visible
 
-        Vector2 fbSize(fbWidth, fbHeight);
-        const Vector2 &viewportSize = render->GetLogicalSize();
-        
-        Vector2 textureScale = uniformScale * fbSize / viewportSize;
-        s->texture = c->GetTexture(textureScale);
+            int fbWidth, fbHeight;
+            SDL_GL_GetDrawableSize(render->GetWindow(), &fbWidth, &fbHeight);
+
+            Vector2 fbSize(fbWidth, fbHeight);
+            const Vector2 &viewportSize = render->GetLogicalSize();
+
+            Vector2 textureScale = uniformScale * fbSize / viewportSize;
+            s->texture = c->GetTexture(textureScale);
+        }
 
         _transDirty = false;
     }
@@ -219,7 +227,7 @@ void Sprite::Update()
     }
 }
 
-void Sprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info)
+void Sprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info, bool stream)
 {
     // Set basic properties
     SetString(_name, (char *)(bytecode + info->name));
@@ -237,12 +245,12 @@ void Sprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info
     // Allocate costumes
     _nCostumes = info->numCostumes;
     _costumes = new Costume[_nCostumes];
-    
+        
     // Initialize costumes
     bc::Costume *costumes = (bc::Costume *)(bytecode + info->costumes);
     for (int64_t i = 0; i < _nCostumes; i++)
     {
-        _costumes[i].Init(bytecode, bytecodeSize, &costumes[i]);
+        _costumes[i].Init(bytecode, bytecodeSize, &costumes[i], stream);
         _costumeNameMap[_costumes[i].GetName()] = i + 1;
     }
 
@@ -254,7 +262,7 @@ void Sprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info
     bc::Sound *sounds = (bc::Sound *)(bytecode + info->sounds);
     for (int64_t i = 0; i < _nSounds; i++)
     {
-		_sounds[i].Init(bytecode, bytecodeSize, &sounds[i], &_dsp);
+		_sounds[i].Init(bytecode, bytecodeSize, &sounds[i], stream, &_dsp);
 		_soundNameMap[_sounds[i].GetName()] = i;
 	}
 }

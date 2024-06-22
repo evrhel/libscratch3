@@ -151,6 +151,9 @@ private:
     int _bottom, _top;
     Vector2 _logicalSize;
 
+    int _viewportX, _viewportY;
+    int _viewportWidth, _viewportHeight;
+
     double _scale;
     
     Matrix4 _proj;

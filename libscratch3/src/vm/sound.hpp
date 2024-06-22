@@ -99,8 +99,9 @@ public:
 	//! \param bytecode The program bytecode.
 	//! \param bytecodeSize The size of the bytecode.
 	//! \param info The sound information, as loaded from the bytecode.
+	//! \param streamed Whether the sound is streamed.
 	//! \param dsp The DSP controller.
-	void Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, DSPController *dsp);
+	void Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, bool streamed, DSPController *dsp);
 
 	//! \brief Load the sound data.
 	//!
@@ -148,6 +149,8 @@ private:
 
 	PaStream *_stream; // PortAudio stream
 	bool _isPlaying; // true if the sound is currently playing
+
+	bool _streamed; // true if the sound is streamed
 
 	// data
 	uint8_t *_data; // full audio data

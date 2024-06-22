@@ -68,20 +68,19 @@ SpriteRenderInfo::~SpriteRenderInfo() { }
 
 void GLRenderer::ScreenToStage(int x, int y, int64_t *xout, int64_t *yout) const
 {
-    int width, height;
-    SDL_GetWindowSize(_window, &width, &height);
+    // TODO: this will not work on retina displays
+    x -= _viewportX;
+    y -= _viewportY;
 
-    *xout = (x - width / 2) * (_right - _left) / width;
-    *yout = (height / 2 - y) * (_top - _bottom) / height;
+    *xout = (x - _viewportWidth / 2) * (_right - _left) / _viewportWidth;
+    *yout = (_viewportHeight / 2 - y) * (_top - _bottom) / _viewportHeight;
 }
 
 void GLRenderer::StageToScreen(int64_t x, int64_t y, int *xout, int *yout) const
 {
-    int width, height;
-	SDL_GetWindowSize(_window, &width, &height);
-
-	*xout = x * width / (_right - _left) + width / 2;
-	*yout = height / 2 - y * height / (_top - _bottom);
+    // TODO: this will not work on retina displays
+	*xout = x * _viewportWidth / (_right - _left) + _viewportWidth / 2 + _viewportX;
+	*yout = _viewportHeight / 2 - y * _viewportHeight / (_top - _bottom) + _viewportY;
 }
 
 intptr_t GLRenderer::CreateSprite()
@@ -210,9 +209,6 @@ void GLRenderer::BeginRender()
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
-    int width, height;
-    SDL_GL_GetDrawableSize(_window, &width, &height);
-
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     glDisable(GL_DEPTH_TEST);
@@ -223,34 +219,20 @@ void GLRenderer::BeginRender()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    glViewport(_viewportX, _viewportY, _viewportWidth, _viewportHeight);
+
     if (_options.forceAspectRatio)
     {
-        GLint x, y;
-        GLsizei w, h;
+        int width, height;
+        SDL_GL_GetDrawableSize(_window, &width, &height);
 
-
-        if (width * VIEWPORT_HEIGHT > height * VIEWPORT_WIDTH)
-        {
-            w = height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
-            h = height;
-            x = (width - w) / 2;
-            y = 0;
-        }
-        else
-        {
-            w = width;
-            h = width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
-            x = 0;
-            y = (height - h) / 2;
-        }
-
-        glViewport(x, y, w, h);
-
+        // clear whole screen
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        // clear viewport
         glEnable(GL_SCISSOR_TEST);
-        glScissor(x, y, w, h);
+        glScissor(_viewportX, _viewportY, _viewportWidth, _viewportHeight);
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         glScissor(0, 0, width, height);
@@ -258,7 +240,6 @@ void GLRenderer::BeginRender()
     }
     else
     {
-        glViewport(0, 0, width, height);
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
     }
@@ -306,6 +287,31 @@ void GLRenderer::Resize()
     double viewWidth = _right - _left;
     double viewHeight = _top - _bottom;
     _scale = std::max(width / viewWidth, height / viewHeight);
+
+    if (_options.forceAspectRatio)
+    {
+        if (width * VIEWPORT_HEIGHT > height * VIEWPORT_WIDTH)
+        {
+            _viewportWidth = height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
+            _viewportHeight = height;
+            _viewportX = (width - _viewportWidth) / 2;
+            _viewportY = 0;
+        }
+        else
+        {
+            _viewportWidth = width;
+            _viewportHeight = width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
+            _viewportX = 0;
+            _viewportY = (height - _viewportHeight) / 2;
+        }
+    }
+    else
+    {
+		_viewportWidth = width;
+		_viewportHeight = height;
+		_viewportX = 0;
+		_viewportY = 0;
+	}
 }
 
 GLRenderer::GLRenderer(int64_t spriteCount, const Scratch3VMOptions &options) :
