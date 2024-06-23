@@ -160,7 +160,10 @@ void Sound::Play()
 	}
 
 	if (_isPlaying)
-		(void)Pa_AbortStream(_stream);
+	{
+		Pa_AbortStream(_stream);
+		Pa_StopStream(_stream);
+	}
 
 	_streamPos = 0;
 	_isPlaying = true;
@@ -176,9 +179,8 @@ void Sound::Stop()
 	if (!_stream)
 		return;
 
-	PaError err = Pa_AbortStream(_stream);
-	if (err != paNoError)
-		printf("Sound::Stop: Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
+	Pa_AbortStream(_stream);
+	Pa_StopStream(_stream);
 
 	_streamPos = 0;
 	_isPlaying = false;

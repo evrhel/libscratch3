@@ -660,10 +660,10 @@ void Script::Main()
 			default:
 				Raise(InvalidArgument, "Invalid layer");
 			case LayerType_Front:
-				sprite->SetLayer(1);
+				sprite->SetLayer(-1);
 				break;
 			case LayerType_Back:
-				sprite->SetLayer(-1);
+				sprite->SetLayer(1);
 				break;
 			}
 
