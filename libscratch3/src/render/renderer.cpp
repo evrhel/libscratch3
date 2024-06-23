@@ -221,8 +221,14 @@ void GLRenderer::BeginRender()
 
     glViewport(_viewportX, _viewportY, _viewportWidth, _viewportHeight);
 
-    if (_options.forceAspectRatio)
+    if (_options.freeAspectRatio)
     {
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+    else
+    {
+
         int width, height;
         SDL_GL_GetDrawableSize(_window, &width, &height);
 
@@ -237,11 +243,6 @@ void GLRenderer::BeginRender()
         glClear(GL_COLOR_BUFFER_BIT);
         glScissor(0, 0, width, height);
         glDisable(GL_SCISSOR_TEST);
-    }
-    else
-    {
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
     }
 }
 
@@ -288,7 +289,14 @@ void GLRenderer::Resize()
     double viewHeight = _top - _bottom;
     _scale = std::max(width / viewWidth, height / viewHeight);
 
-    if (_options.forceAspectRatio)
+    if (_options.freeAspectRatio)
+    {
+        _viewportWidth = width;
+        _viewportHeight = height;
+        _viewportX = 0;
+        _viewportY = 0;
+    }
+    else
     {
         if (width * VIEWPORT_HEIGHT > height * VIEWPORT_WIDTH)
         {
@@ -305,13 +313,6 @@ void GLRenderer::Resize()
             _viewportY = (height - _viewportHeight) / 2;
         }
     }
-    else
-    {
-		_viewportWidth = width;
-		_viewportHeight = height;
-		_viewportX = 0;
-		_viewportY = 0;
-	}
 }
 
 GLRenderer::GLRenderer(int64_t spriteCount, const Scratch3VMOptions &options) :
@@ -437,7 +438,9 @@ GLRenderer::GLRenderer(int64_t spriteCount, const Scratch3VMOptions &options) :
     CreateQuad();
 
     // Load shaders
+#if LS_DEBUG
     printf("Loading shaders\n");
+#endif // LS_DEBUG
     _spriteShader = CreateSpriteShader();
 
     // Draw list

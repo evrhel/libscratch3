@@ -858,11 +858,35 @@ void Script::Main()
 			Pop();
 			break;
 		case Op_stopall:
-			Raise(NotImplemented, "stopall");
+			for (const Script &script : vm->GetScripts())
+			{
+				Script *sp = const_cast<Script *>(&script);
+				if (sp != this)
+				{
+					// See Op_stopother for explanation
+					sp->state = TERMINATED;
+				}
+			}
+
+			Terminate();
 		case Op_stopself:
 			Terminate();
-		case Op_stopother:
-			Raise(NotImplemented, "stopother");
+		case Op_stopother: {
+			for (const Script &script : vm->GetScripts())
+			{
+				Script *sp = const_cast<Script *>(&script);
+				if (sp->sprite == sprite && sp != this)
+				{
+					// Do not call Terminate(), as it will yield
+					// the current script. Instead, set the state
+					// to TERMINATED and let the scheduler handle it
+					// in the next iteration.
+					sp->state = TERMINATED;
+				}
+			}
+
+			break;
+		}
 		case Op_onclone:
 			// do nothing
 			break;

@@ -86,7 +86,9 @@ void Costume::Load()
 		}
 	}
 
+#if LS_DEBUG
 	printf("Costume::Load: Loaded %s\n", GetNameString());
+#endif // LS_DEBUG
 }
 
 GLuint Costume::GetTexture(const Vector2 &scale)
@@ -166,7 +168,9 @@ void Costume::Upload()
 
 	assert(_bitmapData != nullptr);
 
+#if LS_DEBUG
 	printf("Costume::Upload: Uploading %s\n", GetNameString());
+#endif // LS_DEBUG
 
 	// upload to gpu
 	glGenTextures(1, _textures);
@@ -220,7 +224,9 @@ GLuint Costume::RenderLod(double scale)
 	if (!_handle)
 		return 0; // not an SVG
 
+#if LS_DEBUG
 	printf("Costume::RenderLod: Rendering %s at scale %.2f\n", GetNameString(), scale);
+#endif // LS_DEBUG
 
 	uint32_t width = static_cast<uint32_t>(_svgWidth * scale);
 	uint32_t height = static_cast<uint32_t>(_svgHeight * scale);

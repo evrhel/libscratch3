@@ -1109,64 +1109,56 @@ private:
 
 			ProcProto *proto = n->As<ProcProto>();
 			Call *call = n->As<Call>();
-			if (proto == nullptr)
+			if (proto != nullptr || call != nullptr)
 			{
-				if (call == nullptr)
+				rapidjson::Value &mutation = block["mutation"];
+				if (!mutation.IsObject())
 				{
-					Error("Expected procedures_prototype or procedures_call parsing mutation in block `%s` (%s)",
-						id.c_str(), opcode.GetString());
+					Error("Expected object parsing mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
 					delete n;
 					return nullptr;
 				}
-			}
 
-			rapidjson::Value &mutation = block["mutation"];
-			if (!mutation.IsObject())
-			{
-				Error("Expected object parsing mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
-				delete n;
-				return nullptr;
-			}
-
-			if (!mutation.HasMember("proccode"))
-			{
-				Error("Missing `proccode` member in mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
-				delete n;
-				return nullptr;
-			}
-
-			rapidjson::Value &proccode = mutation["proccode"];
-			if (!proccode.IsString())
-			{
-				Error("Expected string parsing proccode in mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
-				delete n;
-				return nullptr;
-			}
-
-			bool warp = false;
-			if (mutation.HasMember("warp"))
-			{
-				rapidjson::Value &warpv = mutation["warp"];
-				if (warpv.IsBool())
+				if (!mutation.HasMember("proccode"))
 				{
-					warp = warpv.GetBool();
+					Error("Missing `proccode` member in mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
+					delete n;
+					return nullptr;
 				}
-				else if (warpv.IsString())
-				{
-					if (StringEqualsRaw(warpv.GetString(), "true"))
-						warp = true;
-				}
-			}
 
-			if (proto)
-			{
-				proto->proccode = proccode.GetString();
-				proto->warp = true;
-			}
-			else if (call)
-			{
-				call->proccode = proccode.GetString();
-				call->warp = true;
+				rapidjson::Value &proccode = mutation["proccode"];
+				if (!proccode.IsString())
+				{
+					Error("Expected string parsing proccode in mutation in block `%s` (%s)", id.c_str(), opcode.GetString());
+					delete n;
+					return nullptr;
+				}
+
+				bool warp = false;
+				if (mutation.HasMember("warp"))
+				{
+					rapidjson::Value &warpv = mutation["warp"];
+					if (warpv.IsBool())
+					{
+						warp = warpv.GetBool();
+					}
+					else if (warpv.IsString())
+					{
+						if (StringEqualsRaw(warpv.GetString(), "true"))
+							warp = true;
+					}
+				}
+
+				if (proto)
+				{
+					proto->proccode = proccode.GetString();
+					proto->warp = true;
+				}
+				else if (call)
+				{
+					call->proccode = proccode.GetString();
+					call->warp = true;
+				}
 			}
 		}
 

@@ -64,7 +64,7 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 
 		// create sprite
 		Sprite &sprite = _sprites[i];
-		sprite.Init(bytecode, size, &si, !_options.preload);
+		sprite.Init(bytecode, size, &si, _options.stream);
 
 		_spriteNames[sprite.GetName()] = i + 1;
 
@@ -801,8 +801,12 @@ void VirtualMachine::Scheduler()
 		{
 			// script raised an exception
 			printf("<EXCEPTION> %s: %s\n", ExceptionString(script.except), script.exceptMessage);
+
+			char message[256];
+			snprintf(message, sizeof(message), "Exception: %s\nReason: %s", ExceptionString(script.except), script.exceptMessage);
+
 			script.Dump();
-			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", ExceptionString(script.except), _render->GetWindow());
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Exception", message, _render->GetWindow());
 			
 			_activeScripts = 0;
 			_waitingScripts = 0;

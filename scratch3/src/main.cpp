@@ -68,10 +68,10 @@ static void Usage()
 	printf("  -W, --width <width>   Set window width\n");
 	printf("  -H, --height <height> Set window height\n");
 	printf("  -r, --resizable       Set window resizable\n");
-	printf("  -p, --preload         Preload assets before running\n");
+	printf("  -s, --stream          Stream resources instead of loading all at once\n");
 	printf("  -f, --fullscreen      Set fullscreen\n");
 	printf("  -b, --borderless      Set borderless\n");
-	printf("  -a, --force-aspect    Force viewport aspect ratio\n");
+	printf("  -a, --free-aspect     Don't lock aspect ratio\n");
 }
 
 static void Version()
@@ -91,10 +91,10 @@ struct Options
 	int width = -1;
 	int height = -1;
 	bool resizable = false;
-	bool preload = false;
+	bool stream = false;
 	bool fullscreen = false;
 	bool borderless = false;
-	bool forceAspectRatio = false;
+	bool freeAspectRatio = false;
 
 	void Parse(int argc, char *argv[])
 	{
@@ -153,14 +153,14 @@ struct Options
 			}
 			else if (!strcmp(arg, "--resizable"))
 				resizable = true;
-			else if (!strcmp(arg, "--preload"))
-				preload = true;
+			else if (!strcmp(arg, "--stream"))
+				stream = true;
 			else if (!strcmp(arg, "--fullscreen"))
 				fullscreen = true;
 			else if (!strcmp(arg, "--borderless"))
 				borderless = true;
-			else if (!strcmp(arg, "--force-aspect"))
-				forceAspectRatio = true;
+			else if (!strcmp(arg, "--free-aspect"))
+				freeAspectRatio = true;
 			else if (!strcmp(arg, "-Og"))
 			{
 				optimization = 0;
@@ -195,8 +195,8 @@ struct Options
 					case 'r':
 						resizable = true;
 						break;
-					case 'p':
-						preload = true;
+					case 's':
+						stream = true;
 						break;
 					case 'f':
 						fullscreen = true;
@@ -205,7 +205,7 @@ struct Options
 						borderless = true;
 						break;
 					case 'a':
-						forceAspectRatio = true;
+						freeAspectRatio = true;
 						break;
 					case 'o':
 					case 'F':
@@ -298,8 +298,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	printf("Loading project `%s`\n", opts.file);
-
 	S = Scratch3Create();
 	if (!S)
 	{
@@ -323,8 +321,6 @@ int main(int argc, char *argv[])
 		printf("Failed to load project: %s\n", Scratch3GetErrorString(rc));
 		exit(1);
 	}
-
-	printf("Compiling project\n");
 
 	Scratch3CompilerOptions compileOptions;
 	memset(&compileOptions, 0, sizeof(compileOptions));
@@ -351,10 +347,10 @@ int main(int argc, char *argv[])
 	vmOptions.width = opts.width;
 	vmOptions.height = opts.height;
 	vmOptions.resizable = opts.resizable;
-	vmOptions.preload = opts.preload;
+	vmOptions.stream = opts.stream;
 	vmOptions.fullscreen = opts.fullscreen;
 	vmOptions.borderless = opts.borderless;
-	vmOptions.forceAspectRatio = opts.forceAspectRatio;
+	vmOptions.freeAspectRatio = opts.freeAspectRatio;
 
 	rc = Scratch3VMInit(S, &vmOptions);
 	if (rc != SCRATCH3_ERROR_SUCCESS)

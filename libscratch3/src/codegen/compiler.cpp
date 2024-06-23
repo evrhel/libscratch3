@@ -2,6 +2,8 @@
 
 #include <cstdio>
 
+#include <lysys/lysys.hpp>
+
 #include "opcode.hpp"
 #include "util.hpp"
 
@@ -1736,7 +1738,9 @@ public:
 		size_t id = 0;
 		for (AutoRelease<VariableDef> &vd : vars)
 		{
+#if LS_DEBUG
 			printf("%s -> %zu\n", vd->id.c_str(), id);
+#endif // LS_DEBUG
 			staticVariables[vd->id] = id++;
 
 			Value v;
@@ -1749,7 +1753,9 @@ public:
 
 		for (AutoRelease<ListDef> &ld : lists)
 		{
+#if LS_DEBUG
 			printf("%s -> %zu\n", ld->id.c_str(), id);
+#endif // LS_DEBUG
 			staticVariables[ld->id] = id++;
 
 			Value v;
