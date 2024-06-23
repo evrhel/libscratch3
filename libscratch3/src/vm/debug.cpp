@@ -76,6 +76,24 @@ void Debugger::Render()
 
 				ImGui::SeparatorText("Performance");
 				ImGui::LabelText("Framerate", "%.2f (%.0f ms)", render->GetFramerate(), render->GetDeltaTime() * 1000);
+
+				if (ImPlot::BeginPlot("Framerate History"))
+				{
+					for (int i = 0; i < FPS_HISTOGRAM_SIZE - 1; i++)
+						_fpsHistogram[i] = _fpsHistogram[i + 1];
+					_fpsHistogram[FPS_HISTOGRAM_SIZE - 1] = render->GetFramerate();
+
+					ImPlot::SetupAxisLimits(ImAxis_X1, -FPS_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
+					ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 360, ImGuiCond_Always);
+
+					ImPlot::SetupAxisTicks(ImAxis_X1, -FPS_HISTOGRAM_SIZE, 0, 9);
+					ImPlot::SetupAxisTicks(ImAxis_Y1, 0, 360, 7);
+
+					ImPlot::PlotBars("##fps", _fpsHistogramTimes, _fpsHistogram, FPS_HISTOGRAM_SIZE, 1.0);
+
+					ImPlot::EndPlot();
+				}
+
 				ImGui::LabelText("Frame", "%d", render->GetFrame());
 				ImGui::LabelText("Resolution", "%dx%d", width, height);
 				ImGui::LabelText("Viewport Size", "%dx%d", right - left, top - bottom);
@@ -352,7 +370,7 @@ void Debugger::Render()
 
 					_audioHistogramMax = -INFINITY;
 					_audioHistogramMin = INFINITY;
-					for (int i = 0; i < HISTOGRAM_SIZE - 1; i++)
+					for (int i = 0; i < AUDIO_HISTOGRAM_SIZE - 1; i++)
 					{
 						float tmp = _audioHistogram[i] = _audioHistogram[i + 1];
 						if (tmp > _audioHistogramMax)
@@ -361,7 +379,7 @@ void Debugger::Render()
 							_audioHistogramMin = tmp;
 					}
 
-					_audioHistogram[HISTOGRAM_SIZE - 1] = sample;
+					_audioHistogram[AUDIO_HISTOGRAM_SIZE - 1] = sample;
 					if (sample > _audioHistogramMax)
 						_audioHistogramMax = sample;
 					else if (sample < _audioHistogramMin)
@@ -376,16 +394,16 @@ void Debugger::Render()
 
 				if (ImPlot::BeginPlot("Visualizer", ImVec2(-1, 0), ImPlotFlags_None))
 				{
-					ImPlot::SetupAxisLimits(ImAxis_X1, -HISTOGRAM_SIZE, 0, ImGuiCond_Always);
+					ImPlot::SetupAxisLimits(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
 					ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
 
-					ImPlot::SetupAxisTicks(ImAxis_X1, -HISTOGRAM_SIZE, 0, 9);
+					ImPlot::SetupAxisTicks(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, 9);
 
 					ImPlot::SetupFinish();
 
-					ImPlot::PlotLine("##histogram", _histogramTimes, _audioHistogram, HISTOGRAM_SIZE);
+					ImPlot::PlotLine("##histogram", _audioHistogramTimes, _audioHistogram, AUDIO_HISTOGRAM_SIZE);
 
-					const float xs[] = { -HISTOGRAM_SIZE, 0.0f };
+					const float xs[] = { -AUDIO_HISTOGRAM_SIZE, 0.0f };
 					const float hi[] = { _audioHistogramMax, _audioHistogramMax };
 					const float lo[] = { _audioHistogramMin, _audioHistogramMin };
 
@@ -470,13 +488,19 @@ void Debugger::Render()
 Debugger::Debugger(VirtualMachine *vm) :
 	_vm(vm)
 {
-	memset(_histogramTimes, 0, sizeof(_histogramTimes));
-	for (int i = 0; i < HISTOGRAM_SIZE; i++)
-		_histogramTimes[i] = i - HISTOGRAM_SIZE + 1;
+	memset(_audioHistogramTimes, 0, sizeof(_audioHistogramTimes));
+	for (int i = 0; i < AUDIO_HISTOGRAM_SIZE; i++)
+		_audioHistogramTimes[i] = i - AUDIO_HISTOGRAM_SIZE + 1;
 
 	memset(_audioHistogram, 0, sizeof(_audioHistogram));
 	_audioHistogramMax = 0.0f;
 	_audioHistogramMin = 0.0f;
+
+	memset(_fpsHistogramTimes, 0, sizeof(_fpsHistogramTimes));
+	for (int i = 0; i < FPS_HISTOGRAM_SIZE; i++)
+		_fpsHistogramTimes[i] = i - FPS_HISTOGRAM_SIZE + 1;
+
+	memset(_fpsHistogram, 0, sizeof(_fpsHistogram));
 
 	_nextSampleTime = 0.0;
 }

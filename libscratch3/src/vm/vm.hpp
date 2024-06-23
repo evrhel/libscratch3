@@ -227,6 +227,7 @@ private:
 	//
 
 	GLRenderer *_render; // Renderer
+	double _lastSlowRender; // Time of last slow render
 
 	//
 	/////////////////////////////////////////////////////////////////

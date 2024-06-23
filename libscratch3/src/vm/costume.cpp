@@ -77,6 +77,13 @@ void Costume::Load()
 		_size = IntVector2(_svgWidth, _svgHeight);
 		_logicalSize = Vector2(_size);
 		_logicalCenter = Vector2(_center);
+		
+		if (!_streamed)
+		{
+			// preload some LODs (arbitrary)
+			(void)GetTexture(Vector2(1));
+			(void)GetTexture(Vector2(2));
+		}
 	}
 
 	printf("Costume::Load: Loaded %s\n", GetNameString());

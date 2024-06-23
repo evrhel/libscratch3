@@ -124,6 +124,8 @@ int VirtualMachine::VMStart()
 	_nextScript = 0;
 	_enableScreenUpdates = true;
 
+	_lastSlowRender = -1e9;
+
 	// temporary panic handler
 	_panicJmpSet = false;
 	memset(_panicJmp, 0, sizeof(_panicJmp));
@@ -575,10 +577,28 @@ void VirtualMachine::Render()
 		drawList->AddText(position, textColor, text);
 	}
 
+	if (GetTime() - _lastSlowRender <= 2)
+	{
+		constexpr ImVec2 pos(0, 0);
+
+		static const char message[] = "Can't keep up!";
+
+		ImVec2 textSize = ImGui::CalcTextSize(message);
+
+		ImVec2 topLeft(pos.x, pos.y);
+		ImVec2 botRight(pos.x + textSize.x + padding.x * 2, pos.y + textSize.y + padding.y * 2);
+
+		drawList->AddRectFilled(topLeft, botRight, IM_COL32(0, 0, 0, 255));
+		drawList->AddText(ImVec2(pos.x + padding.x, pos.y + padding.y), IM_COL32(255, 0, 0, 255), message);
+	}
+
 	if (_options.debug)
 		_debug.Render();
 
 	_render->EndRender();
+
+	if (_render->GetFramerate() < _options.framerate)
+		_lastSlowRender = GetTime();
 }
 
 void VirtualMachine::Cleanup()
@@ -661,11 +681,14 @@ void VirtualMachine::DispatchEvents()
 	}
 
 	// Sprite clicked
-	while (!_clickQueue.empty())
+	if (!_clickQueue.empty())
 	{
-		Script *s = _clickQueue.front();
-		s->Start();
-		_clickQueue.pop();
+		while (!_clickQueue.empty())
+		{
+			Script *s = _clickQueue.front();
+			s->Start();
+			_clickQueue.pop();
+		}
 	}
 
 	// Ask input
@@ -703,9 +726,9 @@ void VirtualMachine::Scheduler()
 		_nextScript = (_nextScript + 1) % _scripts.size();
 		ran++;
 
-		time = ls_nanotime();
-		if (time >= _nextScreenUpdate)
-			break; // a script is likely taking too long, dont miss the screen update
+		//time = ls_nanotime();
+		//if (time >= _nextScreenUpdate)
+		//	break; // a script is likely taking too long, dont miss the screen update
 
 		if (!script.fiber)
 			continue; // cannot be scheduled

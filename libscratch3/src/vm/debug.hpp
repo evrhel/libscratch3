@@ -1,6 +1,7 @@
 #pragma once
 
-#define HISTOGRAM_SIZE 32
+#define AUDIO_HISTOGRAM_SIZE 32
+#define FPS_HISTOGRAM_SIZE 64
 
 class VirtualMachine;
 
@@ -23,7 +24,10 @@ private:
 
 	double _nextSampleTime;
 
-	float _histogramTimes[HISTOGRAM_SIZE];
-	float _audioHistogram[HISTOGRAM_SIZE];
+	float _audioHistogramTimes[AUDIO_HISTOGRAM_SIZE];
+	float _audioHistogram[AUDIO_HISTOGRAM_SIZE];
 	float _audioHistogramMax, _audioHistogramMin;
+
+	float _fpsHistogramTimes[FPS_HISTOGRAM_SIZE];
+	float _fpsHistogram[FPS_HISTOGRAM_SIZE];
 };

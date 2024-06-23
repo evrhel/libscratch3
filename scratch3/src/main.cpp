@@ -351,6 +351,7 @@ int main(int argc, char *argv[])
 	vmOptions.width = opts.width;
 	vmOptions.height = opts.height;
 	vmOptions.resizable = opts.resizable;
+	vmOptions.preload = opts.preload;
 	vmOptions.fullscreen = opts.fullscreen;
 	vmOptions.borderless = opts.borderless;
 	vmOptions.forceAspectRatio = opts.forceAspectRatio;
