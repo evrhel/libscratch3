@@ -162,10 +162,13 @@ void Debugger::Render()
 				ImGui::LabelText("Program Name", "%s", _vm->GetProgramName().c_str());
 				ImGui::LabelText("Framerate", "%d Hz", framerate);
 
+				constexpr double kNsToSec = 1.0 / 1000000000;
+
 				ImGui::SeparatorText("Performance");
-				ImGui::LabelText("Interpreter Time", "%.2f ms", (_vm->_interpreterTime * 1000));
-				ImGui::LabelText("Delta Execution", "%.2f ms", (_vm->_deltaExecution * 1000));
-				ImGui::LabelText("Utilization", "%.2f%%", _vm->_interpreterTime * framerate * 100.0);
+				ImGui::LabelText("Interpreter Time", "%.2f ms", (_vm->_interpreterTime * kNsToSec * 1000));
+				ImGui::LabelText("Execution Rate", "%.0f kHz", 1 / (1000 * kNsToSec * _vm->_interpreterTime));
+				ImGui::LabelText("Quota", "%.2f%%", (_vm->_interpreterTime * kNsToSec * framerate) * 100.0);
+				ImGui::LabelText("Idle", "%.2f%%", (1.0 - _vm->_interpreterTime * kNsToSec * _vm->_render->GetFramerate()) * 100.0);
 
 				ImGui::SeparatorText("Scheduler");
 				ImGui::LabelText("Suspended", "%s", _vm->IsSuspended() ? "true" : "false");

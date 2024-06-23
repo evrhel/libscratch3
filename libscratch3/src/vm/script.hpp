@@ -67,6 +67,7 @@ struct Script
 	bool isReset;  // Reset flag
 
 	bool autoStart;  // Auto-start flag
+	bool scheduled;  // Whether the script was scheduled this frame
 
 	ExceptionType except; // Exception type
 	const char *exceptMessage; // Exception message

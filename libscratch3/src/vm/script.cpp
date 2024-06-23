@@ -50,6 +50,7 @@ void Script::Init(uint8_t *bytecode, size_t bytecodeSize, bc::Script *info)
 	pc = entry;
 	isReset = false;
 	autoStart = false;
+	scheduled = false;
 	stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
 
 	// fill stack with garbage

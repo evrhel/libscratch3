@@ -269,13 +269,11 @@ private:
 
 	double _epoch; // VM start time
 
-	double _interpreterTime; // Time taken to run the interpreter once
-	double _deltaExecution; // Time since last scheduled execution
-	double _lastExecution; // Time of last scheduled execution
+	long long _interpreterTime; // Time taken to run the interpreter once (ns)
+	long long _deltaExecution; // Time since last scheduled execution (ns)
+	long long _lastExecution; // Time of last scheduled execution (ns)
 
-	long long _lastScreenUpdate; // Time of last screen update
-	long long _nextScreenUpdate; // Time of next screen update
-	bool _enableScreenUpdates; // Enable screen updates
+	long long _nextSchedule; // Time of next scheduled execution (ns)
 
 	//
 	/////////////////////////////////////////////////////////////////

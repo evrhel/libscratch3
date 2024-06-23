@@ -122,9 +122,9 @@ int VirtualMachine::VMStart()
 	_shouldStop = false;
 
 	_nextScript = 0;
-	_enableScreenUpdates = true;
 
 	_lastSlowRender = -1e9;
+	_nextSchedule = 0;
 
 	// temporary panic handler
 	_panicJmpSet = false;
@@ -219,7 +219,11 @@ int VirtualMachine::VMStart()
 	}
 
 	SDL_Window *window = _render->GetWindow();
+#if LS_DEBUG
+	SDL_SetWindowTitle(window, "Scratch 3 [DEBUG]");
+#else
 	SDL_SetWindowTitle(window, "Scratch 3");
+#endif // LS_DEBUG
 
 	_flagClicked = false;
 	_toSend.clear();
@@ -229,7 +233,7 @@ int VirtualMachine::VMStart()
 	memset(_inputBuf, 0, sizeof(_inputBuf));
 
 	_timerStart = 0.0;
-	_deltaExecution = 0.0;
+	_deltaExecution = 0;
 
 	_running = true;
 
@@ -265,7 +269,7 @@ int VirtualMachine::VMStart()
 
 	SendFlagClicked();
 
-	_lastExecution = GetTime();
+	_lastExecution = ls_nanotime();
 
 	return 0;
 }
@@ -295,16 +299,18 @@ int VirtualMachine::VMUpdate()
 
 	DispatchEvents();
 
-	if (!_suspend)
+	long long ns = ls_nanotime();
+	if (!_suspend && ns >= _nextSchedule)
 	{
-		double start = GetTime();
+		const long long kUpdateInterval = 1000000000ll / _options.framerate;
+		_nextSchedule = ns + kUpdateInterval;
 
-		_deltaExecution = start - _lastExecution;
-		_lastExecution = start;
+		_deltaExecution = ns - _lastExecution;
+		_lastExecution = ns;
 
 		Scheduler();
 
-		_interpreterTime = GetTime() - start;
+		_interpreterTime = ls_nanotime() - ns;
 	}
 
 	Render();
@@ -323,8 +329,6 @@ void VirtualMachine::VMSuspend()
 	{
 		_suspend = true;
 		_suspendStart = ls_time64();
-
-		SDL_SetWindowTitle(_render->GetWindow(), "Scratch 3 [Suspended]");
 	}
 }
 
@@ -338,8 +342,6 @@ void VirtualMachine::VMResume()
 
 		// adjust timers to account for suspension
 		_epoch += suspendTime;
-
-		SDL_SetWindowTitle(_render->GetWindow(), "Scratch 3");
 	}
 }
 
@@ -350,7 +352,22 @@ void VirtualMachine::SendFlagClicked()
 
 void VirtualMachine::Send(const std::string &message)
 {
-	_toSend.insert(message);
+	auto it = _messageListeners.find(message);
+	if (it == _messageListeners.end())
+		return;
+
+	// We set this to ensure that any not-running message
+	// handlers for this message are started this frame.
+	// Without this, some handlers may not be started until
+	// the next frame, so this is necessary to ensure
+	// fair scheduling.
+	_nextScript = 0;
+
+	// Start all message handlers
+	for (Script *script : it->second)
+		script->Start();
+
+	//_toSend.insert(message);
 }
 
 void VirtualMachine::SendAndWait(const std::string &message)
@@ -577,19 +594,22 @@ void VirtualMachine::Render()
 		drawList->AddText(position, textColor, text);
 	}
 
-	if (GetTime() - _lastSlowRender <= 2)
+	if (_options.debug)
 	{
-		constexpr ImVec2 pos(0, 0);
+		if (GetTime() - _lastSlowRender <= 2)
+		{
+			constexpr ImVec2 pos(0, 0);
 
-		static const char message[] = "Can't keep up!";
+			static const char message[] = "Can't keep up!";
 
-		ImVec2 textSize = ImGui::CalcTextSize(message);
+			ImVec2 textSize = ImGui::CalcTextSize(message);
 
-		ImVec2 topLeft(pos.x, pos.y);
-		ImVec2 botRight(pos.x + textSize.x + padding.x * 2, pos.y + textSize.y + padding.y * 2);
+			ImVec2 topLeft(pos.x, pos.y);
+			ImVec2 botRight(pos.x + textSize.x + padding.x * 2, pos.y + textSize.y + padding.y * 2);
 
-		drawList->AddRectFilled(topLeft, botRight, IM_COL32(0, 0, 0, 255));
-		drawList->AddText(ImVec2(pos.x + padding.x, pos.y + padding.y), IM_COL32(255, 0, 0, 255), message);
+			drawList->AddRectFilled(topLeft, botRight, IM_COL32(0, 0, 0, 255));
+			drawList->AddText(ImVec2(pos.x + padding.x, pos.y + padding.y), IM_COL32(255, 0, 0, 255), message);
+		}
 	}
 
 	if (_options.debug)
@@ -661,6 +681,7 @@ void VirtualMachine::DispatchEvents()
 
 		for (Script *script : _flagListeners)
 			script->Start();
+
 		_flagClicked = false;
 	}
 
@@ -704,31 +725,17 @@ void VirtualMachine::DispatchEvents()
 
 void VirtualMachine::Scheduler()
 {
-	// update screen at a fixed interval
-	const long long kUpdateInterval = 1000000000ll / _options.framerate;
-
 	int activeScripts = 0, waitingScripts = 0;
-	
-	// current time in nanoseconds
-	long long time = ls_nanotime();
 
-	bool screenUpdated;
-	if ((screenUpdated = time >= _nextScreenUpdate))
-		_nextScreenUpdate = time + kUpdateInterval;
-
-	size_t ran = 0;
-	for (;;) // round-robin scheduler
+	// round-robin scheduler
+	_nextScript = 0;
+	while (_nextScript < _scripts.size())
 	{
-		if (ran >= _scripts.size())
-			break; // iterated through all scripts
-
 		Script &script = *(_scripts.data() + _nextScript);
-		_nextScript = (_nextScript + 1) % _scripts.size();
-		ran++;
+		_nextScript++;
 
-		//time = ls_nanotime();
-		//if (time >= _nextScreenUpdate)
-		//	break; // a script is likely taking too long, dont miss the screen update
+		if (script.scheduled)
+			continue; // already scheduled this frame
 
 		if (!script.fiber)
 			continue; // cannot be scheduled
@@ -781,8 +788,7 @@ void VirtualMachine::Scheduler()
 
 		activeScripts++;
 
-		if (!screenUpdated)
-			continue;
+		script.scheduled = true;
 
 		// schedule the script
 		ls_fiber_switch(script.fiber);
@@ -807,6 +813,10 @@ void VirtualMachine::Scheduler()
 		if (script.state == TERMINATED)
 			script.Reset(); // script terminated, reset it
 	}
+
+	// Reset scheduled flag for next frame
+	for (Script &script : _scripts)
+		script.scheduled = false;
 
 	// remove any playing sounds from the list
 	for (auto it = _playingSounds.begin(); it != _playingSounds.end();)
