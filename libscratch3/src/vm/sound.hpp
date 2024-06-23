@@ -87,6 +87,12 @@ private:
 	float _panFactor = 0.0f;
 };
 
+typedef float MONO_SAMPLE;
+struct STEREO_SAMPLE
+{
+	float L, R;
+};
+
 //! \brief Represents a sound.
 class Sound final
 {
@@ -135,7 +141,7 @@ public:
 	constexpr int GetChannelCount() const { return _nChannels; }
 	constexpr int GetSampleRate() const { return _sampleRate; }
 
-	constexpr float GetCurrentSample() const { return _currentSample; }
+	constexpr const STEREO_SAMPLE &GetCurrentSample() const { return _currentSample; }
 
 	Sound &operator=(const Sound &) = delete;
 	Sound &operator=(Sound &&) = delete;
@@ -157,13 +163,14 @@ private:
 	uint64_t _dataSize; // size of the data
 
 	// stream
+	size_t _streamSize; // size of the stream buffer (in bytes)
 	float *_audioStream; // full audio stream
-	unsigned long _streamPos; // current position in the stream
+	unsigned long _streamPos; // current position in the stream (in frames)
 	unsigned long _frameCount; // number of frames
 	int _nChannels; // number of channels
 	int _sampleRate; // sample rate
 
-	float _currentSample; // current sample value (used for debugging)
+	STEREO_SAMPLE _currentSample; // current sample value (used for debugging)
 
 	DSPController *_dsp;
 
@@ -173,26 +180,33 @@ private:
 	//! \param frames The number of frames to read.
 	//! 
 	//! \return The number of frames read.
-	constexpr unsigned long ReadSamples(float *buffer, unsigned long frames)
+	inline unsigned long ReadFrames(void *buffer, unsigned long frames)
 	{
-		unsigned long read = frames;
-		if (_streamPos + read > _frameCount)
-			read = _frameCount - _streamPos;
+		unsigned long framesToRead = frames;
+		if (_streamPos + framesToRead > _frameCount)
+			framesToRead = _frameCount - _streamPos;
 
-		if (read > 0)
+		if (framesToRead > 0)
 		{
-			memcpy(buffer, _audioStream + _streamPos * _nChannels, read * _nChannels * sizeof(float));
-			_streamPos += read;
+			memcpy(buffer, _audioStream + _streamPos * _nChannels, framesToRead * _nChannels * sizeof(float));
+			_streamPos += framesToRead;
 		}
 
-		return read;
+		return framesToRead;
 	}
 
 	//! \brief Release resources.
 	void Cleanup();
 
-	//! \brief PortAudio callback function.
-	static int paCallback(
+	static int paMonoCallback(
+		const void *inputBuffer,
+		void *outputBuffer,
+		unsigned long framesPerBuffer,
+		const PaStreamCallbackTimeInfo *timeInfo,
+		PaStreamCallbackFlags statusFlags,
+		void *userData);
+
+	static int paStereoCallback(
 		const void *inputBuffer,
 		void *outputBuffer,
 		unsigned long framesPerBuffer,

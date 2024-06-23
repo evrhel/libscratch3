@@ -77,7 +77,7 @@ void Debugger::Render()
 				ImGui::SeparatorText("Performance");
 				ImGui::LabelText("Framerate", "%.2f (%.0f ms)", render->GetFramerate(), render->GetDeltaTime() * 1000);
 
-				if (ImPlot::BeginPlot("Framerate History"))
+				if (ImPlot::BeginPlot("Framerate"))
 				{
 					for (int i = 0; i < FPS_HISTOGRAM_SIZE - 1; i++)
 						_fpsHistogram[i] = _fpsHistogram[i + 1];
@@ -358,7 +358,7 @@ void Debugger::Render()
 				{
 					if (sound->IsLoaded())
 						loaded++;
-					sample += sound->GetCurrentSample();
+					sample += sound->GetCurrentSample().L;
 				}
 
 				ImGui::LabelText("Sounds Loaded", "%d/%zu", loaded, _vm->GetSounds().size());
@@ -395,7 +395,7 @@ void Debugger::Render()
 				if (_audioHistogramMin > oldMin)
 					_audioHistogramMin = oldMin * 0.99f;
 
-				if (ImPlot::BeginPlot("Visualizer", ImVec2(-1, 0), ImPlotFlags_None))
+				if (ImPlot::BeginPlot("Stream", ImVec2(-1, 0), ImPlotFlags_None))
 				{
 					ImPlot::SetupAxisLimits(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
 					ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
