@@ -713,10 +713,12 @@ void Script::Main()
 				Pop();
 				break;
 			}
+			
+			Pop();
 
+			// play sound
 			vm->PlaySound(sound);
 			WaitForSound(sound);
-
 			break;
 		}
 		case Op_playsound: {
@@ -734,6 +736,9 @@ void Script::Main()
 				break;
 			}
 
+			Pop();
+
+			// play sound
 			vm->PlaySound(sound);
 			break;
 		}

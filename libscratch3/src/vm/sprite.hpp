@@ -133,7 +133,10 @@ public:
             return; // no costumes, prevent division by zero
 
         // wrap around
-        costume = (costume - 1) % _nCostumes + 1;
+        if (costume < 1)
+			costume = _nCostumes - (1 - costume) % _nCostumes + 1;
+		else
+            costume = (costume - 1) % _nCostumes + 1;
 
         if (_costume != costume)
         {

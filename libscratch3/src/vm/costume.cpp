@@ -5,6 +5,7 @@
 #include <cassert>
 
 #include <cairo/cairo.h>
+#include <lysys/lysys.hpp>
 
 #include "stb_image.h"
 
