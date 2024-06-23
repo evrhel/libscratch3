@@ -352,50 +352,69 @@ void Debugger::Render()
 					ImGui::LabelText("Output Device", "(none)");
 				}
 
-				float sample = 0.0f;
+				STEREO_SAMPLE sample{ 0.0f, 0.0f };
 				int loaded = 0;
 				for (Sound *sound : _vm->GetSounds())
 				{
 					if (sound->IsLoaded())
 						loaded++;
-					sample += sound->GetCurrentSample().L;
+					sample.L += sound->GetCurrentSample().L;
+					sample.R += sound->GetCurrentSample().R;
 				}
 
 				ImGui::LabelText("Sounds Loaded", "%d/%zu", loaded, _vm->GetSounds().size());
 
-				float oldMax = _audioHistogramMax;
-				float oldMin = _audioHistogramMin;
+				float oldLMax = _audioHistogramLMax, oldRMax = _audioHistogramRMax;
+				float oldLMin = _audioHistogramLMin, oldRMin = _audioHistogramRMin;
 
 				// shift histogram
 				if (_nextSampleTime < _vm->GetTime())
 				{
 					_nextSampleTime = _vm->GetTime() + (1.0 / 60.0);
 
-					_audioHistogramMax = -INFINITY;
-					_audioHistogramMin = INFINITY;
+					_audioHistogramLMax = -INFINITY, _audioHistogramRMax = -INFINITY;
+					_audioHistogramLMin = INFINITY, _audioHistogramRMin = INFINITY;
 					for (int i = 0; i < AUDIO_HISTOGRAM_SIZE - 1; i++)
 					{
-						float tmp = _audioHistogram[i] = _audioHistogram[i + 1];
-						if (tmp > _audioHistogramMax)
-							_audioHistogramMax = tmp;
-						else if (tmp < _audioHistogramMin)
-							_audioHistogramMin = tmp;
+						float tmp = _audioHistogramL[i] = _audioHistogramL[i + 1];
+						if (tmp > _audioHistogramLMax)
+							_audioHistogramLMax = tmp;
+						else if (tmp < _audioHistogramLMin)
+							_audioHistogramLMin = tmp;
+
+						tmp = _audioHistogramR[i] = _audioHistogramR[i + 1];
+						if (tmp > _audioHistogramRMax)
+							_audioHistogramRMax = tmp;
+						else if (tmp < _audioHistogramRMin)
+							_audioHistogramRMin = tmp;
 					}
 
-					_audioHistogram[AUDIO_HISTOGRAM_SIZE - 1] = sample;
-					if (sample > _audioHistogramMax)
-						_audioHistogramMax = sample;
-					else if (sample < _audioHistogramMin)
-						_audioHistogramMin = sample;
+					_audioHistogramL[AUDIO_HISTOGRAM_SIZE - 1] = sample.L;
+					if (sample.L > _audioHistogramLMax)
+						_audioHistogramLMax = sample.L;
+					else if (sample.L < _audioHistogramLMin)
+						_audioHistogramLMin = sample.L;
+
+					_audioHistogramR[AUDIO_HISTOGRAM_SIZE - 1] = sample.R;
+					if (sample.R > _audioHistogramRMax)
+						_audioHistogramRMax = sample.R;
+					else if (sample.R < _audioHistogramRMin)
+						_audioHistogramRMin = sample.R;
 				}
 				
-				if (_audioHistogramMax < oldMax)
-					_audioHistogramMax = oldMax * 0.99f;
+				if (_audioHistogramLMax < oldLMax)
+					_audioHistogramLMax = oldLMax * 0.99f;
 
-				if (_audioHistogramMin > oldMin)
-					_audioHistogramMin = oldMin * 0.99f;
+				if (_audioHistogramLMin > oldLMin)
+					_audioHistogramLMin = oldLMin * 0.99f;
 
-				if (ImPlot::BeginPlot("Stream", ImVec2(-1, 0), ImPlotFlags_None))
+				if (_audioHistogramRMax < oldRMax)
+					_audioHistogramRMax = oldRMax * 0.99f;
+
+				if (_audioHistogramRMin > oldRMin)
+					_audioHistogramRMin = oldRMin * 0.99f;
+
+				if (ImPlot::BeginPlot("Stream (L)", ImVec2(-1, 0), ImPlotFlags_None))
 				{
 					ImPlot::SetupAxisLimits(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
 					ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
@@ -404,11 +423,37 @@ void Debugger::Render()
 
 					ImPlot::SetupFinish();
 
-					ImPlot::PlotLine("##histogram", _audioHistogramTimes, _audioHistogram, AUDIO_HISTOGRAM_SIZE);
+					ImPlot::PlotLine("##histogramL", _audioHistogramTimes, _audioHistogramL, AUDIO_HISTOGRAM_SIZE);
 
 					const float xs[] = { -AUDIO_HISTOGRAM_SIZE, 0.0f };
-					const float hi[] = { _audioHistogramMax, _audioHistogramMax };
-					const float lo[] = { _audioHistogramMin, _audioHistogramMin };
+					const float hi[] = { _audioHistogramLMax, _audioHistogramLMax };
+					const float lo[] = { _audioHistogramLMin, _audioHistogramLMin };
+
+					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(255, 0, 0, 255));
+					ImPlot::PlotLine("##max", xs, hi, 2);
+					ImPlot::PopStyleColor();
+
+					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(0, 255, 0, 255));
+					ImPlot::PlotLine("##min", xs, lo, 2);
+					ImPlot::PopStyleColor();
+
+					ImPlot::EndPlot();
+				}
+
+				if (ImPlot::BeginPlot("Stream (R)", ImVec2(-1, 0), ImPlotFlags_None))
+				{
+					ImPlot::SetupAxisLimits(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
+					ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
+
+					ImPlot::SetupAxisTicks(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, 9);
+
+					ImPlot::SetupFinish();
+
+					ImPlot::PlotLine("##histogramR", _audioHistogramTimes, _audioHistogramR, AUDIO_HISTOGRAM_SIZE);
+
+					const float xs[] = { -AUDIO_HISTOGRAM_SIZE, 0.0f };
+					const float hi[] = { _audioHistogramRMax, _audioHistogramRMax };
+					const float lo[] = { _audioHistogramRMin, _audioHistogramRMin };
 
 					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(255, 0, 0, 255));
 					ImPlot::PlotLine("##max", xs, hi, 2);
@@ -495,9 +540,13 @@ Debugger::Debugger(VirtualMachine *vm) :
 	for (int i = 0; i < AUDIO_HISTOGRAM_SIZE; i++)
 		_audioHistogramTimes[i] = i - AUDIO_HISTOGRAM_SIZE + 1;
 
-	memset(_audioHistogram, 0, sizeof(_audioHistogram));
-	_audioHistogramMax = 0.0f;
-	_audioHistogramMin = 0.0f;
+	memset(_audioHistogramL, 0, sizeof(_audioHistogramL));
+	_audioHistogramLMax = 0.0f;
+	_audioHistogramLMin = 0.0f;
+
+	memset(_audioHistogramR, 0, sizeof(_audioHistogramR));
+	_audioHistogramRMax = 0.0f;
+	_audioHistogramRMin = 0.0f;
 
 	memset(_fpsHistogramTimes, 0, sizeof(_fpsHistogramTimes));
 	for (int i = 0; i < FPS_HISTOGRAM_SIZE; i++)

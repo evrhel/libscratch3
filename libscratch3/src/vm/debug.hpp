@@ -25,8 +25,11 @@ private:
 	double _nextSampleTime;
 
 	float _audioHistogramTimes[AUDIO_HISTOGRAM_SIZE];
-	float _audioHistogram[AUDIO_HISTOGRAM_SIZE];
-	float _audioHistogramMax, _audioHistogramMin;
+
+	float _audioHistogramL[AUDIO_HISTOGRAM_SIZE];
+	float _audioHistogramLMax, _audioHistogramLMin;
+	float _audioHistogramR[AUDIO_HISTOGRAM_SIZE];
+	float _audioHistogramRMax, _audioHistogramRMin;
 
 	float _fpsHistogramTimes[FPS_HISTOGRAM_SIZE];
 	float _fpsHistogram[FPS_HISTOGRAM_SIZE];
