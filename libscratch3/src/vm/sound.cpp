@@ -78,22 +78,43 @@ void DSPController::SetPitch(double pitch)
 	_resampleRatio = static_cast<float>(pow(kSemitone, pitch / 10)); // 10 units = 1 semitone
 }
 
-void Sound::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, bool stream, DSPController *dsp)
+bool AbstractSound::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, bool stream)
 {
-	Cleanup();
+	if (_data)
+	{
+		printf("Sound::Init: already initialized\n");
+		return false;
+	}
 
-	SetString(_name, (char *)(bytecode + info->name));
+	if (SetString(_name, (char *)(bytecode + info->name)).type != ValueType_String)
+	{
+		printf("Sound::Init: SetString failed\n");
+		return false;
+	}
+
 	_data = bytecode + info->data;
 	_dataSize = info->dataSize;
-	_dsp = dsp;
 
 	_streamed = stream;
+
+	return true;
 }
 
-void Sound::Load()
+bool AbstractSound::Load()
 {
 	if (_audioStream)
-		return;
+		return false; // already loaded, not an error
+
+	if (_dataSize == 0)
+	{
+		_streamSize = 0;
+		_frameCount = 0;
+		_nChannels = 0;
+		_sampleRate = 44100; // arbitrary, to prevent division by zero
+
+		printf("Sound::Load: warning: empty sound (%s)\n", _name.u.string->str);
+		return true;
+	}
 
 	SoundMemoryFile fileData;
 	fileData.data = _data;
@@ -104,16 +125,16 @@ void Sound::Load()
 	SNDFILE *file = sf_open_virtual(&_sfVirtualIo, SFM_READ, &info, &fileData);
 	if (!file)
 	{
-		printf("Sound::Load: sf_open_virtual failed\n");
-		return;
+		printf("Sound::Load: sf_open_virtual failed (%s)\n", _name.u.string->str);
+		return false;
 	}
 
 	_nChannels = info.channels;
 	if (_nChannels > 2)
 	{
-		printf("Sound::Load: max 2 channels per audio stream\n");
+		printf("Sound::Load: max 2 channels per audio stream (%s)\n", _name.u.string->str);
 		sf_close(file);
-		return;
+		return false;
 	}
 
 	_frameCount = info.frames;
@@ -127,90 +148,35 @@ void Sound::Load()
 		printf("Sound::Load: sf_readf_float failed\n");
 		delete[] _audioStream, _audioStream = nullptr;
 		sf_close(file);
-		return;
+		return false;
 	}
 
 	sf_close(file);
+
+	return true;
 }
 
-void Sound::Play()
-{
-	if (!_audioStream)
-		return; // not loaded
-
-	if (!_stream)
-	{
-		PaError err;
-
-		err = Pa_OpenDefaultStream(
-			&_stream,
-			0,
-			_nChannels,
-			paFloat32,
-			_sampleRate,
-			BUFFER_LENGTH,
-			_nChannels == 1 ? paMonoCallback : paStereoCallback,
-			this);
-		if (err != paNoError)
-		{
-			printf("Sound::Load: Pa_OpenDefaultStream failed: %s\n", Pa_GetErrorText(err));
-			Cleanup();
-			return;
-		}
-	}
-
-	if (_isPlaying)
-	{
-		_streamPos = 0;
-		_currentSample = STEREO_SAMPLE{ 0.0f, 0.0f };
-		return;
-	}
-
-	_streamPos = 0;
-	_isPlaying = true;
-	_currentSample = STEREO_SAMPLE{ 0.0f, 0.0f };
-
-	PaError err = Pa_StartStream(_stream);
-	if (err != paNoError)
-		printf("Sound::Play: Pa_StartStream failed: %s\n", Pa_GetErrorText(err));
-}
-
-void Sound::Stop()
-{
-	if (!_stream)
-		return;
-
-	Pa_StopStream(_stream);
-
-	_streamPos = 0;
-	_isPlaying = false;
-	_currentSample = STEREO_SAMPLE{ 0.0f, 0.0f };
-}
-
-Sound::Sound() :
-	_stream(nullptr),
-	_isPlaying(false),
+AbstractSound::AbstractSound() :
 	_streamed(false),
-	_streamSize(0),
 	_data(nullptr), _dataSize(0),
-	_audioStream(nullptr),
-	_streamPos(0), _frameCount(0),
-	_nChannels(0), _sampleRate(0),
-	_currentSample({ 0.0f, 0.0f }),
-	_dsp(nullptr)
+	_streamSize(0), _audioStream(nullptr),
+	_frameCount(0), _nChannels(0), _sampleRate(0)
 {
 	InitializeValue(_name);
 }
 
-Sound::~Sound()
+AbstractSound::~AbstractSound()
 {
 	Cleanup();
 }
 
-void Sound::Cleanup()
+void AbstractSound::Cleanup()
 {
-	if (_stream)
-		Pa_CloseStream(_stream), _stream = nullptr;
+	if (_voiceCount != 0)
+	{
+		printf("Sound::Cleanup: FATAL: voices still playing\n");
+		abort();
+	}
 
 	if (_audioStream)
 		delete[] _audioStream, _audioStream = nullptr;
@@ -220,7 +186,84 @@ void Sound::Cleanup()
 	ReleaseValue(_name);
 }
 
-int Sound::paMonoCallback(
+void Voice::Play()
+{
+	if (!_sound->GetAudioStream())
+	{
+		printf("Voice::Play: sound not loaded\n");
+		return;
+	}
+
+	PaError err;
+
+	if (!_stream)
+	{
+		err = Pa_OpenDefaultStream(
+			&_stream,
+			0,
+			_sound->GetChannelCount(),
+			paFloat32,
+			_sound->GetSampleRate(),
+			BUFFER_LENGTH,
+			_sound->GetChannelCount() == 1 ? paMonoCallback : paStereoCallback,
+			this);
+		if (err != paNoError)
+		{
+			printf("Voice::Play: Pa_OpenDefaultStream failed: %s\n", Pa_GetErrorText(err));
+			return;
+		}
+	}
+
+	if (_isPlaying)
+	{
+		_streamPos = 0;
+		_sample = STEREO_SAMPLE{ 0.0f, 0.0f };
+		return;
+	}
+
+	_streamPos = 0;
+	_isPlaying = true;
+	_sample = STEREO_SAMPLE{ 0.0f, 0.0f };
+
+	err = Pa_StartStream(_stream);
+	if (err != paNoError)
+		printf("Voice::Play: Pa_StartStream failed: %s\n", Pa_GetErrorText(err));
+}
+
+void Voice::Stop()
+{
+	if (!_stream || !_isPlaying)
+		return;
+
+	Pa_StopStream(_stream);
+
+	_streamPos = 0;
+	_isPlaying = false;
+	_sample = STEREO_SAMPLE{ 0.0f, 0.0f };
+}
+
+Voice::Voice() :
+	_sound(nullptr),
+	_stream(nullptr),
+	_isPlaying(false),
+	_streamPos(0),
+	_sample({ 0.0f, 0.0f })
+{
+
+}
+
+Voice::~Voice()
+{
+	Cleanup();
+}
+
+void Voice::Cleanup()
+{
+	if (_stream)
+		Pa_CloseStream(_stream), _stream = nullptr;
+}
+
+int Voice::paMonoCallback(
 	const void *inputBuffer,
 	void *outputBuffer,
 	unsigned long framesPerBuffer,
@@ -228,12 +271,14 @@ int Sound::paMonoCallback(
 	PaStreamCallbackFlags statusFlags,
 	void *userData)
 {
-	Sound *sound = static_cast<Sound *>(userData);
-	float *out = static_cast<float *>(outputBuffer);
-	DSPController *dsp = sound->_dsp;
-	const float volume = dsp->GetVolumeMultiplier(); // [0.0, 1.0]
-	const float resampleRatio = dsp->GetResampleRatio(); // [0.0, inf)
-	const float panFactor = dsp->GetPanFactor(); // [-1.0, 1.0]
+	Voice *const voice = static_cast<Voice *>(userData);
+	float *const out = static_cast<float *>(outputBuffer);
+
+	const DSPController &dsp = voice->_dsp;
+	const float volume = dsp.GetVolumeMultiplier(); // [0.0, 1.0]
+	const float resampleRatio = dsp.GetResampleRatio(); // [0.0, inf)
+	const float panFactor = dsp.GetPanFactor(); // [-1.0, 1.0]
+
 	unsigned long read;
 	float tmp[BUFFER_LENGTH];
 
@@ -249,10 +294,10 @@ int Sound::paMonoCallback(
 	if (resampleRatio == 1.0f)
 	{
 		// no resampling, just copy
-		read = sound->ReadFrames(out, BUFFER_LENGTH);
+		read = voice->ReadFrames(out, BUFFER_LENGTH);
 		if (read == 0)
 		{
-			sound->_isPlaying = false;
+			voice->_isPlaying = false;
 			return paComplete;
 		}
 	}
@@ -272,10 +317,10 @@ int Sound::paMonoCallback(
 			if (toRead > BUFFER_LENGTH)
 				toRead = BUFFER_LENGTH;
 
-			read = sound->ReadFrames(tmp, toRead);
+			read = voice->ReadFrames(tmp, toRead);
 			if (read == 0)
 			{
-				sound->_isPlaying = false;
+				voice->_isPlaying = false;
 				return paComplete;
 			}
 
@@ -313,10 +358,10 @@ int Sound::paMonoCallback(
 		// number of samples needed
 		sf_count_t floatsNeeded = static_cast<sf_count_t>(mutil::round(framesPerBuffer * resampleRatio));
 
-		read = sound->ReadFrames(tmp, floatsNeeded);
+		read = voice->ReadFrames(tmp, floatsNeeded);
 		if (read == 0)
 		{
-			sound->_isPlaying = false;
+			voice->_isPlaying = false;
 			return paComplete;
 		}
 
@@ -347,12 +392,12 @@ int Sound::paMonoCallback(
 			max = out[i]; // sample with largest amplitude
 	}
 
-	sound->_currentSample = STEREO_SAMPLE{ max, max };
+	voice->_sample = STEREO_SAMPLE{ max, max };
 
 	return paContinue;
 }
 
-int Sound::paStereoCallback(
+int Voice::paStereoCallback(
 	const void *inputBuffer,
 	void *outputBuffer,
 	unsigned long framesPerBuffer,
@@ -360,12 +405,14 @@ int Sound::paStereoCallback(
 	PaStreamCallbackFlags statusFlags,
 	void *userData)
 {
-	Sound *sound = static_cast<Sound *>(userData);
+	Voice *voice = static_cast<Voice *>(userData);
 	STEREO_SAMPLE *stereoOut = static_cast<STEREO_SAMPLE *>(outputBuffer);
-	DSPController *dsp = sound->_dsp;
-	const float volume = dsp->GetVolumeMultiplier(); // [0.0, 1.0]
-	const float resampleRatio = dsp->GetResampleRatio(); // [0.0, inf)
-	const float panFactor = dsp->GetPanFactor(); // [-1.0, 1.0]
+
+	const DSPController &dsp = voice->_dsp;
+	const float volume = dsp.GetVolumeMultiplier(); // [0.0, 1.0]
+	const float resampleRatio = dsp.GetResampleRatio(); // [0.0, inf)
+	const float panFactor = dsp.GetPanFactor(); // [-1.0, 1.0]
+
 	unsigned long read;
 	float tmp[BUFFER_LENGTH];
 
@@ -379,10 +426,10 @@ int Sound::paStereoCallback(
 	if (resampleRatio == 1.0f)
 	{
 		// no resampling, just copy
-		read = sound->ReadFrames(stereoOut, BUFFER_LENGTH);
+		read = voice->ReadFrames(stereoOut, BUFFER_LENGTH);
 		if (read == 0)
 		{
-			sound->_isPlaying = false;
+			voice->_isPlaying = false;
 			return paComplete;
 		}
 	}
@@ -424,7 +471,7 @@ int Sound::paStereoCallback(
 			max.R = sample.R;
 	}
 
-	sound->_currentSample = max;
+	voice->_sample = max;
 
 	return paContinue;
 }

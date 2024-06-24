@@ -93,8 +93,10 @@ struct STEREO_SAMPLE
 	float L, R;
 };
 
+class Voice;
+
 //! \brief Represents a sound.
-class Sound final
+class AbstractSound final
 {
 public:
 	constexpr const String *GetName() const { return _name.u.string; }
@@ -106,55 +108,35 @@ public:
 	//! \param bytecodeSize The size of the bytecode.
 	//! \param info The sound information, as loaded from the bytecode.
 	//! \param streamed Whether the sound is streamed.
-	//! \param dsp The DSP controller.
-	void Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, bool streamed, DSPController *dsp);
+	//! 
+	//! \return Whether the sound was successfully initialized.
+	bool Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sound *info, bool streamed);
 
 	//! \brief Load the sound data.
-	//!
-	//! Audio stream creation is deferred until Play() is called for
-	//! the first time. This will merely set up the data for playback.
-	void Load();
+	//! 
+	//! \return Whether the sound was successfully loaded.
+	bool Load();
 
-	constexpr bool IsLoaded() const { return _stream != nullptr; }
+	Voice *CreateVoice();
 
-	// use VirtualMachine::PlaySound
-	void Play();
-
-	//! \brief Stop audio playback.
-	//!
-	//! Stops the audio playback and resets the stream to the
-	//! beginning. The function may briefly block until the stream has
-	//! fully finished playing its buffer.
-	void Stop();
-	
-	//! \brief Check if the sound is currently playing.
-	//!
-	//! \return true if the sound is playing, false otherwise.
-	constexpr bool IsPlaying() const { return _isPlaying; }
-
-	// used by debuggers
-	constexpr PaStream *GetStream() const { return _stream; }
-
-	constexpr unsigned long GetStreamPos() const { return _streamPos; }
-	constexpr unsigned long GetSampleCount() const { return _frameCount; }
+	constexpr size_t GetStreamSize() const { return _streamSize; }
+	constexpr const float *GetAudioStream() const { return _audioStream; }
+	constexpr unsigned long GetFrameCount() const { return _frameCount; }
 	constexpr double GetDuration() const { return static_cast<double>(_frameCount) / _sampleRate; }
 	constexpr int GetChannelCount() const { return _nChannels; }
 	constexpr int GetSampleRate() const { return _sampleRate; }
 
-	constexpr const STEREO_SAMPLE &GetCurrentSample() const { return _currentSample; }
+	constexpr size_t GetVoiceCount() const { return _voiceCount; }
 
-	Sound &operator=(const Sound &) = delete;
-	Sound &operator=(Sound &&) = delete;
+	AbstractSound &operator=(const AbstractSound &) = delete;
+	AbstractSound &operator=(AbstractSound &&) = delete;
 
-	Sound();
-	Sound(const Sound &) = delete;
-	Sound(Sound &&) = delete;
-	~Sound();
+	AbstractSound();
+	AbstractSound(const AbstractSound &) = delete;
+	AbstractSound(AbstractSound &&) = delete;
+	~AbstractSound();
 private:
 	Value _name;
-
-	PaStream *_stream; // PortAudio stream
-	bool _isPlaying; // true if the sound is currently playing
 
 	bool _streamed; // true if the sound is streamed
 
@@ -165,14 +147,45 @@ private:
 	// stream
 	size_t _streamSize; // size of the stream buffer (in bytes)
 	float *_audioStream; // full audio stream
-	unsigned long _streamPos; // current position in the stream (in frames)
 	unsigned long _frameCount; // number of frames
 	int _nChannels; // number of channels
 	int _sampleRate; // sample rate
 
-	STEREO_SAMPLE _currentSample; // current sample value (used for debugging)
+	size_t _voiceCount; // number of voices playing this sound
 
-	DSPController *_dsp;
+	//! \brief Release resources.
+	void Cleanup();
+};
+
+class Voice final
+{
+public:
+	constexpr AbstractSound *GetSound() const { return _sound; }
+	constexpr DSPController *GetDSP() { return &_dsp; }
+	constexpr unsigned long GetStreamPos() const { return _streamPos; }
+
+	void Play();
+	void Stop();
+
+	constexpr const STEREO_SAMPLE &GetSample() const { return _sample; }
+
+	Voice &operator=(const Voice &) = delete;
+	Voice &operator=(Voice &&) = delete;
+
+	Voice();
+	Voice(const Voice &) = delete;
+	Voice(Voice &&) = delete;
+	~Voice();
+private:
+	AbstractSound *_sound;
+	DSPController _dsp;
+
+	PaStream *_stream;
+	bool _isPlaying;
+
+	unsigned long _streamPos;
+
+	STEREO_SAMPLE _sample;
 
 	//! \brief Read samples from the audio stream.
 	//! 
@@ -182,20 +195,23 @@ private:
 	//! \return The number of frames read.
 	inline unsigned long ReadFrames(void *buffer, unsigned long frames)
 	{
+		const float *const stream = _sound->GetAudioStream();
+		const unsigned long nFrames = _sound->GetFrameCount();
+		const int nChannels = _sound->GetChannelCount();
+
 		unsigned long framesToRead = frames;
-		if (_streamPos + framesToRead > _frameCount)
-			framesToRead = _frameCount - _streamPos;
+		if (_streamPos + framesToRead > nFrames)
+			framesToRead = nFrames - _streamPos;
 
 		if (framesToRead > 0)
 		{
-			memcpy(buffer, _audioStream + _streamPos * _nChannels, framesToRead * _nChannels * sizeof(float));
+			memcpy(buffer, stream + _streamPos * nChannels, framesToRead * nChannels * sizeof(float));
 			_streamPos += framesToRead;
 		}
 
 		return framesToRead;
 	}
 
-	//! \brief Release resources.
 	void Cleanup();
 
 	static int paMonoCallback(

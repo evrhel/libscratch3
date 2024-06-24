@@ -66,37 +66,22 @@ static constexpr bool AABBContains(const AABB &a, const Vector2 &p)
            p.y >= a.lo.y && p.y <= a.hi.y;
 }
 
-void Sprite::SetMessage(const Value &message, MessageState state)
-{
-    CvtString(Assign(_message, message));
-    _messageState = _message.type == ValueType_String ? state : MessageState_None;
-}
-
-void Sprite::SetLayer(int64_t layer)
-{
-    _vm->GetRenderer()->SetLayer(_drawable, layer);
-}
-
-void Sprite::MoveLayer(int64_t amount)
-{
-    _vm->GetRenderer()->MoveLayer(_drawable, amount);
-}
-
-void Sprite::SetCostume(const String *name)
+int64_t AbstractSprite::FindCostume(const String *name) const
 {
     auto it = _costumeNameMap.find(name);
     if (it != _costumeNameMap.end())
-        SetCostume(it->second);
+        return it->second;
+    return 0;
 }
 
-Sound *Sprite::FindSound(int64_t sound)
+Sound *AbstractSprite::FindSound(int64_t sound)
 {
     if (sound < 0 || sound >= _nSounds)
 		return nullptr;
 	return _sounds + sound;
 }
 
-Sound *Sprite::FindSound(const String *name)
+Sound *AbstractSprite::FindSound(const String *name)
 {
     auto it = _soundNameMap.find(name);
     if (it != _soundNameMap.end())
@@ -104,143 +89,13 @@ Sound *Sprite::FindSound(const String *name)
     return nullptr;
 }
 
-bool Sprite::TouchingColor(int64_t color) const
-{        
-    // TODO: implement
-    if (!_shown)
-        return false;
-    return true;
-}
-
-bool Sprite::TouchingSprite(const Sprite *sprite) const
-{
-    if (!_shown || !sprite->_shown)
-        return false;
-
-    // fast AABB check
-    if (!AABBIntersect(_bbox, sprite->_bbox))
-        return false;
-    return CheckSpriteAdv(sprite);
-}
-
-bool Sprite::TouchingPoint(const Vector2 &point) const
-{
-    if (!_shown)
-        return false;
-
-    // fast AABB check
-    if (!AABBContains(_bbox, point))
-        return false;
-
-    return true;
-    //return CheckPointAdv(point);
-}
-
-void Sprite::Update()
-{
-    GLRenderer *render = _vm->GetRenderer();
-    SpriteRenderInfo *s = render->GetRenderInfo(_drawable);
-    s->shouldRender = _shown;
-
-    Costume *c = _costumes + _costume - 1;
-
-    if (_vm->GetTime() < _glide.end)
-    {
-        // linear interpolation
-        double t = (_vm->GetTime() - _glide.start) / (_glide.end - _glide.start);
-        double x = _glide.x0 + t * (_glide.x1 - _glide.x0);
-        double y = _glide.y0 + t * (_glide.y1 - _glide.y0);
-        SetXY(x, y);
-    }
-
-    if (_transDirty)
-    {
-        const Vector2 &costumeLogicalCenter = c->GetLogicalCenter();
-        const Vector2 &costumeLogicalSize = c->GetLogicalSize();
-
-        Vector2 costumeRealCenter = costumeLogicalSize / 2.0f;
-        Vector2 centerOffset = costumeLogicalCenter - costumeRealCenter;
-
-        float uniformScale = static_cast<float>(_size / 100);
-        Vector2 size = costumeLogicalSize * uniformScale;
-
-        float rotation;
-        if (_rotationStyle == RotationStyle_DontRotate)
-            rotation = 0.0f;
-        else if (_rotationStyle == RotationStyle_LeftRight)
-        {
-            if (_direction < 0)
-                rotation = 180.0f;
-			else
-				rotation = 0.0f;
-        }
-		else
-			rotation = static_cast<float>(_direction - 90.0);
-        rotation = mutil::radians(rotation);
-
-        // setup matrices
-
-        Matrix4 scale = mutil::scale(Matrix4(), Vector3(size, 1.0f));
-        Matrix4 transPos = mutil::translate(Matrix4(), Vector3(_x, _y, 0.0f));
-        Quaternion q = mutil::rotateaxis(Vector3(0.0f, 0.0f, 1.0f), rotation);
-        Matrix4 transCenter = mutil::translate(Matrix4(), Vector3(-centerOffset.x, centerOffset.y, 0.0f));
-
-        // compute model matrix
-        _model = transPos * mutil::torotation(q) * transCenter * scale;
-        _invModel = mutil::inverse(_model);
-
-        // compute bounding box
-        ApplyTransformation(CenterAABB(_bbox), _model);
-
-        // update sprite render info
-        s->model = _model;
-
-        if (_shown)
-        {
-            // GetTexture may trigger a texture load, only want to do this if
-            // the sprite is visible
-
-            int fbWidth, fbHeight;
-            SDL_GL_GetDrawableSize(render->GetWindow(), &fbWidth, &fbHeight);
-
-            Vector2 fbSize(fbWidth, fbHeight);
-            const Vector2 &viewportSize = render->GetLogicalSize();
-
-            Vector2 textureScale = uniformScale * fbSize / viewportSize;
-            s->texture = c->GetTexture(textureScale);
-        }
-
-        _transDirty = false;
-    }
-
-    if (_effectDirty)
-    {
-        s->colorEffect = mutil::mod(static_cast<float>(_colorEffect / 200), 1.0f);
-        s->brightnessEffect = clamp(static_cast<float>(_brightnessEffect / 100), -1.0f, 1.0f) + 1;
-        s->fisheyeEffect = mutil::max(0.0f, static_cast<float>(_fisheyeEffect + 100) / 100.0f);
-        s->whirlEffect = -_whirlEffect * MUTIL_PI / 180.0f;
-        s->pixelateEffect = mutil::abs(static_cast<float>(_pixelateEffect)) / 10;
-        s->mosaicEffect = mutil::clamp(mutil::round(mutil::abs(static_cast<float>(_mosaicEffect) + 10) / 10), 1.0f, 512.0f);
-        s->ghostEffect = clamp(static_cast<float>(_ghostEffect / 100), 0.0f, 1.0f);
-        s->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-        _effectDirty = false;
-    }
-}
-
-void Sprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info, bool stream)
+void AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info, bool stream)
 {
     // Set basic properties
     SetString(_name, (char *)(bytecode + info->name));
-    _x = info->x;
-    _y = info->y;
-    _size = info->size;
-    _direction = info->direction;
-    _costume = info->currentCostume;
     _layer = info->layer;
-    _shown = info->visible;
     _isStage = info->isStage;
     _draggable = info->draggable;
-    _rotationStyle = (RotationStyle)info->rotationStyle;
 
     // Allocate costumes
     _nCostumes = info->numCostumes;
@@ -267,7 +122,7 @@ void Sprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info
 	}
 }
 
-void Sprite::Load(VirtualMachine *vm)
+void AbstractSprite::Load(VirtualMachine *vm)
 {
     if (_vm)
         return; // already loaded
@@ -308,7 +163,7 @@ void Sprite::Load(VirtualMachine *vm)
     Update();
 }
 
-void Sprite::DebugUI() const
+void AbstractSprite::DebugUI() const
 {
     GLRenderer *render = _vm->GetRenderer();
 
@@ -395,55 +250,17 @@ void Sprite::DebugUI() const
     }
 }
 
-Sprite::Sprite()
+AbstractSprite::AbstractSprite()
 {
     InitializeValue(_name);
-    InitializeValue(_message);
 }
 
-Sprite::~Sprite()
+AbstractSprite::~AbstractSprite()
 {
     Cleanup();
 }
 
-bool Sprite::CheckSpriteAdv(const Sprite *sprite) const
-{
-    Costume *sc = sprite->_costumes + sprite->_costume - 1;
-    
-    // brute force check
-    const IntVector2 &size = sc->GetSize();
-    for (int32_t x = 0; x < size.x; x++)
-    {
-        for (int32_t y = 0; y < size.y; y++)
-        {
-            // check if a collision is possible
-            if (!sc->TestCollision(x, y))
-                continue;
-
-            // convert sprite costume pixel location to world space
-            Vector4 world4 = sprite->_model * Vector4(x, y, 0.0f, 1.0f);
-            Vector2 world = Vector2(world4) / world4.w;
-
-            // check if the point is inside this sprite
-            if (CheckPointAdv(world))
-                return true;
-        }
-    }
-
-    return false;
-}
-
-bool Sprite::CheckPointAdv(const Vector2 &point) const
-{
-    // convert to local space
-    Vector4 pos4 = _invModel * Vector4(point, 0.0f, 1.0f);
-    Vector2 pos = Vector2(pos4) / pos4.w;
-
-    Costume *c = _costumes + _costume - 1;
-    return c->TestCollision(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y));
-}
-
-void Sprite::Cleanup()
+void AbstractSprite::Cleanup()
 {
     _clickListeners.clear();
 

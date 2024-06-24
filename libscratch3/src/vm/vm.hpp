@@ -17,16 +17,16 @@
 #include <scratch3/scratch3.h>
 
 #include "memory.hpp"
-#include "costume.hpp"
 #include "script.hpp"
 #include "io.hpp"
 #include "debug.hpp"
-#include "sound.hpp"
 
 class Loader;
 class VirtualMachine;
 class Sprite;
 class GLRenderer;
+class AbstractSound;
+class Voice;
 
 //! \brief Scratch 3 virtual machine
 class VirtualMachine final
@@ -159,7 +159,8 @@ public:
 	void StopAllSounds();
 
 	constexpr bool HasAudio() const { return _hasAudio; }
-	constexpr const std::vector<Sound *> &GetSounds() const { return _sounds; }
+	constexpr const std::vector<AbstractSound *> &GetSounds() const { return _sounds; }
+	constexpr const std::list<Voice *> &GetVoices() const { return _activeVoices; }
 
 	constexpr Loader *GetLoader() const { return _loader; }
 	constexpr GLRenderer *GetRenderer() const { return _render; }
@@ -199,9 +200,9 @@ private:
 	Sprite *_stage; // Stage sprite
 
 	std::unordered_map<const String *, intptr_t, _StringHasher, _StringEqual> _spriteNames; // Sprite name lookup
-
-	std::vector<Sound *> _sounds; // All sounds
-	std::list<Sound *> _playingSounds; // Playing sounds
+	
+	std::vector<AbstractSound *> _sounds; // All sounds
+	std::list<Voice *> _activeVoices; // Active voices
 	bool _hasAudio; // Host supports audio
 
 	std::vector<Script> _initScripts; // Initialization scripts
