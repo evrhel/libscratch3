@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 // initial capacity for lists
 #define INITIAL_CAPACITY 8
@@ -289,3 +290,6 @@ struct _StringEqual
 		return true;
 	}
 };
+
+template <typename T>
+using StringMap = std::unordered_map<const String *, T, _StringHasher, _StringEqual>;

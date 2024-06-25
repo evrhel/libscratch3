@@ -21,16 +21,15 @@ public:
 	//! \brief Set the volume.
 	//!
 	//! \param volume The volume, clamped to the range [0.0, 100.0].
-	constexpr void SetVolume(double volume)
+	constexpr void SetVolume(const double volume)
 	{
-		if (volume < 0.0)
-			volume = 0.0;
-		else if (volume > 100.0)
-			volume = 100.0;
-
 		_volume = volume;
+		if (_volume < 0.0) _volume = 0.0;
+		else if (_volume > 100.0) _volume = 100.0;
 		_volumeMultiplier = static_cast<float>(volume / 100.0);
 	}
+
+	constexpr void AddVolume(const double amount) { SetVolume(_volume + amount); }
 
 	constexpr double GetVolume() const { return _volume; }
 	constexpr float GetVolumeMultiplier() const { return _volumeMultiplier; }
@@ -42,6 +41,8 @@ public:
 	//!
 	//! \param pitch The pitch, clamped to the range [-360.0, 360.0].
 	void SetPitch(double pitch);
+
+	inline void AddPitch(const double amount) { SetPitch(_pitch + amount); }
 
 	constexpr double GetPitch() const { return _pitch; }
 
@@ -60,19 +61,25 @@ public:
 	//! 100.0 to full right.
 	//!
 	//! \param pan The amount of panning, clamped to the range [-100.0, 100.0].
-	constexpr void SetPan(double pan)
+	constexpr void SetPan(const double pan)
 	{
-		if (pan < -100.0)
-			pan = -100.0;
-		else if (pan > 100.0)
-			pan = 100.0;
-
 		_pan = pan;
-		_panFactor = static_cast<float>(pan / 100.0);
+		if (_pan < -100.0) _pan = -100.0;
+		else if (_pan > 100.0) _pan = 100.0;
+		_panFactor = static_cast<float>(_pan / 100.0);
 	}
+
+	constexpr void AddPan(const double amount) { SetPan(_pan + amount); }
 
 	constexpr double GetPan() const { return _pan; }
 	constexpr float GetPanFactor() const { return _panFactor; }
+
+	constexpr void ClearEffects()
+	{
+		_volume = 100.0, _volumeMultiplier = 1.0f;
+		_pitch = 0.0, _resampleRatio = 1.0f;
+		_pan = 0.0, _panFactor = 0.0f;
+	}
 
 	DSPController() = default;
 	~DSPController() = default;
@@ -100,7 +107,6 @@ class AbstractSound final
 {
 public:
 	constexpr const String *GetName() const { return _name.u.string; }
-	constexpr const char *GetNameString() const { return _name.u.string->str; }
 
 	//! \brief Initialize the sound.
 	//!
@@ -162,6 +168,7 @@ class Voice final
 public:
 	constexpr AbstractSound *GetSound() const { return _sound; }
 	constexpr DSPController *GetDSP() { return &_dsp; }
+	constexpr bool IsPlaying() const { return _isPlaying; }
 	constexpr unsigned long GetStreamPos() const { return _streamPos; }
 
 	void Play();

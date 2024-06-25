@@ -30,6 +30,153 @@ static std::string trim(const std::string &str, const std::string &ws = " \t\n\r
 	return str.substr(start, end - start + 1);
 }
 
+void SpriteList::Add(Sprite *sprite)
+{
+	assert(sprite != nullptr);
+	assert(sprite->_next == nullptr);
+	assert(sprite->_prev == nullptr);
+
+	if (!_tail)
+		_head = _tail = sprite;
+	else
+	{
+		_tail->_next = sprite;
+		sprite->_prev = _tail;
+
+		if (_head == _tail)
+			_head->_next = sprite;
+		_tail = sprite;
+	}
+
+	_count++;
+}
+
+Sprite *SpriteList::Remove(Sprite *sprite)
+{
+	assert(sprite != nullptr);
+	assert(_count > 0);
+
+	if (sprite == _head)
+		_head = sprite->_next;
+
+	if (sprite == _tail)
+		_tail = sprite->_prev;
+
+	if (sprite->_prev)
+		sprite->_prev->_next = sprite->_next;
+
+	if (sprite->_next)
+		sprite->_next->_prev = sprite->_prev;
+
+	sprite->_prev = nullptr;
+	sprite->_next = nullptr;
+
+	_count--;
+
+	return sprite;
+}
+
+void SpriteList::Insert(Sprite *LS_RESTRICT before, Sprite *LS_RESTRICT sprite)
+{
+	assert(sprite != nullptr);
+
+	if (sprite->_next != nullptr || sprite->_prev != nullptr)
+		Remove(sprite); // remove and reinsert
+
+	if (before)
+	{
+		sprite->_next = before->_next;
+		sprite->_prev = before;
+
+		if (before->_next)
+			before->_next->_prev = sprite;
+		else
+			_tail = sprite;
+
+		if (before->_prev)
+			before->_prev->_next = sprite;
+
+		before->_next = sprite;
+	}
+	else
+	{
+		if (_head)
+		{
+			_head->_prev = sprite;
+			sprite->_next = _head;
+		}
+		else
+			_tail = sprite;
+
+		_head = sprite;
+	}
+
+	_count++;
+}
+
+void SpriteList::Move(Sprite *sprite, int64_t distance)
+{
+	assert(sprite != nullptr);
+	assert(_count > 0);
+
+	if (distance == 0 || sprite == _head)
+		return;
+
+	assert(sprite->_prev != nullptr);
+
+	if (distance > 0)
+	{
+		Sprite *before = sprite->_prev;
+		Remove(sprite);
+
+		for (int64_t i = 0; i < distance; i++)
+		{
+			if (before == _tail)
+				break; // clamp to end
+			before = before->_next;
+		}
+
+		Insert(before, sprite);
+	}
+	else
+	{
+		Sprite *after = sprite->_next;
+		Remove(sprite);
+
+		distance = -distance;
+		for (int64_t i = 0; i < distance; i++)
+		{
+			if (after == _head->_next)
+				break; // clamp to start
+			after = after->_prev;
+		}
+
+		Insert(after->_prev, sprite);
+	}
+}
+
+void SpriteList::Clear()
+{
+	Sprite *next;
+	for (Sprite *s = _head; s; s = next)
+	{
+		next = s->_next;
+		delete s;
+	}
+
+	_head = nullptr;
+	_tail = nullptr;
+	_count = 0;
+}
+
+SpriteList::SpriteList() :
+	_head(nullptr), _tail(nullptr), _count(0) {}
+
+SpriteList::~SpriteList()
+{
+	Clear();
+}
+
 int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size)
 {
 	assert(_bytecode == nullptr);
@@ -41,13 +188,16 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 	bc::Header *header = (bc::Header *)bytecode;
 	bc::SpriteTable *st = (bc::SpriteTable *)(bytecode + header->stable);
 
-	_sprites = new Sprite[st->count];
-	_spritesEnd = _sprites + st->count;
+	_abstractSprites = new AbstractSprite[st->count];
+	_nAbstractSprites = st->count;
+
+	_spriteList = new SpriteList();
 
 	// load sprites
 	bool foundStage = false;
 	for (bc::uint64 i = 0; i < st->count; i++)
 	{
+		AbstractSprite &as = _abstractSprites[i];
 		bc::Sprite &si = st->sprites[i];
 
 		if (si.isStage)
@@ -62,38 +212,36 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 			foundStage = true;
 		}
 
-		// create sprite
-		Sprite &sprite = _sprites[i];
-		sprite.Init(bytecode, size, &si, _options.stream);
+		// Initialize the abstract sprite
+		as.Init(bytecode, size, &si, _options.stream);
 
-		_spriteNames[sprite.GetName()] = i + 1;
+		// Create base sprite
+		Sprite *sprite = as.Instantiate(this, nullptr);
+		_baseSprites[as.GetName()] = sprite;
 
-		// create initializer, if any
+		// Create initializer, if any
 		if (si.initializer.offset)
 		{
 			_initScripts.emplace_back();
-			Script &init = _initScripts.back();
-			init.Init(bytecode, size, &si.initializer);
-			init.sprite = &sprite;
-			init.vm = this;
+
+			SCRIPT_ALLOC_INFO &ai = _initScripts.back();
+			ai.sprite = sprite;
+			ai.info = (bc::Script *)(bytecode + si.initializer.offset);
 		}
 
-		// load scripts
+		// Create script stubs
 		bc::Script *scripts = (bc::Script *)(bytecode + si.scripts);
 		for (bc::uint64 j = 0; j < si.numScripts; j++)
 		{
-			bc::Script &sci = scripts[j];
+			_scriptStubs.emplace_back();
 
-			_scripts.emplace_back();
-			Script &s = _scripts.back();
-			s.Init(bytecode, size, &sci);
-
-			s.sprite = &sprite;
-			s.vm = this;
+			SCRIPT_ALLOC_INFO &ai = _scriptStubs.back();
+			ai.sprite = sprite;
+			ai.info = scripts + j;
 		}
 
 		if (si.isStage)
-			_stage = &sprite;
+			_stage = sprite;
 	}
 
 	if (!foundStage)
@@ -110,8 +258,17 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 static int ScriptEntryThunk(void *scriptPtr)
 {
 	Script *script = (Script *)scriptPtr;
+
+	if (setjmp(script->entryJmp) == 1)
+	{
+		if (!script->restart)
+			script->vm->Panic("Script restarted without restart flag");
+	}
+
+	script->restart = false;
+
+	// Run the script, does not return
 	script->Main();
-	return 0;
 }
 
 int VirtualMachine::VMStart()
@@ -143,77 +300,66 @@ int VirtualMachine::VMStart()
 	if (ls_convert_to_fiber(NULL) != 0)
 		Panic("Failed to convert to fiber");
 
-	// create fibers for initialization scripts
-	for (Script &script : _initScripts)
-	{
-		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
-		if (!script.fiber)
-			Panic("Failed to create fiber");
-	}
-
-	// create fibers for scripts
-	for (Script &script : _scripts)
-	{
-		script.fiber = ls_fiber_create(ScriptEntryThunk, &script);
-		if (!script.fiber)
-			Panic("Failed to create fiber");
-	}
-
 	// initialize graphics
-	int64_t nSprites = _spritesEnd - _sprites - 1; // exclude the stage
-	_render = new GLRenderer(nSprites, _options);
-	if (_render->HasError())
-		Panic("Failed to initialize graphics");
+	_render = GLRenderer::Create(_spriteList, _options);
+	if (!_render)
+		Panic("Failed to create graphics");
 
 	// Initialize graphics resources
-	for (Sprite *s = _sprites; s < _spritesEnd; s++)
-	{
-		s->Load(this);
-		for (int64_t i = 0; i < s->GetSoundCount(); i++)
-			_sounds.push_back(&s->GetSounds()[i]);
-	}
+	for (AbstractSprite *as = _abstractSprites; as < _abstractSprites + _nAbstractSprites; as++)
+		as->Load(this);
 
 	_messageListeners.clear();
 	_keyListeners.clear();
 	_flagListeners.clear();
 
 	// Find listeners
-	for (Script &script : _scripts)
+	for (SCRIPT_ALLOC_INFO &ai : _scriptStubs)
 	{
-		uint8_t *ptr = script.entry;
+		uint8_t *ptr = _bytecode + ai.info->offset;
 		Opcode opcode = (Opcode)*ptr;
 		ptr++;
+
+		STATIC_EVENT_HANDLER seh;
+		seh.ai = ai;
+		seh.script = nullptr;
 
 		switch (opcode)
 		{
 		default:
 			Panic("Script entry is not an event");
 		case Op_onflag:
-			_flagListeners.push_back(&script);
+			_flagListeners.push_back(seh);
 			break;
 		case Op_onkey: {
 			uint16_t sc = *(uint16_t *)ptr;
 			ptr += sizeof(uint16_t);
-			_keyListeners[(SDL_Scancode)sc].push_back(&script);
+			_keyListeners[(SDL_Scancode)sc].push_back(seh);
 			break;
 		}
 		case Op_onclick:
 			// Handled by the sprite
 			break;
-		case Op_onbackdropswitch:
-			script.autoStart = true;
+		case Op_onbackdropswitch: {
+			Script *script = AllocScript(ai);
+			script->autoStart = true;
+			RestartScript(script);
 			break;
-		case Op_ongt:
-			script.autoStart = true;
+		}
+		case Op_ongt: {
+			Script *script = AllocScript(ai);
+			script->autoStart = true;
+			RestartScript(script);
 			break;
+		}
 		case Op_onevent: {
 			char *evt = (char *)(_bytecode + *(uint64_t *)ptr);
 			ptr += sizeof(uint64_t);
-			_messageListeners[evt].push_back(&script);
+			_messageListeners[evt].push_back(seh);
 			break;
 		}
 		case Op_onclone:
-			// TODO: support
+			// Handled by the sprite
 			break;
 		}
 	}
@@ -226,7 +372,6 @@ int VirtualMachine::VMStart()
 #endif // LS_DEBUG
 
 	_flagClicked = false;
-	_toSend.clear();
 	_askQueue = std::queue<std::pair<Script *, std::string>>();
 	_asker = nullptr;
 	_question.clear();
@@ -245,27 +390,28 @@ int VirtualMachine::VMStart()
 	// for a sprite's variables. Anything may be done here, but
 	// if an initialization script ever yields, the VM will panic.
 	// The only way a script should return control is by terminating.
-	for (Script &script : _initScripts)
+	for (SCRIPT_ALLOC_INFO &ai : _initScripts)
 	{
-		script.Start();
-		_current = &script;
-		ls_fiber_switch(script.fiber);
+		Script *script = AllocScript(ai);
+		RestartScript(script);
 
+		// Run the script
+		_current = script;
+		ls_fiber_switch(script->fiber);
 		_current = nullptr;
 
 		if (_panicing)
 			longjmp(_panicJmp, 1);
 
-		if (script.except != Exception_None)
+		if (script->except != Exception_None)
 			Panic("Initialization script raised an exception");
 
-		if (script.state != TERMINATED)
+		if (script->state != TERMINATED)
 			Panic("Initialization script did not terminate");
 
-		// no longer needed
-		ls_close(script.fiber);
-		script.Destroy();
+		CloseScript(script);
 	}
+	_initScripts.clear();
 
 	SendFlagClicked();
 
@@ -364,10 +510,8 @@ void VirtualMachine::Send(const std::string &message)
 	_nextScript = 0;
 
 	// Start all message handlers
-	for (Script *script : it->second)
-		script->Start();
-
-	//_toSend.insert(message);
+	for (STATIC_EVENT_HANDLER &seh : it->second)
+		RunEventHandler(&seh);
 }
 
 void VirtualMachine::SendAndWait(const std::string &message)
@@ -416,16 +560,8 @@ Sprite *VirtualMachine::FindSprite(const Value &name)
 	if (name.type != ValueType_String)
 		return nullptr;
 
-	auto it = _spriteNames.find(name.u.string);
-	return it != _spriteNames.end() ? FindSprite(it->second) : nullptr;
-}
-
-Sprite *VirtualMachine::FindSprite(intptr_t id)
-{
-	Sprite *s = _sprites + id - 1;
-	if (s >= _sprites && s < _spritesEnd)
-		return s;
-	return nullptr;
+	auto it = _baseSprites.find(name.u.string);
+	return it != _baseSprites.end() ? it->second : nullptr;
 }
 
 void VirtualMachine::ResetTimer()
@@ -433,40 +569,185 @@ void VirtualMachine::ResetTimer()
 	_timerStart = GetTime();
 }
 
-void VirtualMachine::PlaySound(Sound *sound)
+void VirtualMachine::StartVoice(Voice *voice)
 {
-	if (sound->IsPlaying())
+	if (voice->IsPlaying())
 	{
-		sound->Stop();
-		sound->Play();
+		voice->Play();
 		return; // already in list
 	}
 
-	_playingSounds.push_back(sound);
-	sound->Play();
+	_activeVoices.push_back(voice);
+	voice->Play();
 }
 
 void VirtualMachine::StopAllSounds()
 {
-	for (Sound *snd : _playingSounds)
-		snd->Stop();
-	_playingSounds.clear();
+	for (Voice *voice : _activeVoices)
+		voice->Stop();
+	_activeVoices.clear();
 }
 
 void VirtualMachine::OnClick(int64_t x, int64_t y)
 {
 	Vector2 point(x, y);
-	for (const int64_t *id = _render->RenderOrderEnd() - 1; id >= _render->RenderOrderBegin(); id--)
+	for (Sprite *sprite = _spriteList->Tail(); sprite; sprite = sprite->GetPrev())
 	{
-		Sprite *sprite = reinterpret_cast<Sprite *>(_render->GetRenderInfo(*id)->userData);
+		if (sprite->GetInstanceId() != BASE_INSTANCE_ID)
+			continue; // Events only broadcast to base instances
+
 		if (sprite->TouchingPoint(point))
 		{
 			// sprite was clicked
-			for (Script *script : sprite->GetClickListeners())
-				_clickQueue.push(script);
+			for (auto &seh : sprite->GetBase()->GetClickListeners())
+				_clickQueue.push(const_cast<STATIC_EVENT_HANDLER *>(&seh));
 			break;
 		}
 	}
+}
+
+Script *VirtualMachine::AllocScript(const SCRIPT_ALLOC_INFO &ai)
+{
+	if (ai.sprite == nullptr || ai.info == nullptr)
+		Panic("Invalid script start info");
+
+	if (_allocatedScripts == MAX_SCRIPTS)
+		Panic("Out of script slots");
+
+	Script *script = _scriptTable + _nextEntry;
+	_nextEntry++;
+	_allocatedScripts++;
+
+	assert(script->state == EMBRYO);
+
+	script->sprite = ai.sprite;
+	script->fiber = ls_fiber_create(ScriptEntryThunk, script);
+	if (!script->fiber)
+		Panic("Failed to create fiber");
+	script->sleepUntil = 0.0;
+	script->waitInput = false;
+	script->askInput = false;
+	script->entry = _bytecode + ai.info->offset;
+	script->pc = script->entry;
+	script->autoStart = false;
+	script->scheduled = false;
+	script->restart = false;
+
+	script->stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
+	if (!script->stack)
+	{
+		ls_close(script->fiber);
+		Panic("Failed to allocate stack");
+	}
+
+	script->sp = script->stack + STACK_SIZE;
+
+	script->except = Exception_None;
+	script->exceptMessage = nullptr;
+
+	script->state = SUSPENDED;
+
+	script->refCount = 1;
+
+	return script;
+}
+
+void VirtualMachine::CloseScript(Script *script)
+{
+	size_t index = script - _scriptTable;
+	if (index >= MAX_SCRIPTS)
+		Panic("Script is not owned by this VM");
+
+	if (script->state == EMBRYO)
+		Panic("Closing unallocated script");
+
+	assert(script->refCount != 0);
+
+	if (--script->refCount != 0)
+		return;
+	
+	// Release the script
+
+	assert(script->fiber != nullptr);
+
+	// Release stack
+	Value *const stackEnd = script->stack + STACK_SIZE;
+	while (script->sp < stackEnd)
+	{
+		ReleaseValue(*script->sp);
+		script->sp++;
+	}
+
+	assert(script->sp == stackEnd);
+
+	free(script->stack);
+
+	ls_close(script->fiber);
+
+	memset(script, 0, sizeof(Script));
+	script->state = EMBRYO;
+
+	if (index < _nextEntry)
+		_nextEntry = index;
+}
+
+Script *VirtualMachine::OpenScript(unsigned long id)
+{
+	if (id >= MAX_SCRIPTS)
+		Panic("Script ID out of range");
+	Script *script = _scriptTable + id;
+	if (script->state == EMBRYO)
+		return nullptr;
+	script->refCount++;
+	return script;
+}
+
+void VirtualMachine::RestartScript(Script *script)
+{
+	size_t index = script - _scriptTable;
+	if (index >= MAX_SCRIPTS)
+		Panic("Script is not owned by this VM");
+
+	if (script->state == EMBRYO)
+		Panic("Unallocated script");
+
+	assert(script->fiber != nullptr);
+
+	script->restart = true;
+	script->state = RUNNABLE;
+
+	if (_current == script) // jump to beginning of script
+		longjmp(script->entryJmp, 1);
+}
+
+void VirtualMachine::TerminateScript(Script *script)
+{
+	size_t index = script - _scriptTable;
+	if (index >= MAX_SCRIPTS)
+		Panic("Script is not owned by this VM");
+
+	if (script->state == EMBRYO)
+		Panic("Unallocated script");
+
+	if (script->state == TERMINATED)
+		return; // already terminated
+
+	script->state = TERMINATED;
+
+	if (_current == script)
+	{
+		// yield control to the VM
+		ls_fiber_sched();
+
+		abort(); // should be unreachable
+	}
+}
+
+void VirtualMachine::RunEventHandler(STATIC_EVENT_HANDLER *seh)
+{
+	if (!seh->script)
+		seh->script = AllocScript(seh->ai);
+	RestartScript(seh->script);
 }
 
 void VirtualMachine::OnKeyDown(int scancode)
@@ -475,21 +756,21 @@ void VirtualMachine::OnKeyDown(int scancode)
 	if (it == _keyListeners.end())
 		return;
 
-	for (Script *script : it->second)
-		script->Start();
+	for (STATIC_EVENT_HANDLER &seh : it->second)
+		RunEventHandler(&seh);
 
 	// "any" key
 	it = _keyListeners.find((SDL_Scancode)-1);
 	if (it != _keyListeners.end())
 	{
-		for (Script *script : it->second)
-			script->Start();
+		for (STATIC_EVENT_HANDLER &seh : it->second)
+			RunEventHandler(&seh);
 	}
 }
 
 void VirtualMachine::OnResize()
 {
-	for (Sprite *s = _sprites; s < _spritesEnd; s++)
+	for (Sprite *s = _spriteList->Head(); s; s = s->GetNext())
 		s->InvalidateTransform(); // force recompute
 }
 
@@ -502,10 +783,6 @@ VirtualMachine::VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options) :
 
 	_bytecode = nullptr;
 	_bytecodeSize = 0;
-	_loader = nullptr;
-
-	_sprites = nullptr;
-	_spritesEnd = nullptr;
 
 	_flagClicked = false;
 
@@ -558,8 +835,8 @@ void VirtualMachine::Render()
 {
 	_render->BeginRender();
 
-	for (Sprite *s = _sprites; s < _spritesEnd; s++)
-		s->Update();
+	for (Sprite *s = _spriteList->Head(); s; s = s->GetNext())
+		s->Update(this);
 
 	_render->Render();
 
@@ -571,10 +848,10 @@ void VirtualMachine::Render()
 	const ImU32 backColor = IM_COL32(255, 255, 255, 255); //IM_COL32(0, 0, 0, 128);
 
 	ImDrawList *drawList = ImGui::GetBackgroundDrawList();
-	for (Sprite *s = _sprites; s < _spritesEnd; s++)
+	for (Sprite *s = _spriteList->Head(); s; s = s->GetNext())
 	{
-		const String *message = s->GetMessage();
-		if (!message)
+		const Value &message = s->GetMessage();
+		if (message.type == ValueType_None)
 			continue;
 
 		const AABB &bbox = s->GetBoundingBox();
@@ -584,7 +861,7 @@ void VirtualMachine::Render()
 
 		ImVec2 position(x, y);
 
-		const char *text = message->str;
+		const char *text = ToString(message);
 		ImVec2 textSize = ImGui::CalcTextSize(text);
 		
 		ImVec2 topLeft(position.x - padding.x, position.y - padding.y);
@@ -623,20 +900,35 @@ void VirtualMachine::Render()
 
 void VirtualMachine::Cleanup()
 {
-	for (Script &s : _scripts)
-		ls_close(s.fiber), s.fiber = nullptr;
+	for (unsigned long id = 0; id < MAX_SCRIPTS; id++)
+	{
+		Script &s = _scriptTable[id];
+		if (s.state != EMBRYO)
+			CloseScript(&s);
+	}
+
 	ls_convert_to_thread();
 
-	if (_sprites)
-		delete[] _sprites, _sprites = nullptr;
+	if (_spriteList)
+	{
+		for (Sprite *s = _spriteList->Head(); s; s = s->GetNext())
+			delete s;
+		delete _spriteList, _spriteList = nullptr;
+	}
+
+	_stage = nullptr;
+
+	_baseSprites.clear();
 
 	_io.Release();
+
+	if (_abstractSprites)
+		delete[] _abstractSprites, _abstractSprites = nullptr;
 
 	if (_render)
 		delete _render, _render = nullptr;
 
 	_flagClicked = false;
-	_toSend.clear();
 	_askQueue = std::queue<std::pair<Script *, std::string>>();
 	_asker = nullptr;
 	_question.clear();
@@ -645,28 +937,14 @@ void VirtualMachine::Cleanup()
 	_messageListeners.clear();
 	_keyListeners.clear();
 
-	for (Script &script : _scripts)
-		script.Destroy();
-	_scripts.clear();
-
-	if (_sprites)
-		delete[] _sprites, _sprites = nullptr;
-
-	_io.Release();
-
-	if (_render)
-		delete _render, _render = nullptr;
-
-	_loader = nullptr;
 	_bytecode = nullptr;
 	_bytecodeSize = 0;
-
 
 	_activeScripts = 0;
 	_waitingScripts = 0;
 	_running = false;
 
-	_spriteNames.clear();
+	_baseSprites.clear();
 }
 
 void VirtualMachine::DispatchEvents()
@@ -676,29 +954,20 @@ void VirtualMachine::DispatchEvents()
 	{
 		StopAllSounds();
 
-		for (Script &script : _scripts)
-			script.Reset();
+		// terminate all scripts
+		for (Script *s = _scriptTable; s < _scriptTable + MAX_SCRIPTS; s++)
+		{
+			if (s->state == EMBRYO)
+				continue;
+			TerminateScript(s);
+		}
+		
+		DestroyAllClones();
 
-		for (Script *script : _flagListeners)
-			script->Start();
+		for (STATIC_EVENT_HANDLER &seh : _flagListeners)
+			RunEventHandler(&seh);
 
 		_flagClicked = false;
-	}
-
-	// Broadcasts
-	if (_toSend.size() != 0)
-	{
-		for (const std::string &message : _toSend)
-		{
-			auto it = _messageListeners.find(message);
-			if (it == _messageListeners.end())
-				continue;
-
-			for (Script *script : it->second)
-				script->Start();
-		}
-
-		_toSend.clear();
 	}
 
 	// Sprite clicked
@@ -706,8 +975,7 @@ void VirtualMachine::DispatchEvents()
 	{
 		while (!_clickQueue.empty())
 		{
-			Script *s = _clickQueue.front();
-			s->Start();
+			RunEventHandler(_clickQueue.front());
 			_clickQueue.pop();
 		}
 	}
@@ -729,9 +997,9 @@ void VirtualMachine::Scheduler()
 
 	// round-robin scheduler
 	_nextScript = 0;
-	while (_nextScript < _scripts.size())
+	while (_nextScript < MAX_SCRIPTS)
 	{
-		Script &script = *(_scripts.data() + _nextScript);
+		Script &script = *(_scriptTable + _nextScript);
 		_nextScript++;
 
 		if (script.scheduled)
@@ -753,24 +1021,24 @@ void VirtualMachine::Scheduler()
 		{
 			double time = GetTime();
 
-			bool gliding = script.sprite->GetGlide()->end > time;
+			bool gliding = script.sprite->GetGlideInfo().end > time;
 			if (gliding)
 			{
 				// gliding to a point
 				waitingScripts++;
 				continue;
 			}
-			else if (script.waitSound)
+			else if (script.waitVoice)
 			{
 				// waiting for a sound to finish
-				if (script.waitSound->IsPlaying())
+				if (script.waitVoice->IsPlaying())
 				{
 					// still playing, wait
 					waitingScripts++;
 					continue;
 				}
 
-				script.waitSound = nullptr;
+				script.waitVoice = nullptr;
 			}
 			else if (script.waitInput || script.askInput || script.sleepUntil > time)
 			{
@@ -784,7 +1052,7 @@ void VirtualMachine::Scheduler()
 		}
 
 		if (script.state != RUNNABLE)
-			continue; // not ready to run
+			continue; // not runnable
 
 		activeScripts++;
 

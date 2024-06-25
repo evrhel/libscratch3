@@ -21,8 +21,6 @@ const char *GetStateName(int state)
 		return "EMBRYO";
 	case RUNNABLE:
 		return "RUNNABLE";
-	case RUNNING:
-		return "RUNNING";
 	case WAITING:
 		return "WAITING";
 	case SUSPENDED:
@@ -32,92 +30,12 @@ const char *GetStateName(int state)
 	}
 }
 
-void Script::Init(uint8_t *bytecode, size_t bytecodeSize, bc::Script *info)
-{
-	if (stack)
-		abort();
-
-	bc::Header *header = (bc::Header *)bytecode;
-
-	state = EMBRYO;
-	sprite = nullptr;
-	fiber = nullptr;
-	sleepUntil = 0.0;
-	waitInput = false;
-	askInput = false;
-	ticks = 0;
-	entry = bytecode + info->offset;
-	pc = entry;
-	isReset = false;
-	autoStart = false;
-	scheduled = false;
-	stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
-
-	// fill stack with garbage
-	if (stack)
-	{
-		sp = stack + STACK_SIZE;
-#if _DEBUG
-		memset(stack, 0xab, STACK_SIZE * sizeof(Value));
-#endif // _DEBUG
-	}
-	else
-		sp = nullptr; // out of memory
-
-	except = Exception_None;
-	exceptMessage = nullptr;
-}
-
-void Script::Destroy()
-{
-	free(stack);
-	memset(this, 0, sizeof(Script));
-}
-
-void Script::Reset()
-{
-	state = EMBRYO;
-	sleepUntil = 0.0;
-	waitInput = false;
-	askInput = false;
-	waitSound = nullptr;
-	ticks = 0;
-	pc = entry;
-	isReset = true;
-	except = Exception_None;
-	exceptMessage = nullptr;
-
-	// release stack
-	Value *const stackEnd = stack + STACK_SIZE;
-	while (sp < stackEnd)
-	{
-		ReleaseValue(*sp);
-		memset(sp, 0xab, sizeof(Value));
-		sp++;
-	}
-
-	assert(sp == stackEnd);
-
-	bp = sp; // base pointer
-}
-
-void Script::Start()
-{
-	Reset();
-	state = RUNNABLE;
-}
-
 void Script::Main()
 {
-	(void)setjmp(scriptMain); // don't care about return value
-
-	isReset = false;
-	assert(sp == stack + STACK_SIZE);
-
 	uint8_t *bytecode = vm->GetBytecode();
 	bc::Header *header = (bc::Header *)bytecode;
 
-	bool b, b2;
+	bool b;
 	uint64_t ui64;
 	int64_t i64;
 	double real;
@@ -126,8 +44,6 @@ void Script::Main()
 
 	for (;;)
 	{
-		ticks++;
-
 		Opcode opcode = (Opcode)*pc;
 		pc++;
 
@@ -501,11 +417,11 @@ void Script::Main()
 			SetReal(Push(), sprite->GetDirection());
 			break;
 		case Op_say:
-			sprite->SetMessage(StackAt(-1), MessageState_Say);
+			sprite->SetMessage(StackAt(-1), false);
 			Pop();
 			break;
 		case Op_think:
-			sprite->SetMessage(StackAt(-1), MessageState_Think);
+			sprite->SetMessage(StackAt(-1), true);
 			Pop();
 			break;
 		case Op_setcostume: {
@@ -520,7 +436,7 @@ void Script::Main()
 				sprite->SetCostume(static_cast<int64_t>(round(v.u.real)));
 				break;
 			case ValueType_String:
-				sprite->SetCostume(v.u.string);
+				sprite->SetCostume(sprite->GetBase()->FindCostume(v.u.string));
 				break;
 			default:
 				break; // do nothing
@@ -547,7 +463,7 @@ void Script::Main()
 				stage->SetCostume(static_cast<int64_t>(round(v.u.real)));
 				break;
 			case ValueType_String:
-				stage->SetCostume(v.u.string);
+				stage->SetCostume(stage->GetBase()->FindCostume(v.u.string));
 				break;
 			}
 
@@ -568,36 +484,37 @@ void Script::Main()
 			Pop();
 			break;
 		case Op_addgraphiceffect: {
-			GraphicEffect effect = (GraphicEffect) * (uint8_t *)pc;
+			GraphicEffect effect = (GraphicEffect)*(uint8_t *)pc;
 			pc++;
 
 			double val = ToReal(StackAt(-1));
 			Pop();
 
+			GraphicEffectController &gec = sprite->GetGraphicEffects();
 			switch (effect)
 			{
 			default:
 				Raise(InvalidArgument, "Invalid graphic effect");
 			case GraphicEffect_Color:
-				sprite->SetColorEffect(val + sprite->GetColorEffect());
+				gec.AddColorEffect(val);
 				break;
 			case GraphicEffect_Fisheye:
-				sprite->SetFisheyeEffect(val + sprite->GetFisheyeEffect());
+				gec.AddFisheyeEffect(val);
 				break;
 			case GraphicEffect_Whirl:
-				sprite->SetWhirlEffect(val + sprite->GetWhirlEffect());
+				gec.AddWhirlEffect(val);
 				break;
 			case GraphicEffect_Pixelate:
-				sprite->SetPixelateEffect(val + sprite->GetPixelateEffect());
+				gec.AddPixelateEffect(val);
 				break;
 			case GraphicEffect_Mosaic:
-				sprite->SetMosaicEffect(val + sprite->GetMosaicEffect());
+				gec.AddMosaicEffect(val);
 				break;
 			case GraphicEffect_Brightness:
-				sprite->SetBrightnessEffect(val + sprite->GetBrightnessEffect());
+				gec.AddBrightnessEffect(val);
 				break;
 			case GraphicEffect_Ghost:
-				sprite->SetGhostEffect(val + sprite->GetGhostEffect());
+				gec.AddGhostEffect(val);
 				break;
 			}
 
@@ -610,78 +527,87 @@ void Script::Main()
 			double val = ToReal(StackAt(-1));
 			Pop();
 
+			GraphicEffectController &gec = sprite->GetGraphicEffects();
+
 			switch (effect)
 			{
 			default:
 				Raise(InvalidArgument, "Invalid graphic effect");
 			case GraphicEffect_Color:
-				sprite->SetColorEffect(val);
+				gec.SetColorEffect(val);
 				break;
 			case GraphicEffect_Fisheye:
-				sprite->SetFisheyeEffect(val);
+				gec.SetFisheyeEffect(val);
 				break;
 			case GraphicEffect_Whirl:
-				sprite->SetWhirlEffect(val);
+				gec.SetWhirlEffect(val);
 				break;
 			case GraphicEffect_Pixelate:
-				sprite->SetPixelateEffect(val);
+				gec.SetPixelateEffect(val);
 				break;
 			case GraphicEffect_Mosaic:
-				sprite->SetMosaicEffect(val);
+				gec.SetMosaicEffect(val);
 				break;
 			case GraphicEffect_Brightness:
-				sprite->SetBrightnessEffect(val);
+				gec.SetBrightnessEffect(val);
 				break;
 			case GraphicEffect_Ghost:
-				sprite->SetGhostEffect(val);
+				gec.SetGhostEffect(val);
 				break;
 			}
 
 			break;
 		}
 		case Op_cleargraphiceffects:
-			sprite->SetColorEffect(0);
-			sprite->SetFisheyeEffect(0);
-			sprite->SetWhirlEffect(0);
-			sprite->SetPixelateEffect(0);
-			sprite->SetMosaicEffect(0);
-			sprite->SetBrightnessEffect(0);
-			sprite->SetGhostEffect(0);
+			sprite->GetGraphicEffects().ClearEffects();
 			break;
 		case Op_show:
-			sprite->SetShown(true);
+			sprite->SetVisible(true);
 			break;
 		case Op_hide:
-			sprite->SetShown(false);
+			sprite->SetVisible(false);
 			break;
-		case Op_gotolayer:
+		case Op_gotolayer: {
+			Sprite *stage = vm->GetStage();
+			if (sprite == stage)
+				break;
+
+			SpriteList *sprites = vm->GetSpriteList();
+
 			switch (*(uint8_t *)pc)
 			{
 			default:
 				Raise(InvalidArgument, "Invalid layer");
 			case LayerType_Front:
-				sprite->SetLayer(-1);
+				sprites->Insert(stage, sprite);
 				break;
 			case LayerType_Back:
-				sprite->SetLayer(1);
+				sprites->Insert(sprites->Tail(), sprite);
 				break;
 			}
 
 			pc++;
 			break;
+		}
 		case Op_movelayer: {
+			Sprite *stage = vm->GetStage();
+			if (sprite == vm->GetStage())
+				break;
+
 			int64_t amount = ToInteger(StackAt(-1));
 			Pop();
+
+			SpriteList *sprites = vm->GetSpriteList();
 
 			switch (*(uint8_t *)pc)
 			{
 			default:
 				Raise(InvalidArgument, "Invalid direction");
 			case LayerDir_Forward:
-				sprite->MoveLayer(amount);
+				sprites->Move(sprite, amount);
 				break;
 			case LayerDir_Backward:
-				sprite->MoveLayer(-amount);
+				sprites->Move(sprite, -amount);
 				break;
 			}
 
@@ -691,9 +617,12 @@ void Script::Main()
 		case Op_getcostume:
 			SetInteger(Push(), sprite->GetCostume());
 			break;
-		case Op_getcostumename:
-			Assign(Push(), sprite->GetCostumeName());
+		case Op_getcostumename: {
+			int64_t costume = sprite->GetCostume();
+			Costume *c = sprite->GetBase()->GetCostume(costume);
+			Assign(Push(), c->GetNameValue());
 			break;
+		}
 		case Op_getbackdrop:
 			Raise(NotImplemented, "getbackdrop");
 		case Op_getsize:
@@ -707,18 +636,19 @@ void Script::Main()
 				break;
 			}
 
-			Sound *sound = sprite->FindSound(v.u.string);
-			if (!sound)
+			int64_t sid = sprite->GetBase()->FindSound(v.u.string);
+			Voice *voice = sprite->GetVoiceFor(sid);
+			if (voice == nullptr)
 			{
 				Pop();
 				break;
 			}
-			
+						
 			Pop();
 
 			// play sound
-			vm->PlaySound(sound);
-			WaitForSound(sound);
+			vm->StartVoice(voice);
+			WaitForVoice(voice);
 			break;
 		}
 		case Op_playsound: {
@@ -729,8 +659,9 @@ void Script::Main()
 				break;
 			}
 
-			Sound *sound = sprite->FindSound(v.u.string);
-			if (!sound)
+			int64_t sid = sprite->GetBase()->FindSound(v.u.string);
+			Voice *voice = sprite->GetVoiceFor(sid);
+			if (voice == nullptr)
 			{
 				Pop();
 				break;
@@ -739,7 +670,7 @@ void Script::Main()
 			Pop();
 
 			// play sound
-			vm->PlaySound(sound);
+			vm->StartVoice(voice);
 			break;
 		}
 		case Op_stopsound:
@@ -749,58 +680,60 @@ void Script::Main()
 			SoundEffect effect = (SoundEffect)*(uint8_t *)pc;
 			pc++;
 
-			DSPController *dsp = sprite->GetDSP();
+			DSPController &dsp = sprite->GetDSP();
 			switch (effect)
 			{
 			default:
 				Raise(InvalidArgument, "Invalid sound effect");
 			case SoundEffect_Pitch:
-				dsp->SetPitch(dsp->GetPitch() + ToReal(StackAt(-1)));
+				dsp.AddPitch(ToReal(StackAt(-1)));
 				break;
 			case SoundEffect_Pan:
-				dsp->SetPan(dsp->GetPan() + ToReal(StackAt(-1)));
+				dsp.AddPan(ToReal(StackAt(-1)));
 				break;
 			}
+
+			Pop();
 			break;
 		}
 		case Op_setsoundeffect: {
 			SoundEffect effect = (SoundEffect)*(uint8_t *)pc;
 			pc++;
 
-			DSPController *dsp = sprite->GetDSP();
+			DSPController &dsp = sprite->GetDSP();
 			switch (effect)
 			{
 			default:
 				Raise(InvalidArgument, "Invalid sound effect");
 			case SoundEffect_Pitch:
-				dsp->SetPitch(ToReal(StackAt(-1)));
+				dsp.SetPitch(ToReal(StackAt(-1)));
 				break;
 			case SoundEffect_Pan:
-				dsp->SetPan(ToReal(StackAt(-1)));
+				dsp.SetPan(ToReal(StackAt(-1)));
 				break;
 			}
+
+			Pop();
 			break;
 		}
 		case Op_clearsoundeffects: {
-			DSPController *dsp = sprite->GetDSP();
-			dsp->SetPitch(0.0);
-			dsp->SetPan(0.0);
+			sprite->GetDSP().ClearEffects();
 			break;
 		}
 		case Op_addvolume: {
-			DSPController *dsp = sprite->GetDSP();
-			dsp->SetVolume(dsp->GetVolume() + ToReal(StackAt(-1)));
+			DSPController &dsp = sprite->GetDSP();
+			dsp.AddVolume(ToReal(StackAt(-1)));
 			Pop();
 			break;
 		}
 		case Op_setvolume: {
-			DSPController *dsp = sprite->GetDSP();
-			dsp->SetVolume(ToReal(StackAt(-1)));
+			DSPController &dsp = sprite->GetDSP();
+			dsp.SetVolume(ToReal(StackAt(-1)));
 			Pop();
 			break;
 		}
 		case Op_getvolume:
-			SetReal(Push(), sprite->GetDSP()->GetVolume());
+			SetReal(Push(), sprite->GetDSP().GetVolume());
 			break;
 		case Op_onflag:
 			// do nothing
@@ -862,31 +795,31 @@ void Script::Main()
 			Sleep(ToReal(StackAt(-1)));
 			Pop();
 			break;
-		case Op_stopall:
-			for (const Script &script : vm->GetScripts())
+		case Op_stopall: {
+			for (unsigned long sid = 0; sid < MAX_SCRIPTS; sid++)
 			{
-				Script *sp = const_cast<Script *>(&script);
-				if (sp != this)
+				Script *script = vm->OpenScript(sid);
+				if (script)
 				{
-					// See Op_stopother for explanation
-					sp->state = TERMINATED;
+					if (script != this)
+						vm->TerminateScript(script);
+					vm->CloseScript(script);
 				}
 			}
 
 			Terminate();
+		}
 		case Op_stopself:
 			Terminate();
 		case Op_stopother: {
-			for (const Script &script : vm->GetScripts())
+			for (unsigned long sid = 0; sid < MAX_SCRIPTS; sid++)
 			{
-				Script *sp = const_cast<Script *>(&script);
-				if (sp->sprite == sprite && sp != this)
+				Script *script = vm->OpenScript(sid);
+				if (script)
 				{
-					// Do not call Terminate(), as it will yield
-					// the current script. Instead, set the state
-					// to TERMINATED and let the scheduler handle it
-					// in the next iteration.
-					sp->state = TERMINATED;
+					if (script->sprite == sprite && script != this)
+						vm->TerminateScript(script);
+					vm->CloseScript(script);
 				}
 			}
 
@@ -1040,7 +973,7 @@ void Script::Main()
 				SetReal(Push(), s->GetSize());
 				break;
 			case PropertyTarget_Volume:
-				SetReal(Push(), s->GetDSP()->GetVolume());
+				SetReal(Push(), s->GetDSP().GetVolume());
 				break;
 			case PropertyTarget_Variable:
 				Pop();
@@ -1188,22 +1121,26 @@ Value &Script::StackAt(int i)
 
 void Script::Sched()
 {
-	ticks = 0;
 	ls_fiber_sched();
 
-	if (isReset)
-		longjmp(scriptMain, 1);
+	if (restart)
+	{
+		assert(sp == stack + STACK_SIZE);
+		longjmp(entryJmp, 1);
+	}
 }
 
 void Script::Terminate()
 {
-	state = TERMINATED;
-	Sched();
+	vm->TerminateScript(this);
 
-	if (state != RUNNABLE)
-		vm->Panic("Terminated script was rescheduled");
+	if (restart)
+	{
+		assert(sp == stack + STACK_SIZE);
+		longjmp(entryJmp, 1);
+	}
 
-	longjmp(scriptMain, 1);
+	vm->Panic("Terminated script rescheduled without restart flag set");
 }
 
 void LS_NORETURN Script::Raise(ExceptionType type, const char *message)
@@ -1220,9 +1157,9 @@ void Script::Sleep(double seconds)
 	Sched();
 }
 
-void Script::WaitForSound(Sound *sound)
+void Script::WaitForVoice(Voice *voice)
 {
-	waitSound = sound;
+	waitVoice = voice;
 	state = WAITING;
 	Sched();
 }
@@ -1236,7 +1173,7 @@ void Script::Glide(double x, double y, double t)
 		return;
 	}
 
-	GlideInfo &glide = *sprite->GetGlide();
+	GlideInfo &glide = sprite->GetGlideInfo();
 
 	glide.x0 = sprite->GetX();
 	glide.y0 = sprite->GetY();
@@ -1267,7 +1204,7 @@ void Script::Dump()
 	else
 		printf("    state = Unknown\n");
 
-	printf("    sprite = %s\n", sprite ? sprite->GetNameString() : "(null)");
+	printf("    sprite = %s\n", sprite ? sprite->GetBase()->GetNameString() : "(null)");
 
 	printf("    sleepUntil = %g\n", sleepUntil);
 	printf("    waitInput = %s\n", waitInput ? "true" : "false");

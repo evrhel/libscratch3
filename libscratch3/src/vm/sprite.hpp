@@ -3,21 +3,25 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <mutil/mutil.h>
 
-#include "costume.hpp"
-#include "sound.hpp"
 #include "script.hpp"
 #include "memory.hpp"
+#include "sound.hpp"
+#include "costume.hpp"
 
 #include "../codegen/util.hpp"
+#include "../render/renderer.hpp"
 
-#define BASE_SPRITE_ID 0
+#define MAX_INSTANCES 256
+#define BASE_INSTANCE_ID 0
 
 using namespace mutil;
 
 class VirtualMachine;
+class Sprite;
 
 //! \brief Axis-aligned bounding box
 struct AABB
@@ -33,33 +37,48 @@ struct GlideInfo
 	double start = -1.0, end = 0.0; // Start and end times
 };
 
-enum MessageState
-{
-    MessageState_None, // nothing
-    MessageState_Say, // speech bubble
-    MessageState_Think // thought bubble
-};
-
-class InstantiatedSprite;
-
-class AbstractSprite
+class AbstractSprite final
 {
 public:
     constexpr const String *GetName() const { return _name.u.string; }
     constexpr const char *GetNameString() const { return _name.u.string->str; }
 
-    constexpr bool IsStage() const { return _isStage; }
+    constexpr const bc::Sprite *GetInfo() const { return _info; }
+
+    constexpr Costume *GetCostume(int64_t id) const
+    {
+        if (id < 1 || id > _nCostumes)
+            return nullptr;
+        return _costumes + id - 1;
+    }
 
     int64_t FindCostume(const String *name) const;
+
+    constexpr Costume *GetCostumes() const { return _costumes; }
     constexpr int64_t CostumeCount() const { return _nCostumes; }
 
-    Sound *FindSound(int64_t sound);
-    Sound *FindSound(const String *name);
+    constexpr AbstractSound *GetSound(int64_t id) const
+    {
+        if (id < 1 || id > _nSounds)
+            return nullptr;
+        return _sounds + id - 1;
+    }
 
-    constexpr Sound *GetSounds() const { return _sounds; }
+    int64_t FindSound(const String *name) const;
+
+    constexpr AbstractSound *GetSounds() const { return _sounds; }
     constexpr int64_t GetSoundCount() const { return _nSounds; }
 
-    constexpr VirtualMachine *GetVM() const { return _vm; }
+    //! \brief Create a new instance of this sprite
+    //! 
+    //! \param vm The virtual machine to use for creating the sprite
+    //! \param tmpl The template sprite to use, or nullptr to create
+    //! a new sprite from the the initial state. If not nullptr, the
+    //! sprite must be an instance of this sprite.
+    //! 
+    //! \return The new sprite. Panics if the sprite could not be
+    //! created.
+    Sprite *Instantiate(VirtualMachine *vm, Sprite *tmpl);
 
     //! \brief Initialize the sprite
     //!
@@ -71,7 +90,9 @@ public:
     //! \param info The information about the sprite, as loaded from
     //! the bytecode
     //! \param stream Whether the sprite and its resources are streamed
-    void Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info, bool stream);
+    //!
+    //! \return Whether the sprite was successfully initialized
+    bool Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info, bool stream);
 
     //! \brief Load the sprite data
     //!
@@ -85,64 +106,150 @@ public:
     //! \brief Render debug information about the sprite
     void DebugUI() const;
 
-    constexpr const std::vector<Script *> &GetClickListeners() const { return _clickListeners; }
+    constexpr const size_t GetFieldCount() const { return _nFields; }
+
+    constexpr const std::vector<STATIC_EVENT_HANDLER> &GetClickListeners() const { return _clickListeners; }
+    constexpr const std::vector<bc::Script *> &GetCloneEntry() const { return _cloneEntry; }
+
+    constexpr Sprite *const *GetInstances() const { return _instances; }
+    constexpr uint32_t GetInstanceCount() const { return _nInstances; }
 
     AbstractSprite();
     ~AbstractSprite();
 private:
     Value _name; // sprite name, always a string
-    bool _isStage = false;
+    const bc::Sprite *_info;
         
-    Costume *_costumes = nullptr;
-    int64_t _nCostumes = 0;
+    Costume *_costumes;
+    int64_t _nCostumes;
+    StringMap<int64_t> _costumeNameMap; // costume name -> index
 
-    // costume name -> index
-    std::unordered_map<const String *, int64_t, _StringHasher, _StringEqual> _costumeNameMap;
+    AbstractSound *_sounds;
+    int64_t _nSounds;
+    StringMap<int64_t> _soundNameMap;  // sound name -> index
 
-    Sound *_sounds = nullptr;
-    int64_t _nSounds = 0;
+    size_t _nFields;
 
-    // sound name -> index
-    std::unordered_map<const String *, int64_t, _StringHasher, _StringEqual> _soundNameMap;
+    std::vector<STATIC_EVENT_HANDLER> _clickListeners;
+    std::vector<bc::Script *> _cloneEntry;
 
-    VirtualMachine *_vm = nullptr;
-
-    // scripts started when the sprite is clicked
-    std::vector<Script *> _clickListeners;
-
-    // entry point for clones of this sprite
-    std::vector<Script *> _cloneListeners;
-
-    uint64_t _nextID = 0;
+    Sprite *_instances[MAX_INSTANCES];
+    uint32_t _nInstances;
+    uint32_t _nextInstanceId;
 
     void Cleanup();
-
-    friend class InstantiatedSprite;
 };
 
-class Sprite
+class Sprite final
 {
 public:
     constexpr AbstractSprite *GetBase() const { return _base; }
-    constexpr uint64_t GetID() const { return _id; }
+    constexpr uint32_t GetInstanceId() const { return _instanceId; }
 
-    Sprite *Clone();
-    void Destroy();
+    constexpr bool IsVisible() const { return _visible; }
+    constexpr double GetX() const { return _x; }
+    constexpr double GetY() const { return _y; }
+    constexpr double GetSize() const { return _size; }
+    constexpr double GetDirection() const { return _direction; }
+    constexpr bool IsDraggable() const { return _draggable; }
+    constexpr RotationStyle GetRotationStyle() const { return _rotationStyle; }
+    constexpr int64_t GetCostume() const { return _costume; }
+    constexpr const Value &GetCostumeName() const { return _base->GetCostume(_costume)->GetNameValue(); }
 
-    Sprite();
+    constexpr void SetVisible(bool visible) { _visible = visible; _transDirty = true; }
+    constexpr void SetX(double x) { _x = x; _transDirty = true; }
+    constexpr void SetY(double y) { _y = y; _transDirty = true; }
+    constexpr void SetXY(double x, double y) { _x = x; _y = y; _transDirty = true; }
+    constexpr void SetSize(double size) { _size = size; _transDirty = true; }
+    constexpr void SetDirection(double direction) { _direction = direction; _transDirty = true; }
+    constexpr void SetDraggable(bool draggable) { _draggable = draggable; }
+    constexpr void SetRotationStyle(RotationStyle rotationStyle) { _rotationStyle = rotationStyle; }
+
+    constexpr void SetCostume(const int64_t costume)
+    {
+        const int64_t newCostume = (costume - 1) % _base->CostumeCount();
+        if (_costume != newCostume)
+        {
+            _costume = newCostume;
+            _transDirty = true;
+        }
+    }
+
+    constexpr void InvalidateTransform() { _transDirty = true; }
+
+    constexpr DSPController &GetDSP() { return _dsp; }
+    constexpr const DSPController &GetDSP() const { return _dsp; }
+    constexpr Voice *GetVoiceFor(int64_t soundId) { return _voices + soundId; }
+
+    constexpr GlideInfo &GetGlideInfo() { return _glide; }
+    constexpr const GlideInfo &GetGlideInfo() const { return _glide; }
+
+    constexpr const Value &GetMessage() const { return _message; }
+    constexpr bool IsThinking() const { return _isThinking; }
+
+    void SetMessage(const Value &message, bool think);
+
+    void Update(VirtualMachine *vm);
+
+    bool TouchingPoint(const Vector2 &point) const;
+    bool TouchingSprite(const Sprite *sprite) const;
+
+    constexpr const Matrix4 &GetModel() const { return _model; }
+    constexpr const Matrix4 &GetInvModel() const { return _invModel; }
+    constexpr const AABB &GetBoundingBox() const { return _bbox; }
+
+    constexpr GraphicEffectController &GetGraphicEffects() { return _gec; }
+    constexpr const GraphicEffectController &GetGraphicEffects() const { return _gec; }
+    constexpr GLuint GetTexture() const { return _texture; }
+
+    constexpr Sprite *GetNext() const { return _next; }
+    constexpr Sprite *GetPrev() const { return _prev; }
+
+    Value &GetField(VirtualMachine *vm, uint32_t id) const;
+
+    constexpr const Value *GetFields() const { return _fields; }
+
+    void DebugUI() const;
+
+    //! \brief Clone this sprite
+    //! 
+    //! Creates a clone of this sprite and schedules the clone's
+    //! scripts to run. The clone will be placed one layer below
+    //! the original sprite.
+    //! 
+    //! \param vm The virtual machine
+    //! 
+    //! \return The clone
+    Sprite *Clone(VirtualMachine *vm);
+
+    //! \brief Destroy this sprite
+    //! 
+    //! Any scripts the sprite is running will be terminated. If
+    //! the sprite is destroying itself (i.e. from within a script),
+    //! this function does not return.
+    //! 
+    //! \param vm The virtual machine
+    void Destroy(VirtualMachine *vm);
+
+    Sprite &operator=(const Sprite &) = delete;
+    Sprite &operator=(Sprite &&) = delete;
+
+    Sprite(VirtualMachine *vm, AbstractSprite *base, uint32_t instanceId);
+    Sprite(const Sprite &) = delete;
+    Sprite(Sprite &&) = delete;
     ~Sprite();
 private:
     AbstractSprite *_base;
-    uint64_t _id;
+    uint32_t _instanceId;
 
     //////////////////////////////////////////////////////////////////////////
     // Sprite properties
 
+    bool _visible;
+
     double _x, _y;
     double _size;
     double _direction;
-
-    int64_t _layer;
 
     bool _draggable;
 
@@ -153,29 +260,18 @@ private:
     bool _transDirty;
     
     //////////////////////////////////////////////////////////////////////////
-    // Graphics effects
-
-    double _colorEffect;
-    double _brightnessEffect;
-    double _fisheyeEffect;
-    double _whirlEffect;
-    double _pixelateEffect;
-    double _mosaicEffect;
-    double _ghostEffect;
-    bool _effectDirty;
-
-    //////////////////////////////////////////////////////////////////////////
-    // Audio effects
+    // Audio
 
     DSPController _dsp;
+    Voice *_voices; // Active voices (size = _base->GetSoundCount())
 
     //////////////////////////////////////////////////////////////////////////
     // Misc
 
     GlideInfo _glide;
 
-    Value _message;
-    MessageState _messageState;
+    Value _message; // None = no message, otherwise the message
+    bool _isThinking; // false = saying, true = thinking
 
     //////////////////////////////////////////////////////////////////////////
     // Rendering
@@ -183,5 +279,23 @@ private:
     Matrix4 _model, _invModel;
     AABB _bbox;
 
-    Sprite *_prev, *_next; // layering
+    GraphicEffectController _gec;
+
+    GLuint _texture;
+
+    Sprite *_next, *_prev;
+
+    //////////////////////////////////////////////////////////////////////////
+    // Fields
+
+    Value *_fields;
+
+    //////////////////////////////////////////////////////////////////////////
+    // Scripting
+
+    std::unordered_set<Script *> _scripts;
+
+    friend class SpriteList;
+    friend class AbstractSprite;
+    friend class VirtualMachine;
 };

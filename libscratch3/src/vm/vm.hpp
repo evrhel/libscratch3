@@ -21,12 +21,73 @@
 #include "io.hpp"
 #include "debug.hpp"
 
+#define MAX_SCRIPTS 512
+
 class Loader;
 class VirtualMachine;
+class AbstractSprite;
 class Sprite;
+class SpriteList;
 class GLRenderer;
 class AbstractSound;
 class Voice;
+
+class SpriteList
+{
+public:
+	constexpr Sprite *Head() const { return _head; }
+	constexpr Sprite *Tail() const { return _tail; }
+	constexpr size_t Count() const { return _count; }
+
+	//! \brief Add a sprite to the end of the list
+	//! 
+	//! \param sprite The sprite to add
+	void Add(Sprite *sprite);
+
+	//! \brief Remove a sprite from the list
+	//! 
+	//! The sprite must be in the list. The sprite will not be
+	//! deleted.
+	//! 
+	//! \param sprite The sprite to remove
+	//! 
+	//! \return sprite
+	Sprite *Remove(Sprite *sprite);
+
+	//! \brief Insert a sprite into the list
+	//! 
+	//! before and sprite must be different.
+	//! 
+	//! \param before The sprite which will come before the new sprite,
+	//! or nullptr to insert at the front. Must be in the list.
+	//! \param sprite The sprite to insert. If already in the list,
+	//! it will be moved.
+	void Insert(Sprite *LS_RESTRICT before, Sprite *LS_RESTRICT sprite);
+
+	//! \brief Move a sprite
+	//! 
+	//! A sprite attempting to move past the tail will be clamped
+	//! to the end. A sprite cannot be become the head of the list.
+	//! The head of the list cannot be moved.
+	//! 
+	//! \param sprite The sprite to move
+	//! \param distance The distance to move the sprite
+	void Move(Sprite *sprite, int64_t distance);
+
+	//! \brief Remove all sprites from the list
+	void Clear();
+
+	SpriteList &operator=(const SpriteList &) = delete;
+	SpriteList &operator=(SpriteList &&) = delete;
+
+	SpriteList();
+	SpriteList(const SpriteList &) = delete;
+	SpriteList(SpriteList &&) = delete;
+	~SpriteList();
+private:
+	Sprite *_head, *_tail;
+	size_t _count;
+};
 
 //! \brief Scratch 3 virtual machine
 class VirtualMachine final
@@ -143,17 +204,15 @@ public:
 
 	inline double GetTimer() const { return GetTime() - _timerStart; }
 
+	constexpr SpriteList *GetSpriteList() const { return _spriteList; }
+
 	Sprite *FindSprite(const Value &name);
-	Sprite *FindSprite(intptr_t id);
 
 	constexpr Sprite *GetStage() const { return _stage; }
 
 	void ResetTimer();
 
-	//! \brief Play a sound
-	//!
-	//! \param sound The sound to play
-	void PlaySound(Sound *sound);
+	void StartVoice(Voice *voice);
 
 	//! \brief Stop all sounds
 	void StopAllSounds();
@@ -162,14 +221,64 @@ public:
 	constexpr const std::vector<AbstractSound *> &GetSounds() const { return _sounds; }
 	constexpr const std::list<Voice *> &GetVoices() const { return _activeVoices; }
 
-	constexpr Loader *GetLoader() const { return _loader; }
 	constexpr GLRenderer *GetRenderer() const { return _render; }
 	constexpr IOHandler &GetIO() const { return _io; }
 	constexpr Debugger &GetDebugger() const { return _debug; }
 
 	constexpr bool IsSuspended() const { return _suspend; }
 
-	constexpr const std::vector<Script> &GetScripts() const { return _scripts; }
+	constexpr const std::vector<SCRIPT_ALLOC_INFO> &GetScriptStubs() const { return _scriptStubs; }
+
+	constexpr const Script *GetScriptTable() const { return _scriptTable; }
+
+	//! \brief Allocate a script
+	//! 
+	//! Allocates a script in the script table. The script will be
+	//! put into a suspended state upon return. Start the script by
+	//! calling Script::Start. Release the returned script by calling
+	//! CloseScript.
+	//! 
+	//! \param ai The allocation information
+	//! 
+	//! \return The allocated script, panics on failure
+	Script *AllocScript(const SCRIPT_ALLOC_INFO &ai);
+
+	//! \brief Close a handle to a script
+	//! 
+	//! \param script The script to close
+	void CloseScript(Script *script);
+
+	//! \brief Get a script by ID
+	//! 
+	//! \param id The script ID, in the range [0, MAX_SCRIPTS)
+	//! 
+	//! \return The script, or nullptr if the script is not
+	//! allocated
+	Script *OpenScript(unsigned long id);
+
+	//! \brief Restart a script
+	//! 
+	//! \param script The script to restart
+	void RestartScript(Script *script);
+
+	//! \brief Terminate a script
+	//! 
+	//! If the script is the currently running script, this function
+	//! does not return. Otherwise, the script will be scheduled for
+	//! termination. If the script was already terminated, this
+	//! function does nothing.
+	//! 
+	//! \param script The script to terminate
+	void TerminateScript(Script *script);
+
+	constexpr Script *GetCurrentScript() const { return _current; }
+
+	//! \brief Run an event handler
+	//! 
+	//! \param seh The event handler to run
+	void RunEventHandler(STATIC_EVENT_HANDLER *seh);
+
+	constexpr void Reschedule() { _nextScript = 0; }
 
 	constexpr const Scratch3VMOptions &GetOptions() const { return _options; }
 
@@ -192,30 +301,34 @@ private:
 	uint8_t *_bytecode; // Bytecode for the program
 	size_t _bytecodeSize; // Size of the bytecode
 	std::string _progName; // Name of the program
-	Loader *_loader; // Loader for the program
 
-	Sprite *_sprites; // All sprites
-	Sprite *_spritesEnd; // End of the sprite list
+	AbstractSprite *_abstractSprites; // All abstract sprites
+	size_t _nAbstractSprites; // Number of abstract sprites
 
+	SpriteList *_spriteList; // All sprites
 	Sprite *_stage; // Stage sprite
 
-	std::unordered_map<const String *, intptr_t, _StringHasher, _StringEqual> _spriteNames; // Sprite name lookup
+	StringMap<Sprite *> _baseSprites; // name -> base sprite instance
 	
 	std::vector<AbstractSound *> _sounds; // All sounds
 	std::list<Voice *> _activeVoices; // Active voices
 	bool _hasAudio; // Host supports audio
 
-	std::vector<Script> _initScripts; // Initialization scripts
-	std::vector<Script> _scripts; // All scripts
+	Script _scriptTable[MAX_SCRIPTS]; // Script table
+	size_t _allocatedScripts; // Number of allocated scripts
+	size_t _nextEntry; // Next entry in the script table
+
 	size_t _nextScript; // Next script to run
 
-	std::vector<Script *> _flagListeners; // Flag listeners
-	std::unordered_map<std::string, std::vector<Script *>> _messageListeners; // Message listeners
-	std::unordered_map<SDL_Scancode, std::vector<Script *>> _keyListeners; // Key listeners
+	std::vector<SCRIPT_ALLOC_INFO> _scriptStubs; // Script start stubs
+
+	std::vector<SCRIPT_ALLOC_INFO> _initScripts; // Initialization scripts
+	std::vector<STATIC_EVENT_HANDLER> _flagListeners; // Flag listeners
+	std::unordered_map<std::string, std::vector<STATIC_EVENT_HANDLER>> _messageListeners; // Message listeners
+	std::unordered_map<SDL_Scancode, std::vector<STATIC_EVENT_HANDLER>> _keyListeners; // Key listeners
 	
 	bool _flagClicked; // Flag clicked event
-	std::unordered_set<std::string> _toSend; // Messages to send
-	std::queue<Script *> _clickQueue; // Scripts to send the click event
+	std::queue<STATIC_EVENT_HANDLER *> _clickQueue; // Scripts to send the click event
 
 	std::queue<std::pair<Script *, std::string>> _askQueue; // Scripts waiting for input
 	Script *_asker; // Current input requester

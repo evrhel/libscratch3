@@ -8,6 +8,8 @@
 #include <implot.h>
 
 #include "shader.hpp"
+#include "../vm/sprite.hpp"
+#include "../vm/vm.hpp"
 
 namespace // shaders
 {
@@ -33,154 +35,286 @@ static SpriteShader *CreateSpriteShader()
     return ss;
 }
 
-void SpriteRenderInfo::Prepare(SpriteShader *ss)
+//! \brief Prepare the sprite shader for rendering
+//! 
+//! \param sprite The sprite to render
+//! \param ss The sprite shader
+//! 
+//! \return true if the sprite should be rendered
+static inline bool PrepareSprite(const Sprite *sprite, SpriteShader *ss)
 {
-    ss->SetModel(model);
-    ss->SetColorEffect(colorEffect);
-    ss->SetBrightnessEffect(brightnessEffect);
-    ss->SetFisheyeEffect(fisheyeEffect);
-    ss->SetWhirlEffect(whirlEffect);
-    ss->SetPixelateEffect(pixelateEffect);
-    ss->SetMosaicEffect(mosaicEffect);
-    ss->SetGhostEffect(ghostEffect);
-    ss->SetTexture(texture);
-    ss->SetColor(color);
-}
-
-SpriteRenderInfo::SpriteRenderInfo() :
-    _layer(-1)
-{
-    shouldRender = false;
-    model = Matrix4();
-    colorEffect = 0.0f;
-    brightnessEffect = 0.0f;
-    fisheyeEffect = 0.0f;
-    whirlEffect = 0.0f;
-    pixelateEffect = 0.0f;
-    mosaicEffect = 0.0f;
-    ghostEffect = 0.0f;
-    texture = 0;
-    color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-    userData = nullptr;
-}
-
-SpriteRenderInfo::~SpriteRenderInfo() { }
-
-void GLRenderer::ScreenToStage(int x, int y, int64_t *xout, int64_t *yout) const
-{
-    // TODO: this will not work on retina displays
-    x -= _viewportX;
-    y -= _viewportY;
-
-    *xout = (x - _viewportWidth / 2) * (_right - _left) / _viewportWidth;
-    *yout = (_viewportHeight / 2 - y) * (_top - _bottom) / _viewportHeight;
-}
-
-void GLRenderer::StageToScreen(int64_t x, int64_t y, int *xout, int *yout) const
-{
-    // TODO: this will not work on retina displays
-	*xout = x * _viewportWidth / (_right - _left) + _viewportWidth / 2 + _viewportX;
-	*yout = _viewportHeight / 2 - y * _viewportHeight / (_top - _bottom) + _viewportY;
-}
-
-intptr_t GLRenderer::CreateSprite()
-{
-    for (int64_t i = 1; i < _spriteCount; i++)
-    {
-        SpriteRenderInfo *s = _sprites + i;
-        if (s->_layer == -1)
-        {            
-            // find empty slot in render order
-            for (int64_t j = 1; j < _spriteCount; j++)
-            {
-                if (_renderOrder[j] == -1)
-                {
-                    _renderOrder[j] = i;
-                    s->_layer = j;
-                    return i;
-                }
-            }
-
-            // should never happen
-            abort();
-        }
-    }
-
-    return -1;
-}
-
-SpriteRenderInfo *GLRenderer::GetRenderInfo(intptr_t sprite)
-{
-    if (sprite > _spriteCount)
-        return nullptr;
-    return _sprites + sprite;
-}
-
-void GLRenderer::SetLayer(intptr_t sprite, int64_t layer)
-{
-    if (sprite <= SPRITE_STAGE || sprite >= _spriteCount || layer == 0)
-        return;
-
-    int64_t newLayer;
-    if (layer < 0)
-        newLayer = _spriteCount + layer + 1; // relative to back
-    else
-        newLayer = layer;
-    
-    if (newLayer < 1 || newLayer >= _spriteCount)
-        return; // out of bounds
-
-    SpriteRenderInfo *s = _sprites + sprite;
-    if (s->_layer == newLayer)
-        return; // already at target layer
-
-    // iterators
-    int64_t *end = _renderOrder + _spriteCount;
-    int64_t *start = _renderOrder + s->_layer;
-    int64_t *target = _renderOrder + newLayer;
-
-    assert(target >= _renderOrder && target < _renderOrder + _spriteCount);
-
-    // shift elements to make room for the sprite
-    if (start < target)
-    {
-        for (int64_t *it = start; it < target; it++)
-        {
-            _sprites[*it]._layer--;
-            *it = *(it + 1);
-        }
-    }
-    else
-    {
-        for (int64_t *it = start; it > target; it--)
-        {
-            _sprites[*it]._layer++;
-            *it = *(it - 1);
-        }
-    }
-
-    // insert the sprite
-    *target = sprite;
-    s->_layer = newLayer;
-}
-
-void GLRenderer::MoveLayer(intptr_t sprite, int64_t direction)
-{
-    if (sprite <= SPRITE_STAGE || sprite >= _spriteCount)
-        return;
-
-    int64_t newLayer = _sprites[sprite]._layer + direction;
-
-    if (newLayer < 1) newLayer = 1;
-    else if (newLayer >= _spriteCount) newLayer = _spriteCount - 1;
-
-    SetLayer(sprite, newLayer);
-}
-
-bool GLRenderer::TouchingColor(intptr_t sprite, const Vector3 &color)
-{
-    if (sprite < 1 || sprite >= _spriteCount)
+    if (!sprite->IsVisible())
         return false;
+
+    GLuint tex = sprite->GetTexture();
+    if (!tex)
+        return false;
+
+    const GraphicEffectController &gec = sprite->GetGraphicEffects();
+
+    ss->SetModel(sprite->GetModel());
+    ss->SetColorEffect(gec.GetColorFactor());
+    ss->SetBrightnessEffect(gec.GetBrightnessFactor());
+    ss->SetFisheyeEffect(gec.GetFisheyeFactor());
+    ss->SetWhirlEffect(gec.GetWhirlFactor());
+    ss->SetPixelateEffect(gec.GetPixelateFactor());
+    ss->SetMosaicEffect(gec.GetMosaicFactor());
+    ss->SetGhostEffect(gec.GetGhostFactor());
+    ss->SetTexture(tex);
+    ss->SetColor(Vector4(1.0f));
+}
+
+static bool CreateQuad(GLuint *vao, GLuint *vbo, GLuint *ebo)
+{
+    static const Vector4 vertices[] = {
+        Vector4(-0.5f, -0.5f, 0.0f, 0.0f),
+        Vector4(0.5f, -0.5f, 1.0f, 0.0f),
+        Vector4(0.5f, 0.5f, 1.0f, 1.0f),
+        Vector4(-0.5f, 0.5f, 0.0f, 1.0f)
+    };
+
+    static const uint8_t indices[] = {
+        0, 1, 2,
+        2, 3, 0
+    };
+
+    glGenVertexArrays(1, vao);
+    glGenBuffers(1, vbo);
+    glGenBuffers(1, ebo);
+
+    glBindVertexArray(*vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // <vec2 position, vec2 texcoord>
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    if (!CheckGLError())
+    {
+		glDeleteVertexArrays(1, vao);
+		glDeleteBuffers(1, vbo);
+		glDeleteBuffers(1, ebo);
+		return false;
+    }
+
+    return true;
+}
+
+static void DetectResolution(const Scratch3VMOptions &options, int *const width, int *const height)
+{
+    if (options.width <= 0 && options.height > 0)
+    {
+        *height = options.height;
+        *width = options.height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
+    }
+    else if (options.width > 0 && options.height <= 0)
+    {
+        *width = options.width;
+        *height = options.width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
+    }
+    else if (options.width > 0 && options.height > 0)
+    {
+        *width = options.width;
+        *height = options.height;
+    }
+    else
+    {
+        SDL_DisplayMode displayMode;
+        if (SDL_GetCurrentDisplayMode(0, &displayMode) == 0)
+        {
+            if (options.fullscreen)
+            {
+                *width = displayMode.w;
+                *height = displayMode.h;
+            }
+            else
+            {
+                *height = displayMode.h * 2 / 3;
+                *width = *height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
+            }
+        }
+        else
+        {
+            *width = VIEWPORT_WIDTH;
+            *height = VIEWPORT_HEIGHT;
+        }
+    }
+}
+
+static Uint32 DetectWindowFlags(const Scratch3VMOptions &options)
+{
+    Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN;
+
+    if (options.fullscreen)
+    {
+        if (options.borderless)
+            flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+        else
+            flags |= SDL_WINDOW_FULLSCREEN;
+    }
+    else if (options.borderless)
+        flags |= SDL_WINDOW_BORDERLESS;
+
+#if LS_DARWIN
+    flags |= SDL_WINDOW_ALLOW_HIGHDPI; // Retina display
+#endif // LS_DARWIN
+
+    return flags;
+}
+
+static SDL_Window *CreateWindow(const Scratch3VMOptions &options)
+{
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+
+    // Determine window size
+    int width, height;
+    DetectResolution(options, &width, &height);
+
+    // Determine window flags
+    Uint32 flags = DetectWindowFlags(options);
+
+    // Create window
+    SDL_Window *window = SDL_CreateWindow("Scratch 3", SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED, width, height, flags);
+    if (!window)
+    {
+#if LS_DEBUG
+        printf("CreateWindow: SDL_CreateWindow failed: %s\n", SDL_GetError());
+#endif // LS_DEBUG
+        return nullptr;
+    }
+
+    return window;
+}
+
+static SDL_GLContext InitializeOpenGL(SDL_Window *window)
+{
+    SDL_GLContext gl = SDL_GL_CreateContext(window);
+    if (!gl)
+    {
+#if LS_DEBUG
+        printf("InitializeOpenGL: SDL_GL_CreateContext failed: %s\n", SDL_GetError());
+#endif // LS_DEBUG
+        return nullptr;
+    }
+
+    if (SDL_GL_MakeCurrent(window, gl) != 0)
+    {
+#if LS_DEBUG
+        printf("InitializeOpenGL: SDL_GL_MakeCurrent failed: %s\n", SDL_GetError());
+#endif // LS_DEBUG
+
+        SDL_GL_DeleteContext(gl);
+        return nullptr;
+    }
+
+    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress))
+    {
+#if LS_DEBUG
+        printf("InitializeOpenGL: gladLoadGLLoader failed\n");
+#endif // LS_DEBUG
+
+        SDL_GL_DeleteContext(gl);
+        return nullptr;
+    }
+
+    SDL_GL_SetSwapInterval(1);
+
+    return gl;
+}
+
+GLRenderer *GLRenderer::Create(const SpriteList *sprites, const Scratch3VMOptions &options)
+{
+    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+        return nullptr;
+
+    // Create window
+    SDL_Window *window = CreateWindow(options);  
+    if (!window)
+    {
+        SDL_Quit();
+        return nullptr;
+    }
+
+    // Initialize OpenGL
+    SDL_GLContext gl = InitializeOpenGL(window);
+    if (!gl)
+    {
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return nullptr;
+    }
+
+    // Load shaders
+    SpriteShader *ss = CreateSpriteShader();
+    
+    // Create quad for rendering sprites
+    GLuint vao, vbo, ebo;
+    if (!CreateQuad(&vao, &vbo, &ebo))
+    {
+#if LS_DEBUG
+        printf("GLRenderer::Create: Failed to create quad\n");
+#endif // LS_DEBUG
+
+        delete ss;
+        SDL_GL_DeleteContext(gl);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return nullptr;
+    }
+
+    // Initialize ImGui
+    ImGui::CreateContext();
+    ImPlot::CreateContext();
+    ImGui_ImplSDL2_InitForOpenGL(window, gl);
+    ImGui_ImplOpenGL3_Init("#version 330 core");
+
+    GLRenderer *r = new GLRenderer();
+
+    r->_window = window;
+    r->_gl = gl;
+    r->_options = options;
+
+    r->_spriteShader = ss;
+
+    r->_quadVao = vao;
+    r->_quadVbo = vbo;
+    r->_quadEbo = ebo;
+
+    r->_sprites = sprites;
+
+    // Set viewport
+    r->SetLogicalSize(-VIEWPORT_WIDTH / 2, VIEWPORT_WIDTH / 2,
+        -VIEWPORT_HEIGHT / 2, VIEWPORT_HEIGHT / 2);
+    r->Resize();
+
+    SDL_ShowWindow(window);
+
+#if LS_DEBUG
+    printf("GLRenderer::Create: OpenGL version: %s\n", glGetString(GL_VERSION));
+#endif // LS_DEBUG
+
+    return r;
+}
+
+bool GLRenderer::TouchingColor(Sprite *sprite, const Vector3 &color)
+{
+    assert(sprite != nullptr);
 
     // TODO: implement
     return true;
@@ -200,6 +334,7 @@ void GLRenderer::SetLogicalSize(int left, int right, int bottom, int top)
 
 void GLRenderer::BeginRender()
 {
+    _frame++;
     _lastTime = _time;
     _time = ls_time64() - _startTime;
     _deltaTime = _time - _lastTime;
@@ -219,7 +354,7 @@ void GLRenderer::BeginRender()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glViewport(_viewportX, _viewportY, _viewportWidth, _viewportHeight);
+    glViewport(_viewport.x, _viewport.y, _viewport.width, _viewport.height);
 
     if (_options.freeAspectRatio)
     {
@@ -228,7 +363,6 @@ void GLRenderer::BeginRender()
     }
     else
     {
-
         int width, height;
         SDL_GL_GetDrawableSize(_window, &width, &height);
 
@@ -238,7 +372,7 @@ void GLRenderer::BeginRender()
 
         // clear viewport
         glEnable(GL_SCISSOR_TEST);
-        glScissor(_viewportX, _viewportY, _viewportWidth, _viewportHeight);
+        glScissor(_viewport.x, _viewport.y, _viewport.width, _viewport.height);
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         glScissor(0, 0, width, height);
@@ -251,24 +385,17 @@ void GLRenderer::Render()
     _spriteShader->Use();
     _spriteShader->SetProj(_proj);
 
-    // draw stage sperately, pen is on top of stage, but below sprites
-    _sprites[0].Prepare(_spriteShader);
-    DrawQuad();
-    _objectsDrawn = 1;
+    glBindVertexArray(_quadVao);
 
-    // TODO: draw pen
-
-    // draw sprites
-    int64_t *end = _renderOrder + _spriteCount;
-    for (int64_t *it = _renderOrder + 1; it < end; it++)
+    _objectsDrawn++;
+    for (Sprite *s = _sprites->Head(); s; s = s->GetNext())
     {
-        SpriteRenderInfo &s = _sprites[*it];
-        if (s.shouldRender && s.texture)
-        {
-            s.Prepare(_spriteShader);
-            DrawQuad();
-            _objectsDrawn++;
-        }
+        if (!PrepareSprite(s, _spriteShader));
+            continue; // not visible
+
+        glDrawElements(GL_TRIANGLES, QUAD_INDEX_COUNT, GL_UNSIGNED_BYTE, 0);
+
+        _objectsDrawn++;
     }
 }
 
@@ -282,276 +409,53 @@ void GLRenderer::EndRender()
 
 void GLRenderer::Resize()
 {
-    int width, height;
-    SDL_GL_GetDrawableSize(_window, &width, &height);
-
-    double viewWidth = _right - _left;
-    double viewHeight = _top - _bottom;
-    _scale = std::max(width / viewWidth, height / viewHeight);
-
-    if (_options.freeAspectRatio)
-    {
-        _viewportWidth = width;
-        _viewportHeight = height;
-        _viewportX = 0;
-        _viewportY = 0;
-    }
-    else
-    {
-        if (width * VIEWPORT_HEIGHT > height * VIEWPORT_WIDTH)
-        {
-            _viewportWidth = height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
-            _viewportHeight = height;
-            _viewportX = (width - _viewportWidth) / 2;
-            _viewportY = 0;
-        }
-        else
-        {
-            _viewportWidth = width;
-            _viewportHeight = width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
-            _viewportX = 0;
-            _viewportY = (height - _viewportHeight) / 2;
-        }
-    }
+    SDL_GL_GetDrawableSize(_window, &_width, &_height);
+    _viewport.Resize(_options.freeAspectRatio, _width, _height);
 }
 
-GLRenderer::GLRenderer(int64_t spriteCount, const Scratch3VMOptions &options) :
-    _window(nullptr),
-    _context(nullptr),
-    _options(options),
-    _left(0), _right(0),
-    _bottom(0), _top(0),
+GLRenderer::GLRenderer() :
+    _window(nullptr), _gl(nullptr),
+    _options({}),
+    _left(0), _right(0), _bottom(0), _top(0),
+    _viewport({}),
+    _width(0), _height(0),
     _frame(0),
-    _startTime(0),
-    _lastTime(0), _time(0),
-    _deltaTime(0), _fps(-1),
-    _scale(0),
+    _startTime(0), _lastTime(0), _time(0), _deltaTime(0), _fps(-1),
+    _objectsDrawn(0),
+    _quadVao(0), _quadVbo(0), _quadEbo(0),
     _spriteShader(nullptr),
-    _sprites(nullptr), _spriteCount(0)
+    _sprites(nullptr)
 {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0)
-        return;
-
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    
-    // Determine window size
-    int width, height;
-    if (options.width <= 0 && options.height > 0)
-    {
-        height = options.height;
-        width = options.height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
-    }
-    else if (options.width > 0 && options.height <= 0)
-    {
-        width = options.width;
-        height = options.width * VIEWPORT_HEIGHT / VIEWPORT_WIDTH;
-    }
-    else if (options.width > 0 && options.height > 0)
-    {
-        width = options.width;
-        height = options.height;
-    }
-    else
-    {
-        width = VIEWPORT_WIDTH;
-        height = VIEWPORT_HEIGHT;
-        
-        SDL_DisplayMode displayMode;
-        if (SDL_GetCurrentDisplayMode(0, &displayMode) == 0)
-        {
-            if (options.fullscreen)
-            {
-                width = displayMode.w;
-                height = displayMode.h;
-            }
-            else
-            {
-                height = displayMode.h * 2 / 3;
-                width = height * VIEWPORT_WIDTH / VIEWPORT_HEIGHT;
-            }
-        }
-    }
-
-    Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN;
-
-    if (options.fullscreen)
-    {
-        if (options.borderless)
-            flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-        else
-            flags |= SDL_WINDOW_FULLSCREEN;
-    }
-    else if (options.borderless)
-        flags |= SDL_WINDOW_BORDERLESS;
-
-#if LS_DARWIN
-    flags |= SDL_WINDOW_ALLOW_HIGHDPI; // Retina display
-#endif // LS_DARWIN
-
-    // Create window
-    _window = SDL_CreateWindow("Scratch 3", SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED, width, height, flags);
-    if (!_window)
-    {
-        Cleanup();
-        return;
-    }
-
-    // Initialize OpenGL
-
-    _context = SDL_GL_CreateContext(_window);
-    if (!_context)
-    {
-        Cleanup();
-        return;
-    }
-
-    if (SDL_GL_MakeCurrent(_window, _context) != 0)
-    {
-        Cleanup();
-        return;
-    }
-    
-    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress))
-    {
-        Cleanup();
-        return;
-    }
-
-    SDL_GL_SetSwapInterval(1);
-
-    // Initialize ImGui
-
-    ImGui::CreateContext();
-    ImPlot::CreateContext();
-    ImGui_ImplSDL2_InitForOpenGL(_window, _context);
-    ImGui_ImplOpenGL3_Init("#version 330 core");
-
-    // Create quad for rendering sprites
-    memset(&_quad, 0, sizeof(_quad));
-    CreateQuad();
-
-    // Load shaders
-#if LS_DEBUG
-    printf("Loading shaders\n");
-#endif // LS_DEBUG
-    _spriteShader = CreateSpriteShader();
-
-    // Draw list
-    _spriteCount = spriteCount + 1; // +1 for stage
-    _sprites = new SpriteRenderInfo[_spriteCount];
-    _renderOrder = new int64_t[_spriteCount];
-
-    // initialize render order
-    for (int64_t i = 1; i < _spriteCount; i++)
-        _renderOrder[i] = -1;
-
-    // stage always at the bottom
-    _renderOrder[0] = 0;
-    _sprites[0]._layer = 0;
-
-    // Set viewport
-    SetLogicalSize(-VIEWPORT_WIDTH / 2, VIEWPORT_WIDTH / 2,
-        -VIEWPORT_HEIGHT / 2, VIEWPORT_HEIGHT / 2);
-    Resize();
-
-    SDL_ShowWindow(_window);
-
     _startTime = ls_time64();
 }
 
 GLRenderer::~GLRenderer()
 {
-    Cleanup();
-}
-
-void GLRenderer::Cleanup()
-{
-    if (_sprites)
-        delete[] _sprites, _sprites = nullptr;
-
-    if (_spriteShader)
-        delete _spriteShader, _spriteShader = nullptr;
-
-    DestroyQuad();
-
-    if (_context)
-        SDL_GL_DeleteContext(_context), _context = nullptr;
-
-    if (_window)
-    {
-        SDL_DestroyWindow(_window), _window = nullptr;
-        SDL_Quit();
-    }
-
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
-    _frame = 0;
-    _startTime = 0;
-    _lastTime = 0;
-    _time = 0;
-    _deltaTime = 0;
-    _fps = -1;
+    delete _spriteShader;
+
+    glDeleteVertexArrays(1, &_quadVao);
+    glDeleteBuffers(1, &_quadVbo);
+    glDeleteBuffers(1, &_quadEbo);
+
+    SDL_GL_DeleteContext(_gl);
+    SDL_DestroyWindow(_window);
+
+    SDL_Quit();
 }
 
-void GLRenderer::CreateQuad()
+bool CheckGLError()
 {
-    const Vector4 vertices[] = {
-        Vector4(-0.5f, -0.5f, 0.0f, 0.0f),
-        Vector4(0.5f, -0.5f, 1.0f, 0.0f),
-        Vector4(0.5f, 0.5f, 1.0f, 1.0f),
-        Vector4(-0.5f, 0.5f, 0.0f, 1.0f)
-    };
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR)
+    {
+        printf("OpenGL error: 0x%x\n", err);
+        return false;
+    }
 
-    const uint8_t indices[] = {
-        0, 1, 2,
-        2, 3, 0
-    };
-
-    glGenVertexArrays(1, &_quad.vao);
-    glGenBuffers(1, &_quad.vbo);
-    glGenBuffers(1, &_quad.ebo);
-
-    glBindVertexArray(_quad.vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, _quad.vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    // <vec2 position, vec2 texcoord>
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(0);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quad.ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    _quad.indexCount = 6;
-}
-
-void GLRenderer::DrawQuad()
-{
-    glBindVertexArray(_quad.vao);
-    glDrawElements(GL_TRIANGLES, _quad.indexCount, GL_UNSIGNED_BYTE, 0);
-}
-
-void GLRenderer::DestroyQuad()
-{
-    if (_quad.vao)
-        glDeleteVertexArrays(1, &_quad.vao), _quad.vao = 0;
-
-    if (_quad.vbo)
-        glDeleteBuffers(1, &_quad.vbo), _quad.vbo = 0;
-
-    if (_quad.ebo)
-        glDeleteBuffers(1, &_quad.ebo), _quad.ebo = 0;
-
-    memset(&_quad, 0, sizeof(_quad));
+    return true;
 }

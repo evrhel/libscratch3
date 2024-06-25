@@ -2,10 +2,12 @@
 
 #include <imgui.h>
 
+#include "vm.hpp"
+#include "costume.hpp"
+#include "sound.hpp"
+
 #include "../render/renderer.hpp"
 #include "../codegen/compiler.hpp"
-
-#include "vm.hpp"
 
 // create AABB at the origin with extents [-0.5, 0.5]
 static constexpr AABB &CenterAABB(AABB &self)
@@ -74,28 +76,89 @@ int64_t AbstractSprite::FindCostume(const String *name) const
     return 0;
 }
 
-Sound *AbstractSprite::FindSound(int64_t sound)
-{
-    if (sound < 0 || sound >= _nSounds)
-		return nullptr;
-	return _sounds + sound;
-}
-
-Sound *AbstractSprite::FindSound(const String *name)
+int64_t AbstractSprite::FindSound(const String *name) const
 {
     auto it = _soundNameMap.find(name);
     if (it != _soundNameMap.end())
-		return FindSound(it->second);
-    return nullptr;
+		return it->second;
+    return 0;
 }
 
-void AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info, bool stream)
+Sprite *AbstractSprite::Instantiate(VirtualMachine *vm, Sprite *tmpl)
+{
+    if (_nInstances == MAX_INSTANCES)
+        vm->Panic("Maximum number of instances reached");
+
+    if (tmpl && tmpl->GetBase() != this)
+        vm->Panic("Template sprite does not match base sprite");
+
+    // Find slot for new instance
+    while (_nextInstanceId < MAX_INSTANCES)
+    {
+        if (_instances[_nextInstanceId] == nullptr)
+			break;
+        _nextInstanceId++;
+    }
+
+    assert(_nextInstanceId < MAX_INSTANCES);
+
+    Sprite *inst = new Sprite(vm, this, _nextInstanceId);
+
+    if (tmpl)
+    {
+        // Copy properties from template
+        inst->_visible = tmpl->_visible;
+        inst->_x = tmpl->_x;
+        inst->_y = tmpl->_y;
+        inst->_size = tmpl->_size;
+        inst->_direction = tmpl->_direction;
+        inst->_draggable = tmpl->_draggable;
+        inst->_rotationStyle = tmpl->_rotationStyle;
+        inst->_costume = tmpl->_costume;
+        inst->_dsp = tmpl->_dsp;
+        inst->_gec = tmpl->_gec;
+
+        // Copy fields from template
+        for (uint32_t i = 0; i < _nFields; i++)
+            Assign(inst->_fields[i], tmpl->_fields[i]);
+    }
+    else
+    {
+        // Copy properties from sprite info
+        inst->_visible = _info->visible;
+        inst->_x = _info->x;
+        inst->_y = _info->y;
+        inst->_size = _info->size;
+        inst->_direction = _info->direction;
+        inst->_draggable = _info->draggable;
+        inst->_rotationStyle = (RotationStyle)_info->rotationStyle;
+        inst->_costume = _info->currentCostume;
+        // No initializers for GEC and DSP
+
+        // TODO: read initial field values from sprite info
+    }
+
+    inst->InvalidateTransform();
+
+    _instances[_nextInstanceId] = inst;
+    _nInstances++;
+
+    SpriteList *spriteList = vm->GetSpriteList();
+    if (tmpl)
+        spriteList->Insert(tmpl->GetPrev(), inst); // insert before template
+    else
+        spriteList->Add(inst);
+
+    return inst;
+}
+
+bool AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Sprite *info, bool stream)
 {
     // Set basic properties
     SetString(_name, (char *)(bytecode + info->name));
-    _layer = info->layer;
-    _isStage = info->isStage;
-    _draggable = info->draggable;
+    if (_name.type != ValueType_String)
+        return false;
+    _info = info;
 
     // Allocate costumes
     _nCostumes = info->numCostumes;
@@ -105,93 +168,67 @@ void AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Spri
     bc::Costume *costumes = (bc::Costume *)(bytecode + info->costumes);
     for (int64_t i = 0; i < _nCostumes; i++)
     {
-        _costumes[i].Init(bytecode, bytecodeSize, &costumes[i], stream);
+        if (!_costumes[i].Init(bytecode, bytecodeSize, &costumes[i], stream))
+        {
+            Cleanup();
+            return false;
+        }
+
         _costumeNameMap[_costumes[i].GetName()] = i + 1;
     }
 
     // Allocate sounds
     _nSounds = info->numSounds;
-    _sounds = new Sound[_nSounds];
+    _sounds = new AbstractSound[_nSounds];
 
     // Initialize sounds
     bc::Sound *sounds = (bc::Sound *)(bytecode + info->sounds);
     for (int64_t i = 0; i < _nSounds; i++)
     {
-		_sounds[i].Init(bytecode, bytecodeSize, &sounds[i], stream, &_dsp);
+        if (!_sounds[i].Init(bytecode, bytecodeSize, &sounds[i], stream))
+        {
+            Cleanup();
+            return false;
+        }
+
 		_soundNameMap[_sounds[i].GetName()] = i;
 	}
+
+    return true;
 }
 
 void AbstractSprite::Load(VirtualMachine *vm)
-{
-    if (_vm)
-        return; // already loaded
+{    
+    uint8_t *bytecode = vm->GetBytecode();
 
-    _vm = vm;
-    
-    // find all click listeners
-    for (const Script &script : vm->GetScripts())
+    // find all listeners
+    for (const SCRIPT_ALLOC_INFO &ai : vm->GetScriptStubs())
     {
-        if (script.sprite != this)
+        if (ai.sprite->GetBase() != this)
             continue;
 
-        if (*script.entry == Op_onclick)
-			_clickListeners.push_back((Script *)&script);
-    }
+        Opcode entry = (Opcode)*(bytecode + ai.info->offset);
+        if (entry == Op_onclick)
+        {
+            STATIC_EVENT_HANDLER seh;
+            seh.ai = ai;
+            seh.script = nullptr;
 
-    Loader *loader = vm->GetLoader();
-    GLRenderer *render = vm->GetRenderer();
-
-    if (!_isStage)
-    {
-        _drawable = render->CreateSprite();
-        SetLayer(_layer);
+            _clickListeners.push_back(seh);
+        }
+        else if (entry == Op_onclone)
+            _cloneEntry.push_back(ai.info);
     }
-    else
-        _drawable = SPRITE_STAGE;
 
     for (int64_t i = 0; i < _nCostumes; i++)
         _costumes[i].Load();
 
     for (int64_t i = 0; i < _nSounds; i++)
         _sounds[i].Load();
-
-    SpriteRenderInfo *ri = render->GetRenderInfo(_drawable);
-    ri->userData = this;
-
-    // initial update
-    Update();
 }
 
 void AbstractSprite::DebugUI() const
 {
-    GLRenderer *render = _vm->GetRenderer();
-
-    ImGui::SeparatorText("Transform");
-    ImGui::LabelText("Position", "%.0f, %.0f", _x, _y);
-    ImGui::LabelText("Direction", "%.0f", _direction);
-    ImGui::LabelText("Size", "%.0f%%", _size);
-    ImGui::LabelText("Draw Order", "%lld", render->GetRenderInfo(_drawable)->GetLayer());
-    ImGui::LabelText("Bounding Box", "(%.0f, %.0f) (%.0f, %.0f), size: %.0fx%.0f",
-        		(double)_bbox.lo.x, (double)_bbox.lo.y, (double)_bbox.hi.x, (double)_bbox.hi.y,
-                (double)(_bbox.hi.x - _bbox.lo.x), (double)(_bbox.hi.y - _bbox.lo.y));
-
-    ImGui::SeparatorText("Graphics");
-    ImGui::LabelText("Visible", "%s", _shown ? "true" : "false");
-    ImGui::LabelText("Costume", "%d/%d (%s)", (int)_costume, (int)_nCostumes, _costumes[_costume - 1].GetNameString());
-    ImGui::LabelText("Color", "%.0f", _colorEffect);
-    ImGui::LabelText("Brightness", "%.0f", _brightnessEffect);
-    ImGui::LabelText("Fisheye", "%.0f", _fisheyeEffect);
-    ImGui::LabelText("Whirl", "%.0f", _whirlEffect);
-    ImGui::LabelText("Pixelate", "%.0f", _pixelateEffect);
-    ImGui::LabelText("Mosaic", "%.0f", _mosaicEffect);
-    ImGui::LabelText("Ghost", "%.0f", _ghostEffect);
-
-    ImGui::SeparatorText("Sound");
-    ImGui::LabelText("Volume", "%.0f%%", _dsp.GetVolume());
-    ImGui::LabelText("Pitch", "%.0f (%+.0f semitones, ratio %.2f)", _dsp.GetPitch(), _dsp.GetPitch() / 10, _dsp.GetResampleRatio());
-    ImGui::LabelText("Pan", "%.0f", _dsp.GetPan());
-
     ImGui::SeparatorText("Costumes");
     constexpr float kImageHeight = 64;
     for (int64_t id = 1; id <= _nCostumes; id++)
@@ -239,14 +276,11 @@ void AbstractSprite::DebugUI() const
     ImGui::SeparatorText("Sounds");
     for (int64_t i = 0; i < _nSounds; i++)
     {
-        Sound &s = _sounds[i];
+        AbstractSound &s = _sounds[i];
 
-        ImGui::Text("[%d]: '%s', rate: %d, length: %.2f, playing: %s",
-			(int)i+1,
-			s.GetNameString(),
-            s.GetSampleRate(),
-            s.GetDuration(),
-            s.IsPlaying() ? "true" : "false");
+        ImGui::Text("[%lld]: '%s', rate: %d, length: %.2f",
+			i+1, s.GetName()->str, s.GetSampleRate(),
+            s.GetDuration());
     }
 }
 
@@ -262,26 +296,269 @@ AbstractSprite::~AbstractSprite()
 
 void AbstractSprite::Cleanup()
 {
-    _clickListeners.clear();
+    for (Sprite **pInst = _instances; pInst < _instances + MAX_INSTANCES; pInst++)
+    {
+        if (pInst)
+            delete *pInst, *pInst = nullptr;
+    }
+    _nInstances = 0;
 
     if (_sounds)
-    {
         delete[] _sounds, _sounds = nullptr;
-        _nSounds = 0;
-    }
 
     if (_costumes)
-    {
         delete[] _costumes, _costumes = nullptr;
-        _nCostumes = 0;
+}
+
+void Sprite::SetMessage(const Value &message, bool think)
+{
+    Assign(_message, message);
+    _isThinking = think;
+}
+
+void Sprite::Update(VirtualMachine *vm)
+{
+    if (vm->GetTime() < _glide.end)
+    {
+        // linear interpolation
+        double t = (vm->GetTime() - _glide.start) / (_glide.end / _glide.start);
+        double x = _glide.x0 + t * (_glide.x1 - _glide.x0);
+        double y = _glide.y0 + t * (_glide.y1 - _glide.y0);
+        SetXY(x, y);
     }
 
-    _drawable = -1;
+    if (_transDirty)
+    {
+        Costume *c = _base->GetCostume(_costume);
 
-    _vm = nullptr;
+        const Vector2 &logicalCenter = c->GetLogicalCenter();
+        const Vector2 &logicalSize = c->GetLogicalSize();
 
-    _messageState = MessageState_None;
+        Vector2 center = logicalCenter / 2.0f;
+        Vector2 centerOffset = logicalCenter - center;
+
+        float unifScale = static_cast<float>(_size / 100);
+        Vector2 size = logicalSize * unifScale;
+
+        // Determine actual rotation
+        float rotation;
+        if (_rotationStyle == RotationStyle_DontRotate)
+            rotation = 0.0f;
+        else if (_rotationStyle == RotationStyle_LeftRight)
+        {
+            if (_direction < 0)
+                rotation = MUTIL_PI;
+            else
+                rotation = 0.0f;
+        }
+        else
+            rotation = radians(static_cast<float>(_direction - 90.0));
+
+        // Setup transformation matrices
+        Matrix4 mScale = scale(Matrix4(), Vector3(size, 1.0f));
+        Matrix4 mTransPos = translate(Matrix4(), Vector3(_x, _y, 0.0f));
+        Quaternion q = rotateaxis(Vector3(0.0f, 0.0f, 1.0f), rotation);
+        Matrix4 mTransCenter = translate(Matrix4(), Vector3(-centerOffset.x, centerOffset.y, 0.0f));
+
+        // Compute model matrix
+        _model = mTransPos * torotation(q), mTransCenter * mScale;
+        _invModel = inverse(_model);
+
+        // Update bounding box
+        ApplyTransformation(CenterAABB(_bbox), _model);
+
+        if (_visible)
+        {
+            // GetTexture may trigger a texture load, only want to do this
+            // if the sprite is visible
+
+            GLRenderer *render = vm->GetRenderer();
+
+            Vector2 fbSize(render->GetWidth(), render->GetHeight());
+            const Vector2 &viewportSize = render->GetLogicalSize();
+
+            Vector2 texScale = unifScale * fbSize / viewportSize;
+            _texture = c->GetTexture(texScale);
+        }
+
+        _transDirty = false;
+    }
+}
+
+bool Sprite::TouchingPoint(const Vector2 &point) const
+{
+    if (!_visible)
+        return false;
+
+    if (!AABBContains(_bbox, point))
+        return false;
+
+    // TODO: perform more accurate check
+    return true;
+}
+
+bool Sprite::TouchingSprite(const Sprite *sprite) const
+{
+    if (!_visible || !sprite->_visible)
+        return false;
+
+    if (!AABBIntersect(_bbox, sprite->_bbox))
+		return false;
+
+    // TODO: perform more accurate check
+    return true;
+}
+
+Value &Sprite::GetField(VirtualMachine *vm, uint32_t id) const
+{
+    if (id >= _base->GetFieldCount())
+        vm->Panic("Invalid field ID");
+    return _fields[id];
+}
+
+void Sprite::DebugUI() const
+{
+    ImGui::SeparatorText("Transform");
+    ImGui::LabelText("Position", "%.0f, %.0f", _x, _y);
+    ImGui::LabelText("Direction", "%.0f", _direction);
+    ImGui::LabelText("Size", "%.0f%%", _size);
+    ImGui::LabelText("Bounding Box", "(%.0f, %.0f) (%.0f, %.0f), size: %.0fx%.0f",
+        (double)_bbox.lo.x, (double)_bbox.lo.y, (double)_bbox.hi.x, (double)_bbox.hi.y,
+        (double)(_bbox.hi.x - _bbox.lo.x), (double)(_bbox.hi.y - _bbox.lo.y));
+
+    ImGui::SeparatorText("Graphics");
+    ImGui::LabelText("Visible", "%s", _visible ? "true" : "false");
+    ImGui::LabelText("Costume", "%lld/%lld (%s)", _costume,
+        _base->CostumeCount(), _base->GetCostume(_costume)->GetNameString());
+    ImGui::LabelText("Color", "%.0f (%.2f)", _gec.GetColorEffect(), (double)_gec.GetColorFactor());
+    ImGui::LabelText("Brightness", "%.0f (%.2f)", _gec.GetBrightnessEffect(), (double)_gec.GetBrightnessFactor());
+    ImGui::LabelText("Fisheye", "%.0f (%.2f)", _gec.GetFisheyeEffect(), (double)_gec.GetFisheyeFactor());
+    ImGui::LabelText("Whirl", "%.0f (%.2f)", _gec.GetWhirlEffect(), (double)_gec.GetWhirlFactor());
+    ImGui::LabelText("Pixelate", "%.0f (%.2f)", _gec.GetPixelateEffect(), (double)_gec.GetPixelateFactor());
+    ImGui::LabelText("Mosaic", "%.0f (%.2f)", _gec.GetMosaicEffect(), (double)_gec.GetMosaicFactor());
+    ImGui::LabelText("Ghost", "%.0f (%.2f)", _gec.GetGhostEffect(), (double)_gec.GetGhostFactor());
+
+    ImGui::SeparatorText("Sound");
+    ImGui::LabelText("Volume", "%.0f%%", _dsp.GetVolume());
+    ImGui::LabelText("Pitch", "%.0f (%+.0f semitones, ratio %.2f)", _dsp.GetPitch(), _dsp.GetPitch() / 10, _dsp.GetResampleRatio());
+    ImGui::LabelText("Pan", "%.0f", _dsp.GetPan());
+
+    ImGui::SeparatorText("Voices");
+    for (int64_t i = 0; i < _base->GetSoundCount(); i++)
+    {
+        Voice &v = _voices[i];
+        AbstractSound *as = v.GetSound();
+
+        const char *name = as->GetName()->str;
+        if (v.IsPlaying())
+            ImGui::Text("[%lld]: '%s' (not playing)", i+1, name);
+        else
+        {
+            unsigned long pos = v.GetStreamPos();
+            unsigned long size = as->GetFrameCount();
+            int rate = as->GetSampleRate();
+
+            double duration = (double)size / rate;
+            double location = duration * pos / size;
+
+            int dMin = static_cast<int>(duration / 60);
+            int dSec = duration - dMin * 60;
+            int lMin = static_cast<int>(location / 60);
+            int lSec = location - lMin * 60;
+
+            ImGui::Text("[%lld]: '%s' %d:%02d/%d:%02d",
+                i+1, name, lMin, lSec, dMin, dSec);
+        }
+    }
+}
+
+Sprite *Sprite::Clone(VirtualMachine *vm)
+{
+    Sprite *clone = _base->Instantiate(vm, this);
+
+    for (bc::Script *ce : _base->GetCloneEntry())
+    {
+        SCRIPT_ALLOC_INFO ai;
+        ai.sprite = clone;
+        ai.info = ce;
+
+        Script *script = vm->AllocScript(ai);
+        vm->RestartScript(script);
+
+        // takes ownership of the script
+        clone->_scripts.insert(script);
+    }
+
+    vm->Reschedule();
+
+    return clone;
+}
+
+void Sprite::Destroy(VirtualMachine *vm)
+{
+    Script *current = vm->GetCurrentScript();
+    bool destroyingSelf = false;
+
+    for (Script *script : _scripts)
+    {
+        if (script == current)
+            destroyingSelf = true;
+        else
+        {
+            vm->TerminateScript(script);
+            vm->CloseScript(script);
+        }
+    }
+
+    _scripts.clear();
+
+    delete this;
+
+    if (destroyingSelf)
+        vm->TerminateScript(current);
+}
+
+Sprite::Sprite(VirtualMachine *vm, AbstractSprite *base, uint32_t instanceId) :
+    _base(base), _instanceId(instanceId),
+    _visible(false),
+    _x(0), _y(0),
+    _size(100),
+    _direction(90),
+    _draggable(false),
+    _rotationStyle(RotationStyle_AllAround),
+    _costume(1),
+    _transDirty(true),
+    _voices(nullptr),
+    _isThinking(false),
+    _texture(0),
+    _next(nullptr), _prev(nullptr),
+    _fields(nullptr)
+{
+    assert(vm != nullptr);
+    assert(base != nullptr);
+    assert(instanceId < MAX_INSTANCES);
+
+    InitializeValue(_message);
+
+    if (_base != nullptr)
+        vm->Panic("Sprite was double-initialized");
+
+    // No need to call InitializeValue after calloc
+    _fields = (Value *)calloc(base->GetFieldCount(), sizeof(Value));
+    if (!_fields)
+        vm->Panic("Failed to allocate fields");
+}
+
+Sprite::~Sprite()
+{
+    assert(_scripts.size() == 0);
+
     ReleaseValue(_message);
 
-    ReleaseValue(_name);
+    if (_fields)
+    {
+        for (Value *v = _fields; v < _fields + _base->GetFieldCount(); v++)
+			ReleaseValue(*v);
+        free(_fields);
+    }
 }

@@ -14,100 +14,84 @@
 
 enum
 {
-	// Script has been created but not yet started
+	// Unallocated script
 	EMBRYO = 0,
 
-	// can be scheduled to run
+	// Can be scheduled to run
 	RUNNABLE = 1,
 
-	// Script is running
-	RUNNING = 2,
-
 	// Script is waiting for a condition to be met
-	WAITING = 3,
+	WAITING = 2,
 
 	// Script is suspended
-	SUSPENDED = 4,
+	SUSPENDED = 3,
 
-	// Script has terminated
-	TERMINATED = 5
+	// Script has terminated and cannot be resumed
+	TERMINATED = 4
 };
 
 // Stack size for each script
 #define STACK_SIZE 512
 
+class AbstractSprite;
 class Sprite;
 class Value;
 class VirtualMachine;
-class Sound;
+class Voice;
+class Script;
+
+struct SCRIPT_ALLOC_INFO
+{
+	Sprite *sprite;
+	bc::Script *info;
+};
+
+struct STATIC_EVENT_HANDLER
+{
+	SCRIPT_ALLOC_INFO ai;
+	Script *script;
+};
 
 struct Script
 {
-	int state;  // Script state
-	Sprite *sprite;  // Owner
+	int state; // Script state
+	Sprite *sprite; // Self
 
-	ls_handle fiber;  // Fiber handle
+	ls_handle fiber; // Fiber handle
 
-	double sleepUntil;  // Time to wake up
-	bool waitInput;  // Wait for input
-	bool askInput;  // Ask for input
-	Sound *waitSound;  // Sound to wait until finished
+	double sleepUntil; // Time to wake up
+	bool waitInput; // Wait for input
+	bool askInput; // Ask for input
+	Voice *waitVoice; // Voice to wait until finished
 
-	uint64_t ticks;  // Number of ticks executed since the last yield
+	uint64_t ticks; // Number of ticks executed since the last yield
 
-	uint8_t *entry;  // Entry point
-	uint8_t *pc;  // Program counter
+	uint8_t *entry; // Entry point
+	uint8_t *pc; // Program counter
 
-	Value *stack;  // Base of the stack (lowest address)
-	Value *sp;  // Stack pointer (highest address, grows downwards) sp - 1 is the next free slot
+	Value *stack; // Base of the stack (lowest address)
+	Value *sp; // Stack pointer (highest address, grows downwards) sp - 1 is the next free slot
 
-	Value *bp;  // Base pointer (stack frame base, points to old bp)
+	Value *bp; // Base pointer (stack frame base, points to old bp)
 
-	jmp_buf scriptMain; // Jump buffer for script main loop
-	bool isReset;  // Reset flag
+	bool autoStart; // Auto-start flag
+	bool scheduled; // Whether the script was scheduled this frame
+	bool restart; // Whether the script should restart from the beginning
 
-	bool autoStart;  // Auto-start flag
-	bool scheduled;  // Whether the script was scheduled this frame
+	jmp_buf entryJmp; // Script entry point
 
 	ExceptionType except; // Exception type
 	const char *exceptMessage; // Exception message
 
-	VirtualMachine *vm;  // Virtual machine
+	VirtualMachine *vm; // Virtual machine
 
-	//! \brief Initialize the script.
-	//!
-	//! Initializes the script to target the given location in the
-	//! bytecode. This will only set up the stack and zero all
-	//! the fields. Do not call multiple times.
-	//!
-	//! \param bytecode The program bytecode.
-	//! \param bytecodeSize The size of the bytecode.
-	//! \param info Script information from the bytecode.
-	void Init(uint8_t *bytecode, size_t bytecodeSize, bc::Script *info);
-
-	//! \brief Release resources used by the script.
-	//! 
-	//! This only releases the stack.
-	void Destroy();
-
-	//! \brief Reset the script to an embryonic state.
-	//!
-	//! Resets all fields to their initial values, except for the
-	//! bytecode location. state will be set to EMBRYO.
-	void Reset();
-
-	//! \brief Reset the script state and mark it as runnable.
-	//!
-	//! Resets the script through Reset() and sets the state to
-	//! RUNNABLE. The next time the script is scheduled, it will
-	//! start from the beginning.
-	void Start();
+	size_t refCount; // Reference count
 
 	//! \brief Execute the script.
 	//!
 	//! Should be called from within the Script's fiber. This will
 	//! execute the script until it yields or terminates.
-	void Main();
+	void LS_NORETURN Main();
 
 	//! \brief Push a value onto the stack.
 	//!
@@ -162,13 +146,13 @@ struct Script
 	//! \param seconds The number of seconds to sleep.
 	void Sleep(double seconds);
 
-	//! \brief Wait for a sound to finish playing.
+	//! \brief Wait for a voice to finish playing.
 	//!
-	//! Yields control to the virtual machine until the sound has
+	//! Yields control to the virtual machine until the voice has
 	//! finished playing.
 	//!
-	//! \param sound The sound to wait for.
-	void WaitForSound(Sound *sound);
+	//! \param voice The voice to wait for.
+	void WaitForVoice(Voice *voice);
 
 	//! \brief Glide to a given position.
 	//!

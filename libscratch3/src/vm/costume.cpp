@@ -9,7 +9,7 @@
 
 #include "stb_image.h"
 
-void Costume::Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info, bool streamed)
+bool Costume::Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info, bool streamed)
 {
 	Cleanup();
 
@@ -22,6 +22,8 @@ void Costume::Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *
 	_dataSize = info->dataSize;
 
 	_streamed = streamed;
+
+	return true;
 }
 
 void Costume::Load()

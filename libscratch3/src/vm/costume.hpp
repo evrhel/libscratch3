@@ -67,7 +67,9 @@ public:
 	//! \param bytecodeSize The size of the bytecode
 	//! \param info The costume information
 	//! \param streamed Whether the costume is streamed
-	void Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info, bool streamed);
+	//! 
+	//! \return Whether the costume was successfully initialized
+	bool Init(uint8_t *bytecode, uint64_t bytecodeSize, const bc::Costume *info, bool streamed);
 
 	//! \brief Load the costumes
 	//!
