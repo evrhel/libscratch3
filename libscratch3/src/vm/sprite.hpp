@@ -15,12 +15,15 @@
 #include "../codegen/util.hpp"
 #include "../render/renderer.hpp"
 
-#define BASE_INSTANCE_ID 0
+#define UNALLOCATED_INSTANCE_ID 0
+#define BASE_INSTANCE_ID 1
+
+#define MAX_INSTANCES 256
 
 using namespace mutil;
 
 class VirtualMachine;
-class Sprite;
+class AbstractSprite;
 
 //! \brief Axis-aligned bounding box
 struct AABB
@@ -34,6 +37,157 @@ struct GlideInfo
 	double x0 = 0.0, y0 = 0.0; // Source glide position
 	double x1 = 0.0, y1 = 0.0; // Target glide position
 	double start = -1.0, end = 0.0; // Start and end times
+};
+
+struct Sprite final
+{
+public:
+    static void *operator new(size_t) = delete;
+    static void operator delete(void *) = delete;
+
+    constexpr AbstractSprite *GetBase() const { return _base; }
+    constexpr uint32_t GetInstanceId() const { return _instanceId; }
+    constexpr bool IsDeleted() const { return _delete; }
+    constexpr bool IsAllocated() const { return _instanceId != UNALLOCATED_INSTANCE_ID; }
+
+    constexpr bool IsVisible() const { return _visible; }
+    constexpr double GetX() const { return _x; }
+    constexpr double GetY() const { return _y; }
+    constexpr double GetSize() const { return _size; }
+    constexpr double GetDirection() const { return _direction; }
+    constexpr bool IsDraggable() const { return _draggable; }
+    constexpr RotationStyle GetRotationStyle() const { return _rotationStyle; }
+    constexpr int64_t GetCostume() const { return _costume; }
+    const Value &GetCostumeName() const;
+
+    constexpr void SetVisible(bool visible) { _visible = visible; _transDirty = true; }
+    constexpr void SetX(double x) { _x = x; _transDirty = true; }
+    constexpr void SetY(double y) { _y = y; _transDirty = true; }
+    constexpr void SetXY(double x, double y) { _x = x; _y = y; _transDirty = true; }
+    constexpr void SetSize(double size) { _size = size; _transDirty = true; }
+    constexpr void SetDirection(double direction) { _direction = direction; _transDirty = true; }
+    constexpr void SetDraggable(bool draggable) { _draggable = draggable; }
+    constexpr void SetRotationStyle(RotationStyle rotationStyle) { _rotationStyle = rotationStyle; }
+
+    void SetCostume(int64_t costume);
+
+    constexpr void InvalidateTransform() { _transDirty = true; }
+
+    constexpr DSPController &GetDSP() { return _dsp; }
+    constexpr const DSPController &GetDSP() const { return _dsp; }
+    constexpr Voice *GetVoiceFor(int64_t soundId) { return _voices + soundId; }
+
+    constexpr GlideInfo &GetGlideInfo() { return _glide; }
+    constexpr const GlideInfo &GetGlideInfo() const { return _glide; }
+
+    constexpr const Value &GetMessage() const { return _message; }
+    constexpr bool IsThinking() const { return _isThinking; }
+
+    void SetMessage(const Value &message, bool think);
+
+    void Update();
+
+    bool TouchingPoint(const Vector2 &point) const;
+    bool TouchingSprite(const Sprite *sprite) const;
+
+    constexpr const Matrix4 &GetModel() const { return _model; }
+    constexpr const Matrix4 &GetInvModel() const { return _invModel; }
+    constexpr const AABB &GetBoundingBox() const { return _bbox; }
+
+    constexpr GraphicEffectController &GetGraphicEffects() { return _gec; }
+    constexpr const GraphicEffectController &GetGraphicEffects() const { return _gec; }
+    constexpr GLuint GetTexture() const { return _texture; }
+
+    constexpr Sprite *GetNext() const { return _next; }
+    constexpr Sprite *GetPrev() const { return _prev; }
+
+    Value &GetField(uint32_t id);
+
+    constexpr const Value *GetFields() const { return _fields; }
+
+    void DebugUI() const;
+
+    //! \brief Clone this sprite
+    //! 
+    //! Creates a clone of this sprite and schedules the clone's
+    //! scripts to run. The clone will be placed one layer below
+    //! the original sprite.
+    //! 
+    //! \return The clone
+    Sprite *Clone();
+
+    //! \brief Destroy this sprite
+    //! 
+    //! Any scripts the sprite is running will be terminated. If
+    //! the sprite is destroying itself (i.e. from within a script),
+    //! this function does not return.
+    //! 
+    //! \param vm The virtual machine
+    void Destroy();
+
+    Sprite &operator=(const Sprite &) = delete;
+    Sprite &operator=(Sprite &&) = delete;
+
+    Sprite() = delete;
+    Sprite(const Sprite &) = delete;
+    Sprite(Sprite &&) = delete;
+    ~Sprite() = delete;
+private:
+    AbstractSprite *_base;
+    uint32_t _instanceId;
+    bool _delete; // Whether the sprite is scheduled for deletion
+
+    //////////////////////////////////////////////////////////////////////////
+    // Sprite properties
+
+    bool _visible;
+
+    double _x, _y;
+    double _size;
+    double _direction;
+
+    bool _draggable;
+
+    RotationStyle _rotationStyle;
+
+    int64_t _costume;
+
+    bool _transDirty;
+    
+    //////////////////////////////////////////////////////////////////////////
+    // Audio
+
+    DSPController _dsp;
+    Voice *_voices; // Active voices (size = _base->GetSoundCount())
+
+    //////////////////////////////////////////////////////////////////////////
+    // Misc
+
+    GlideInfo _glide;
+
+    Value _message; // None = no message, otherwise the message
+    bool _isThinking; // false = saying, true = thinking
+
+    //////////////////////////////////////////////////////////////////////////
+    // Rendering
+
+    Matrix4 _model, _invModel;
+    AABB _bbox;
+
+    GraphicEffectController _gec;
+
+    GLuint _texture;
+
+    Sprite *_next, *_prev;
+
+    //////////////////////////////////////////////////////////////////////////
+    // Fields
+
+    Value _fields[]; // Fields (size = _base->GetFieldCount())
+
+    friend class SpriteList;
+    friend class AbstractSprite;
+    friend class VirtualMachine;
 };
 
 class AbstractSprite final
@@ -112,12 +266,18 @@ public:
     constexpr const std::vector<Script *> &GetClickListeners() const { return _clickListeners; }
     constexpr const std::vector<bc::Script *> &GetCloneEntry() const { return _cloneEntry; }
 
+    Sprite *Alloc();
+    void Free(Sprite *sprite);
+
+    constexpr size_t GetSpriteSize() const { return _spriteSize; }
+    constexpr size_t GetInstanceCount() const { return _nInstances; }
+
     AbstractSprite();
     ~AbstractSprite();
 private:
     Value _name; // sprite name, always a string
     const bc::Sprite *_info;
-        
+
     Costume *_costumes;
     int64_t _nCostumes;
     StringMap<int64_t> _costumeNameMap; // costume name -> index
@@ -131,162 +291,13 @@ private:
     std::vector<Script *> _clickListeners;
     std::vector<bc::Script *> _cloneEntry;
 
-    uint32_t _nextInstanceId;
+    ////////////////////////////////////////////////////////////////
+    // Pool allocator for this sprite
+
+    uint8_t *_pool; // Pool of sprites (size _spriteSize * MAX_INSTANCES)
+    size_t _spriteSize; // Size of each sprite
+    size_t _nInstances; // Number of instances
 
     void Cleanup();
 };
 
-class Sprite final
-{
-public:
-    constexpr AbstractSprite *GetBase() const { return _base; }
-    constexpr uint32_t GetInstanceId() const { return _instanceId; }
-    constexpr bool IsDeleted() const { return _delete; }
-
-    constexpr bool IsVisible() const { return _visible; }
-    constexpr double GetX() const { return _x; }
-    constexpr double GetY() const { return _y; }
-    constexpr double GetSize() const { return _size; }
-    constexpr double GetDirection() const { return _direction; }
-    constexpr bool IsDraggable() const { return _draggable; }
-    constexpr RotationStyle GetRotationStyle() const { return _rotationStyle; }
-    constexpr int64_t GetCostume() const { return _costume; }
-    constexpr const Value &GetCostumeName() const { return _base->GetCostume(_costume)->GetNameValue(); }
-
-    constexpr void SetVisible(bool visible) { _visible = visible; _transDirty = true; }
-    constexpr void SetX(double x) { _x = x; _transDirty = true; }
-    constexpr void SetY(double y) { _y = y; _transDirty = true; }
-    constexpr void SetXY(double x, double y) { _x = x; _y = y; _transDirty = true; }
-    constexpr void SetSize(double size) { _size = size; _transDirty = true; }
-    constexpr void SetDirection(double direction) { _direction = direction; _transDirty = true; }
-    constexpr void SetDraggable(bool draggable) { _draggable = draggable; }
-    constexpr void SetRotationStyle(RotationStyle rotationStyle) { _rotationStyle = rotationStyle; }
-
-    constexpr void SetCostume(const int64_t costume)
-    {
-        const int64_t newCostume = (costume - 1) % _base->CostumeCount();
-        if (_costume != newCostume)
-        {
-            _costume = newCostume;
-            _transDirty = true;
-        }
-    }
-
-    constexpr void InvalidateTransform() { _transDirty = true; }
-
-    constexpr DSPController &GetDSP() { return _dsp; }
-    constexpr const DSPController &GetDSP() const { return _dsp; }
-    constexpr Voice *GetVoiceFor(int64_t soundId) { return _voices + soundId; }
-
-    constexpr GlideInfo &GetGlideInfo() { return _glide; }
-    constexpr const GlideInfo &GetGlideInfo() const { return _glide; }
-
-    constexpr const Value &GetMessage() const { return _message; }
-    constexpr bool IsThinking() const { return _isThinking; }
-
-    void SetMessage(const Value &message, bool think);
-
-    void Update();
-
-    bool TouchingPoint(const Vector2 &point) const;
-    bool TouchingSprite(const Sprite *sprite) const;
-
-    constexpr const Matrix4 &GetModel() const { return _model; }
-    constexpr const Matrix4 &GetInvModel() const { return _invModel; }
-    constexpr const AABB &GetBoundingBox() const { return _bbox; }
-
-    constexpr GraphicEffectController &GetGraphicEffects() { return _gec; }
-    constexpr const GraphicEffectController &GetGraphicEffects() const { return _gec; }
-    constexpr GLuint GetTexture() const { return _texture; }
-
-    constexpr Sprite *GetNext() const { return _next; }
-    constexpr Sprite *GetPrev() const { return _prev; }
-
-    Value &GetField(uint32_t id) const;
-
-    constexpr const Value *GetFields() const { return _fields; }
-
-    void DebugUI() const;
-
-    //! \brief Clone this sprite
-    //! 
-    //! Creates a clone of this sprite and schedules the clone's
-    //! scripts to run. The clone will be placed one layer below
-    //! the original sprite.
-    //! 
-    //! \return The clone
-    Sprite *Clone();
-
-    //! \brief Destroy this sprite
-    //! 
-    //! Any scripts the sprite is running will be terminated. If
-    //! the sprite is destroying itself (i.e. from within a script),
-    //! this function does not return.
-    //! 
-    //! \param vm The virtual machine
-    void Destroy();
-
-    Sprite &operator=(const Sprite &) = delete;
-    Sprite &operator=(Sprite &&) = delete;
-
-    Sprite(AbstractSprite *base, uint32_t instanceId);
-    Sprite(const Sprite &) = delete;
-    Sprite(Sprite &&) = delete;
-    ~Sprite();
-private:
-    AbstractSprite *_base;
-    uint32_t _instanceId;
-    bool _delete; // Whether the sprite is scheduled for deletion
-
-    //////////////////////////////////////////////////////////////////////////
-    // Sprite properties
-
-    bool _visible;
-
-    double _x, _y;
-    double _size;
-    double _direction;
-
-    bool _draggable;
-
-    RotationStyle _rotationStyle;
-
-    int64_t _costume;
-
-    bool _transDirty;
-    
-    //////////////////////////////////////////////////////////////////////////
-    // Audio
-
-    DSPController _dsp;
-    Voice *_voices; // Active voices (size = _base->GetSoundCount())
-
-    //////////////////////////////////////////////////////////////////////////
-    // Misc
-
-    GlideInfo _glide;
-
-    Value _message; // None = no message, otherwise the message
-    bool _isThinking; // false = saying, true = thinking
-
-    //////////////////////////////////////////////////////////////////////////
-    // Rendering
-
-    Matrix4 _model, _invModel;
-    AABB _bbox;
-
-    GraphicEffectController _gec;
-
-    GLuint _texture;
-
-    Sprite *_next, *_prev;
-
-    //////////////////////////////////////////////////////////////////////////
-    // Fields
-
-    Value *_fields;
-
-    friend class SpriteList;
-    friend class AbstractSprite;
-    friend class VirtualMachine;
-};

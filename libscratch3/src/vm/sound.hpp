@@ -80,18 +80,15 @@ public:
 		_pitch = 0.0, _resampleRatio = 1.0f;
 		_pan = 0.0, _panFactor = 0.0f;
 	}
-
-	DSPController() = default;
-	~DSPController() = default;
 private:
-	double _volume = 100.0;
-	float _volumeMultiplier = 1.0f;
+	double _volume;
+	float _volumeMultiplier;
 
-	double _pitch = 0.0;
-	float _resampleRatio = 1.0f;
+	double _pitch;
+	float _resampleRatio;
 
-	double _pan = 0.0;
-	float _panFactor = 0.0f;
+	double _pan;
+	float _panFactor;
 };
 
 typedef float MONO_SAMPLE;

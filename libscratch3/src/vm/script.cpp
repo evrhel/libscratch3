@@ -862,7 +862,7 @@ int ScriptMain()
 		}
 		case Op_deleteclone:
 			// Only destroy clones, not the original sprite
-			if (self->sprite != BASE_INSTANCE_ID)
+			if (self->sprite->GetInstanceId() != BASE_INSTANCE_ID)
 				self->sprite->Destroy();
 			break;
 		case Op_touching: {

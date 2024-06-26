@@ -110,17 +110,6 @@ public:
         _mosaicEffect = 0, _mosaicFactor = 1;
         _ghostEffect = 0, _ghostFactor = 0;
     }
-
-    constexpr GraphicEffectController() :
-        _colorEffect(0), _colorFactor(0),
-        _brightnessEffect(0), _brightnessFactor(1),
-        _fisheyeEffect(0), _fisheyeFactor(1),
-        _whirlEffect(0), _whirlFactor(0),
-        _pixelateEffect(0), _pixelateFactor(1),
-        _mosaicEffect(0), _mosaicFactor(1),
-        _ghostEffect(0), _ghostFactor(0) {}
-
-    ~GraphicEffectController() = default;
 private:
     double _colorEffect;
     float _colorFactor;

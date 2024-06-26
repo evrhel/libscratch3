@@ -163,7 +163,7 @@ void SpriteList::Clear()
 	for (Sprite *s = _head; s; s = next)
 	{
 		next = s->_next;
-		delete s;
+		s->GetBase()->Free(s);
 	}
 
 	_head = nullptr;
@@ -828,7 +828,8 @@ void VirtualMachine::DeleteSprite(Sprite *sprite)
 			FreeScript(s);
 	}
 
-	delete _spriteList->Remove(sprite);
+	_spriteList->Remove(sprite);
+	sprite->GetBase()->Free(sprite);
 }
 
 void VirtualMachine::DeleteClones()

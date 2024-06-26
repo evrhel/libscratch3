@@ -263,6 +263,8 @@ void Debugger::Render()
 						ImGui::LabelText("Costume Count", "%lld", as.CostumeCount());
 						ImGui::LabelText("Sound Count", "%lld", as.GetSoundCount());
 						ImGui::LabelText("Field Count", "%zu", as.GetFieldCount());
+						ImGui::LabelText("Instances", "%zu/%zu", as.GetInstanceCount(), (size_t)MAX_INSTANCES);
+						ImGui::LabelText("Memory Usage", "%zu KiB", as.GetSpriteSize() * MAX_INSTANCES / 1024);
 					}
 				}
 

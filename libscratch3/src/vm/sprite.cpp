@@ -89,8 +89,7 @@ Sprite *AbstractSprite::Instantiate(Sprite *tmpl)
     if (tmpl && tmpl->GetBase() != this)
         VM->Panic("Template sprite does not match base sprite");
 
-    Sprite *inst = new Sprite(this, _nextInstanceId);
-    _nextInstanceId++;
+    Sprite *inst = Alloc();
 
     if (tmpl)
     {
@@ -180,6 +179,23 @@ bool AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Spri
 		_soundNameMap[_sounds[i].GetName()] = i;
 	}
 
+    // TODO: fields
+    _spriteSize = offsetof(Sprite, _fields);
+    _nInstances = 0;
+
+    // Allocate sprite pool
+    _pool = (uint8_t *)malloc(_spriteSize * MAX_INSTANCES);
+    if (!_pool)
+    {
+        Cleanup();
+        return false;
+    }
+
+    // Causes all Value instances to be zero-initialized
+    // effectively calling InitializeValue on all fields,
+    // so we don't have to do it manually when allocating
+    memset(_pool, 0, _spriteSize * MAX_INSTANCES);
+
     return true;
 }
 
@@ -264,12 +280,67 @@ void AbstractSprite::DebugUI() const
     }
 }
 
+Sprite *AbstractSprite::Alloc()
+{
+    if (_nInstances >= MAX_INSTANCES)
+        VM->Panic("Too many instances");
+
+    uint8_t *end = _pool + (_spriteSize * MAX_INSTANCES);
+    for (uint8_t *p = _pool; p < end; p += _spriteSize)
+    {
+        Sprite *s = (Sprite *)p;
+        if (!s->IsAllocated())
+        {
+            s->_base = this;
+            s->_instanceId = ((_pool - p) / _spriteSize) + 1;
+            s->_delete = false;
+
+            s->_dsp.ClearEffects();
+            s->_voices = nullptr;
+
+            s->_gec.ClearEffects();
+
+            s->_next = nullptr;
+            s->_prev = nullptr;
+
+            _nInstances++;
+
+            return s;
+        }
+    }
+
+    abort(); // unreachable
+}
+
+void AbstractSprite::Free(Sprite *sprite)
+{
+    assert(sprite->_base == this);
+    assert(sprite->IsAllocated());
+
+    // Release all resources
+
+    for (uint32_t i = 0; i < _nFields; i++)
+        ReleaseValue(sprite->_fields[i]);
+    ReleaseValue(sprite->_message);
+
+    sprite->_prev = nullptr;
+    sprite->_next = nullptr;
+
+    sprite->_voices = nullptr;
+
+    sprite->_delete = false;
+    sprite->_instanceId = UNALLOCATED_INSTANCE_ID;
+    sprite->_base = nullptr;
+
+    _nInstances--;
+}
+
 AbstractSprite::AbstractSprite() :
     _info(nullptr),
     _costumes(nullptr), _nCostumes(0),
     _sounds(nullptr), _nSounds(0),
     _nFields(0),
-    _nextInstanceId(0)
+    _pool(nullptr), _spriteSize(0), _nInstances(0)
 {
     InitializeValue(_name);
 }
@@ -286,6 +357,34 @@ void AbstractSprite::Cleanup()
 
     if (_costumes)
         delete[] _costumes, _costumes = nullptr;
+
+    if (_pool)
+    {
+        uint8_t *end = _pool + (_spriteSize * MAX_INSTANCES);
+        for (uint8_t *p = _pool; p < end; p += _spriteSize)
+        {
+            Sprite *s = (Sprite *)p;
+            if (s->IsAllocated())
+                Free(s);
+        }
+
+        free(_pool), _pool = nullptr;
+    }
+}
+
+const Value &Sprite::GetCostumeName() const
+{
+    return _base->GetCostume(_costume)->GetNameValue();
+}
+
+void Sprite::SetCostume(int64_t costume)
+{
+    int64_t newCostume = (costume - 1) % _base->CostumeCount();
+    if (_costume != newCostume)
+    {
+        _costume = newCostume;
+        _transDirty = true;
+    }
 }
 
 void Sprite::SetMessage(const Value &message, bool think)
@@ -387,8 +486,10 @@ bool Sprite::TouchingSprite(const Sprite *sprite) const
     return true;
 }
 
-Value &Sprite::GetField(uint32_t id) const
+Value &Sprite::GetField(uint32_t id)
 {
+    assert(IsAllocated() && !_delete);
+
     if (id >= _base->GetFieldCount())
         VM->Panic("Invalid field ID");
     return _fields[id];
@@ -452,6 +553,8 @@ void Sprite::DebugUI() const
 
 Sprite *Sprite::Clone()
 {
+    assert(IsAllocated() && !_delete);
+
     Sprite *clone = _base->Instantiate(this);
 
     SCRIPT_ALLOC_INFO ai;
@@ -472,50 +575,11 @@ Sprite *Sprite::Clone()
 
 void Sprite::Destroy()
 {
+    assert(IsAllocated() && !_delete);
+
     _delete = true;
 
     Script *current = VM->GetCurrentScript();
     if (current && current->sprite == this)
         VM->TerminateScript(current);
-}
-
-Sprite::Sprite(AbstractSprite *base, uint32_t instanceId) :
-    _base(base), _instanceId(instanceId), _delete(false),
-    _visible(false),
-    _x(0), _y(0),
-    _size(100),
-    _direction(90),
-    _draggable(false),
-    _rotationStyle(RotationStyle_AllAround),
-    _costume(1),
-    _transDirty(true),
-    _voices(nullptr),
-    _isThinking(false),
-    _texture(0),
-    _next(nullptr), _prev(nullptr),
-    _fields(nullptr)
-{
-    assert(base != nullptr);
-
-    InitializeValue(_message);
-
-    if (base->GetFieldCount() > 0)
-    {
-        // No need to call InitializeValue after calloc
-        _fields = (Value *)calloc(base->GetFieldCount(), sizeof(Value));
-        if (!_fields)
-            VM->Panic("Failed to allocate fields");
-    }
-}
-
-Sprite::~Sprite()
-{
-    ReleaseValue(_message);
-
-    if (_fields)
-    {
-        for (Value *v = _fields; v < _fields + _base->GetFieldCount(); v++)
-			ReleaseValue(*v);
-        free(_fields);
-    }
 }
