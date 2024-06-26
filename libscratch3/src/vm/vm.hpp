@@ -322,6 +322,7 @@ private:
 	Script _scriptTable[MAX_SCRIPTS]; // Script table
 	size_t _allocatedScripts; // Number of allocated scripts
 	size_t _nextEntry; // Next entry in the script table
+	intptr_t _lastEntry; // Last entry in the script table (exclusive)
 
 	size_t _nextScript; // Next script to run
 

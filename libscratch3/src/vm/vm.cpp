@@ -302,6 +302,7 @@ int VirtualMachine::VMStart()
 	memset(_scriptTable, 0, sizeof(_scriptTable));
 	_allocatedScripts = 0;
 	_nextEntry = 0;
+	_lastEntry = 0;
 
 	// temporary panic handler
 	_panicJmpSet = false;
@@ -653,8 +654,10 @@ Script *VirtualMachine::AllocScript(const SCRIPT_ALLOC_INFO &ai)
 		Panic("Out of script slots");
 
 	Script *script = _scriptTable + _nextEntry;
+
 	_nextEntry++;
-	_allocatedScripts++;
+	if (_nextEntry > _lastEntry)
+		_lastEntry = _nextEntry;
 
 	assert(script->state == EMBRYO);
 
@@ -694,6 +697,8 @@ Script *VirtualMachine::AllocScript(const SCRIPT_ALLOC_INFO &ai)
 
 	script->state = SUSPENDED;
 
+	_allocatedScripts++;
+
 	return script;
 }
 
@@ -709,29 +714,16 @@ void VirtualMachine::FreeScript(Script *script)
 	// We reuse the fiber and the allocated stack
 
 	script->sprite = nullptr;
-	script->sleepUntil = 0.0;
-	script->waitInput = false;
-	script->askInput = false;
-	script->waitVoice = nullptr;
-	script->ticks = 0;
-	script->entry = 0;
-	script->pc = 0;
-	
+
 	ReleaseStack(script);
-
-	script->autoStart = false;
-	script->scheduled = false;
-	script->restart = false;
-
-	script->except = Exception_None;
-	script->exceptMessage = nullptr;
-
-	script->exitCode = 0;
-
 	script->state = EMBRYO; // set last!
 
 	if (index < _nextEntry)
 		_nextEntry = index;
+
+	// find the last allocated script
+	while (_lastEntry > 0 && _scriptTable[_lastEntry - 1].state == EMBRYO)
+		_lastEntry--;
 
 	_allocatedScripts--;
 }
@@ -830,7 +822,7 @@ void VirtualMachine::DeleteSprite(Sprite *sprite)
 	assert(VM == this);
 	assert(_current == nullptr);
 
-	for (Script *s = _scriptTable; s < _scriptTable + MAX_SCRIPTS; s++)
+	for (Script *s = _scriptTable; s < _scriptTable + _lastEntry; s++)
 	{
 		if (s->sprite == sprite)
 			FreeScript(s);
@@ -1075,15 +1067,16 @@ void VirtualMachine::DispatchEvents()
 	{
 		StopAllSounds();
 
+		// delete all clones
+		DeleteClones();
+
 		// terminate all scripts
-		for (Script *s = _scriptTable; s < _scriptTable + MAX_SCRIPTS; s++)
+		for (Script *s = _scriptTable; s < _scriptTable + _lastEntry; s++)
 		{
 			if (s->state == EMBRYO)
 				continue;
 			TerminateScript(s);
 		}
-
-		DeleteClones();
 
 		for (Script *s : _flagListeners)
 			RestartScript(s);
@@ -1118,7 +1111,7 @@ void VirtualMachine::Scheduler()
 
 	// round-robin scheduler
 	_nextScript = 0;
-	while (_nextScript < MAX_SCRIPTS)
+	while (_nextScript < _lastEntry)
 	{
 		Script &script = *(_scriptTable + _nextScript);
 		_nextScript++;
