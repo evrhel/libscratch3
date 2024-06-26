@@ -84,25 +84,13 @@ int64_t AbstractSprite::FindSound(const String *name) const
     return 0;
 }
 
-Sprite *AbstractSprite::Instantiate(VirtualMachine *vm, Sprite *tmpl)
+Sprite *AbstractSprite::Instantiate(Sprite *tmpl)
 {
-    if (_nInstances == MAX_INSTANCES)
-        vm->Panic("Maximum number of instances reached");
-
     if (tmpl && tmpl->GetBase() != this)
-        vm->Panic("Template sprite does not match base sprite");
+        VM->Panic("Template sprite does not match base sprite");
 
-    // Find slot for new instance
-    while (_nextInstanceId < MAX_INSTANCES)
-    {
-        if (_instances[_nextInstanceId] == nullptr)
-			break;
-        _nextInstanceId++;
-    }
-
-    assert(_nextInstanceId < MAX_INSTANCES);
-
-    Sprite *inst = new Sprite(vm, this, _nextInstanceId);
+    Sprite *inst = new Sprite(this, _nextInstanceId);
+    _nextInstanceId++;
 
     if (tmpl)
     {
@@ -140,10 +128,8 @@ Sprite *AbstractSprite::Instantiate(VirtualMachine *vm, Sprite *tmpl)
 
     inst->InvalidateTransform();
 
-    _instances[_nextInstanceId] = inst;
-    _nInstances++;
-
-    SpriteList *spriteList = vm->GetSpriteList();
+    // Add to sprite list
+    SpriteList *spriteList = VM->GetSpriteList();
     if (tmpl)
         spriteList->Insert(tmpl->GetPrev(), inst); // insert before template
     else
@@ -197,25 +183,19 @@ bool AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Spri
     return true;
 }
 
-void AbstractSprite::Load(VirtualMachine *vm)
+void AbstractSprite::Load()
 {    
-    uint8_t *bytecode = vm->GetBytecode();
+    uint8_t *bytecode = VM->GetBytecode();
 
     // find all listeners
-    for (const SCRIPT_ALLOC_INFO &ai : vm->GetScriptStubs())
+    for (const SCRIPT_ALLOC_INFO &ai : VM->GetScriptStubs())
     {
         if (ai.sprite->GetBase() != this)
             continue;
 
         Opcode entry = (Opcode)*(bytecode + ai.info->offset);
         if (entry == Op_onclick)
-        {
-            STATIC_EVENT_HANDLER seh;
-            seh.ai = ai;
-            seh.script = nullptr;
-
-            _clickListeners.push_back(seh);
-        }
+            _clickListeners.push_back(VM->AllocScript(ai));
         else if (entry == Op_onclone)
             _cloneEntry.push_back(ai.info);
     }
@@ -284,7 +264,12 @@ void AbstractSprite::DebugUI() const
     }
 }
 
-AbstractSprite::AbstractSprite()
+AbstractSprite::AbstractSprite() :
+    _info(nullptr),
+    _costumes(nullptr), _nCostumes(0),
+    _sounds(nullptr), _nSounds(0),
+    _nFields(0),
+    _nextInstanceId(0)
 {
     InitializeValue(_name);
 }
@@ -296,13 +281,6 @@ AbstractSprite::~AbstractSprite()
 
 void AbstractSprite::Cleanup()
 {
-    for (Sprite **pInst = _instances; pInst < _instances + MAX_INSTANCES; pInst++)
-    {
-        if (pInst)
-            delete *pInst, *pInst = nullptr;
-    }
-    _nInstances = 0;
-
     if (_sounds)
         delete[] _sounds, _sounds = nullptr;
 
@@ -316,12 +294,12 @@ void Sprite::SetMessage(const Value &message, bool think)
     _isThinking = think;
 }
 
-void Sprite::Update(VirtualMachine *vm)
+void Sprite::Update()
 {
-    if (vm->GetTime() < _glide.end)
+    if (VM->GetTime() < _glide.end)
     {
         // linear interpolation
-        double t = (vm->GetTime() - _glide.start) / (_glide.end / _glide.start);
+        double t = (VM->GetTime() - _glide.start) / (_glide.end / _glide.start);
         double x = _glide.x0 + t * (_glide.x1 - _glide.x0);
         double y = _glide.y0 + t * (_glide.y1 - _glide.y0);
         SetXY(x, y);
@@ -334,7 +312,7 @@ void Sprite::Update(VirtualMachine *vm)
         const Vector2 &logicalCenter = c->GetLogicalCenter();
         const Vector2 &logicalSize = c->GetLogicalSize();
 
-        Vector2 center = logicalCenter / 2.0f;
+        Vector2 center = logicalSize / 2.0f;
         Vector2 centerOffset = logicalCenter - center;
 
         float unifScale = static_cast<float>(_size / 100);
@@ -361,7 +339,7 @@ void Sprite::Update(VirtualMachine *vm)
         Matrix4 mTransCenter = translate(Matrix4(), Vector3(-centerOffset.x, centerOffset.y, 0.0f));
 
         // Compute model matrix
-        _model = mTransPos * torotation(q), mTransCenter * mScale;
+        _model = mTransPos * torotation(q) * mTransCenter * mScale;
         _invModel = inverse(_model);
 
         // Update bounding box
@@ -372,7 +350,7 @@ void Sprite::Update(VirtualMachine *vm)
             // GetTexture may trigger a texture load, only want to do this
             // if the sprite is visible
 
-            GLRenderer *render = vm->GetRenderer();
+            GLRenderer *render = VM->GetRenderer();
 
             Vector2 fbSize(render->GetWidth(), render->GetHeight());
             const Vector2 &viewportSize = render->GetLogicalSize();
@@ -409,10 +387,10 @@ bool Sprite::TouchingSprite(const Sprite *sprite) const
     return true;
 }
 
-Value &Sprite::GetField(VirtualMachine *vm, uint32_t id) const
+Value &Sprite::GetField(uint32_t id) const
 {
     if (id >= _base->GetFieldCount())
-        vm->Panic("Invalid field ID");
+        VM->Panic("Invalid field ID");
     return _fields[id];
 }
 
@@ -472,54 +450,37 @@ void Sprite::DebugUI() const
     }
 }
 
-Sprite *Sprite::Clone(VirtualMachine *vm)
+Sprite *Sprite::Clone()
 {
-    Sprite *clone = _base->Instantiate(vm, this);
+    Sprite *clone = _base->Instantiate(this);
+
+    SCRIPT_ALLOC_INFO ai;
+    ai.sprite = clone;
 
     for (bc::Script *ce : _base->GetCloneEntry())
     {
-        SCRIPT_ALLOC_INFO ai;
-        ai.sprite = clone;
         ai.info = ce;
 
-        Script *script = vm->AllocScript(ai);
-        vm->RestartScript(script);
-
-        // takes ownership of the script
-        clone->_scripts.insert(script);
+        Script *script = VM->AllocScript(ai);
+        VM->RestartScript(script);
     }
 
-    vm->Reschedule();
+    VM->Reschedule();
 
     return clone;
 }
 
-void Sprite::Destroy(VirtualMachine *vm)
+void Sprite::Destroy()
 {
-    Script *current = vm->GetCurrentScript();
-    bool destroyingSelf = false;
+    _delete = true;
 
-    for (Script *script : _scripts)
-    {
-        if (script == current)
-            destroyingSelf = true;
-        else
-        {
-            vm->TerminateScript(script);
-            vm->CloseScript(script);
-        }
-    }
-
-    _scripts.clear();
-
-    delete this;
-
-    if (destroyingSelf)
-        vm->TerminateScript(current);
+    Script *current = VM->GetCurrentScript();
+    if (current && current->sprite == this)
+        VM->TerminateScript(current);
 }
 
-Sprite::Sprite(VirtualMachine *vm, AbstractSprite *base, uint32_t instanceId) :
-    _base(base), _instanceId(instanceId),
+Sprite::Sprite(AbstractSprite *base, uint32_t instanceId) :
+    _base(base), _instanceId(instanceId), _delete(false),
     _visible(false),
     _x(0), _y(0),
     _size(100),
@@ -534,25 +495,21 @@ Sprite::Sprite(VirtualMachine *vm, AbstractSprite *base, uint32_t instanceId) :
     _next(nullptr), _prev(nullptr),
     _fields(nullptr)
 {
-    assert(vm != nullptr);
     assert(base != nullptr);
-    assert(instanceId < MAX_INSTANCES);
 
     InitializeValue(_message);
 
-    if (_base != nullptr)
-        vm->Panic("Sprite was double-initialized");
-
-    // No need to call InitializeValue after calloc
-    _fields = (Value *)calloc(base->GetFieldCount(), sizeof(Value));
-    if (!_fields)
-        vm->Panic("Failed to allocate fields");
+    if (base->GetFieldCount() > 0)
+    {
+        // No need to call InitializeValue after calloc
+        _fields = (Value *)calloc(base->GetFieldCount(), sizeof(Value));
+        if (!_fields)
+            VM->Panic("Failed to allocate fields");
+    }
 }
 
 Sprite::~Sprite()
 {
-    assert(_scripts.size() == 0);
-
     ReleaseValue(_message);
 
     if (_fields)

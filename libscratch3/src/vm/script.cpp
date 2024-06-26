@@ -11,6 +11,24 @@
 #define DEG2RAD (0.017453292519943295769236907684886)
 #define RAD2DEG (57.295779513082320876798154814105)
 
+void Script::Dump()
+{
+	printf("Script %p\n", this);
+
+	if (state >= EMBRYO && state <= TERMINATED)
+		printf("    state = %s\n", GetStateName(state));
+	else
+		printf("    state = Unknown\n");
+
+	printf("    sprite = %s\n", sprite ? sprite->GetBase()->GetNameString() : "(null)");
+
+	printf("    sleepUntil = %g\n", sleepUntil);
+	printf("    waitInput = %s\n", waitInput ? "true" : "false");
+	printf("    stack = %p\n", stack);
+	printf("    sp = %p\n", sp);
+	printf("    pc = %p\n", pc); // TODO: display disassembly
+}
+
 const char *GetStateName(int state)
 {
 	switch (state)
@@ -30,9 +48,9 @@ const char *GetStateName(int state)
 	}
 }
 
-void Script::Main()
+int ScriptMain()
 {
-	uint8_t *bytecode = vm->GetBytecode();
+	uint8_t *bytecode = VM->GetBytecode();
 	bc::Header *header = (bc::Header *)bytecode;
 
 	bool b;
@@ -42,10 +60,12 @@ void Script::Main()
 	String *str;
 	Value *lhs, *rhs;
 
+	Script *self = VM->GetCurrentScript();
+	Sprite *sprite = self->sprite;
 	for (;;)
 	{
-		Opcode opcode = (Opcode)*pc;
-		pc++;
+		Opcode opcode = (Opcode)*self->pc;
+		self->pc++;
 
 		switch (opcode)
 		{
@@ -57,65 +77,65 @@ void Script::Main()
 		case Op_int:
 			Raise(VMError, "Software interrupt");
 		case Op_setstatic: {
-			bc::VarId *id = (bc::VarId *)pc;
-			pc += sizeof(bc::VarId);
+			bc::VarId *id = (bc::VarId *)self->pc;
+			self->pc += sizeof(bc::VarId);
 
-			Assign(vm->GetStaticVariable(id->ToInt()), StackAt(-1));
+			Assign(VM->GetStaticVariable(id->ToInt()), StackAt(-1));
 			Pop();
 			break;
 		}
 		case Op_getstatic: {
-			bc::VarId *id = (bc::VarId *)pc;
-			pc += sizeof(bc::VarId);
-			Assign(Push(), vm->GetStaticVariable(id->ToInt()));
+			bc::VarId *id = (bc::VarId *)self->pc;
+			self->pc += sizeof(bc::VarId);
+			Assign(Push(), VM->GetStaticVariable(id->ToInt()));
 			break;
 		}
 		case Op_addstatic: {
-			bc::VarId *id = (bc::VarId *)pc;
-			pc += sizeof(bc::VarId);
-			Value &v = vm->GetStaticVariable(id->ToInt());
+			bc::VarId *id = (bc::VarId *)self->pc;
+			self->pc += sizeof(bc::VarId);
+			Value &v = VM->GetStaticVariable(id->ToInt());
 			SetReal(v, ToReal(v) + ToReal(StackAt(-1)));
 			Pop();
 			break;
 		}
 		case Op_listcreate:
-			i64 = *(int64_t *)pc;
-			pc += sizeof(int64_t);
+			i64 = *(int64_t *)self->pc;
+			self->pc += sizeof(int64_t);
 			AllocList(Push(), i64);
 			break;
 		case Op_jmp:
-			ui64 = *(uint64_t *)pc;
-			pc = bytecode + ui64;
+			ui64 = *(uint64_t *)self->pc;
+			self->pc = bytecode + ui64;
 			break;
 		case Op_jz:
-			ui64 = *(uint64_t *)pc;
+			ui64 = *(uint64_t *)self->pc;
 			b = Truth(StackAt(-1));
 			Pop();
 
 			if (!b)
-				pc = bytecode + ui64;
+				self->pc = bytecode + ui64;
 			else
-				pc += sizeof(uint64_t);
+				self->pc += sizeof(uint64_t);
 			break;
 		case Op_jnz:
-			ui64 = *(uint64_t *)pc;
+			ui64 = *(uint64_t *)self->pc;
 			b = Truth(StackAt(-1));
 			Pop();
 
 			if (b)
-				pc = bytecode + ui64;
+				self->pc = bytecode + ui64;
 			else
-				pc += sizeof(uint64_t);
+				self->pc += sizeof(uint64_t);
 			break;
 		case Op_call: {
-			bc::_bool warp = *pc;
-			pc += sizeof(bc::_bool);
+			bc::_bool warp = *self->pc;
+			self->pc += sizeof(bc::_bool);
 
-			int argc = static_cast<int>(*(bc::uint16 *)pc);
-			pc += sizeof(bc::uint16);
+			int argc = static_cast<int>(*(bc::uint16 *)self->pc);
+			self->pc += sizeof(bc::uint16);
 
-			uint8_t *proc = bytecode + *(bc::uint64 *)pc;
-			pc += sizeof(bc::uint64);
+			uint8_t *proc = bytecode + *(bc::uint64 *)self->pc;
+			self->pc += sizeof(bc::uint64);
 
 			// space for return address and base pointer
 			Push(), Push();
@@ -125,42 +145,42 @@ void Script::Main()
 				Assign(StackAt(-i), StackAt(-i - 2));
 
 			// store base pointer
-			SetIntPtr(StackAt(-argc - 1), (intptr_t)bp);
+			SetIntPtr(StackAt(-argc - 1), (intptr_t)self->bp);
 
 			// store return address
-			SetIntPtr(StackAt(-argc - 2), (intptr_t)pc);
+			SetIntPtr(StackAt(-argc - 2), (intptr_t)self->pc);
 
 			// set new base pointer
-			bp = sp + argc;
+			self->bp = self->sp + argc;
 
 			// jump to procedure
-			pc = proc;
+			self->pc = proc;
 			break;
 		}
 		case Op_ret: {
-			if (bp == stack + STACK_SIZE)
+			if (self->bp == self->stack + STACK_SIZE)
 				Raise(StackUnderflow, "Stack underflow");
 
-			if (bp->type != ValueType_IntPtr)
+			if (self->bp->type != ValueType_IntPtr)
 				Raise(VMError, "Corrupt stack frame");
 
 			// release stack
-			while (sp < bp)
+			while (self->sp < self->bp)
 			{
-				ReleaseValue(*sp);
-				memset(sp, 0xab, sizeof(Value));
-				sp++;
+				ReleaseValue(*self->sp);
+				memset(self->sp, 0xab, sizeof(Value));
+				self->sp++;
 			}
 			
 			// restore old base pointer
-			bp = (Value *)bp->u.intptr;
+			self->bp = (Value *)self->bp->u.intptr;
 			Pop();
 
 			// pop return address and jump
 			Value &raddr = StackAt(-1);
 			if (raddr.type != ValueType_IntPtr)
 				Raise(VMError, "Corrupt stack frame");
-			pc = (uint8_t *)raddr.u.intptr;
+			self->pc = (uint8_t *)raddr.u.intptr;
 			Pop();
 			break;
 		}
@@ -180,13 +200,13 @@ void Script::Main()
 			Push();
 			break;
 		case Op_pushint:
-			i64 = *(int64_t *)pc;
-			pc += sizeof(int64_t);
+			i64 = *(int64_t *)self->pc;
+			self->pc += sizeof(int64_t);
 			SetInteger(Push(), i64);
 			break;
 		case Op_pushreal:
-			real = *(double *)pc;
-			pc += sizeof(double);
+			real = *(double *)self->pc;
+			self->pc += sizeof(double);
 			SetReal(Push(), real);
 			break;
 		case Op_pushtrue:
@@ -196,14 +216,14 @@ void Script::Main()
 			SetBool(Push(), false);
 			break;
 		case Op_pushstring:
-			ui64 = *(uint64_t *)pc;
+			ui64 = *(uint64_t *)self->pc;
 			str = (String *)(bytecode + ui64);
-			pc += sizeof(uint64_t);
+			self->pc += sizeof(uint64_t);
 			SetStaticString(Push(), str);
 			break;
 		case Op_push: {
-			int16_t index = *(int16_t *)pc;
-			pc += sizeof(int16_t);
+			int16_t index = *(int16_t *)self->pc;
+			self->pc += sizeof(int16_t);
 			Value &v = StackAt(index);
 			Assign(Push(), v);
 			break;
@@ -377,7 +397,7 @@ void Script::Main()
 		case Op_glide:
 			Raise(NotImplemented, "glide");
 		case Op_glidexy:
-			Glide(ToReal(StackAt(-2)), ToReal(StackAt(-1)), ToReal(StackAt(-3)));
+			GlideTo(ToReal(StackAt(-2)), ToReal(StackAt(-1)), ToReal(StackAt(-3)));
 			break;
 		case Op_setdir:
 			sprite->SetDirection(ToReal(StackAt(-1)));
@@ -404,8 +424,8 @@ void Script::Main()
 		case Op_bounceonedge:
 			Raise(NotImplemented, "bounceonedge");
 		case Op_setrotationstyle:
-			sprite->SetRotationStyle((RotationStyle)*(uint8_t *)pc);
-			pc++;
+			sprite->SetRotationStyle((RotationStyle)*(uint8_t *)self->pc);
+			self->pc++;
 			break;
 		case Op_getx:
 			SetReal(Push(), sprite->GetX());
@@ -450,7 +470,7 @@ void Script::Main()
 			break;
 		case Op_setbackdrop: {
 			Value &v = StackAt(-1);
-			Sprite *stage = vm->GetStage();
+			Sprite *stage = VM->GetStage();
 
 			switch (v.type)
 			{
@@ -471,7 +491,7 @@ void Script::Main()
 			break;
 		}
 		case Op_nextbackdrop: {
-			Sprite *stage = vm->GetStage();
+			Sprite *stage = VM->GetStage();
 			stage->SetCostume(stage->GetCostume() + 1);
 			break;
 		}
@@ -484,8 +504,8 @@ void Script::Main()
 			Pop();
 			break;
 		case Op_addgraphiceffect: {
-			GraphicEffect effect = (GraphicEffect)*(uint8_t *)pc;
-			pc++;
+			GraphicEffect effect = (GraphicEffect)*(uint8_t *)self->pc;
+			self->pc++;
 
 			double val = ToReal(StackAt(-1));
 			Pop();
@@ -521,8 +541,8 @@ void Script::Main()
 			break;
 		}
 		case Op_setgraphiceffect: {
-			GraphicEffect effect = (GraphicEffect)*(uint8_t *)pc;
-			pc++;
+			GraphicEffect effect = (GraphicEffect)*(uint8_t *)self->pc;
+			self->pc++;
 
 			double val = ToReal(StackAt(-1));
 			Pop();
@@ -568,13 +588,13 @@ void Script::Main()
 			sprite->SetVisible(false);
 			break;
 		case Op_gotolayer: {
-			Sprite *stage = vm->GetStage();
+			Sprite *stage = VM->GetStage();
 			if (sprite == stage)
 				break;
 
-			SpriteList *sprites = vm->GetSpriteList();
+			SpriteList *sprites = VM->GetSpriteList();
 
-			switch (*(uint8_t *)pc)
+			switch (*(uint8_t *)self->pc)
 			{
 			default:
 				Raise(InvalidArgument, "Invalid layer");
@@ -586,20 +606,20 @@ void Script::Main()
 				break;
 			}
 
-			pc++;
+			self->pc++;
 			break;
 		}
 		case Op_movelayer: {
-			Sprite *stage = vm->GetStage();
-			if (sprite == vm->GetStage())
+			Sprite *stage = VM->GetStage();
+			if (sprite == VM->GetStage())
 				break;
 
 			int64_t amount = ToInteger(StackAt(-1));
 			Pop();
 
-			SpriteList *sprites = vm->GetSpriteList();
+			SpriteList *sprites = VM->GetSpriteList();
 
-			switch (*(uint8_t *)pc)
+			switch (*(uint8_t *)self->pc)
 			{
 			default:
 				Raise(InvalidArgument, "Invalid direction");
@@ -611,7 +631,7 @@ void Script::Main()
 				break;
 			}
 
-			pc++;
+			self->pc++;
 			break;
 		}
 		case Op_getcostume:
@@ -647,7 +667,7 @@ void Script::Main()
 			Pop();
 
 			// play sound
-			vm->StartVoice(voice);
+			VM->StartVoice(voice);
 			WaitForVoice(voice);
 			break;
 		}
@@ -670,15 +690,15 @@ void Script::Main()
 			Pop();
 
 			// play sound
-			vm->StartVoice(voice);
+			VM->StartVoice(voice);
 			break;
 		}
 		case Op_stopsound:
-			vm->StopAllSounds();
+			VM->StopAllSounds();
 			break;
 		case Op_addsoundeffect: {
-			SoundEffect effect = (SoundEffect)*(uint8_t *)pc;
-			pc++;
+			SoundEffect effect = (SoundEffect)*(uint8_t *)self->pc;
+			self->pc++;
 
 			DSPController &dsp = sprite->GetDSP();
 			switch (effect)
@@ -697,8 +717,8 @@ void Script::Main()
 			break;
 		}
 		case Op_setsoundeffect: {
-			SoundEffect effect = (SoundEffect)*(uint8_t *)pc;
-			pc++;
+			SoundEffect effect = (SoundEffect)*(uint8_t *)self->pc;
+			self->pc++;
 
 			DSPController &dsp = sprite->GetDSP();
 			switch (effect)
@@ -739,15 +759,15 @@ void Script::Main()
 			// do nothing
 			break;
 		case Op_onkey:
-			pc += sizeof(uint16_t); // skip key
+			self->pc += sizeof(uint16_t); // skip key
 			break;
 		case Op_onclick:
 			// do nothing
 			break;
 		case Op_onbackdropswitch: {
-			Sprite *stage = vm->GetStage();
-			char *targetName = (char *)(bytecode + *(uint64_t *)pc);
-			pc += sizeof(uint64_t);
+			Sprite *stage = VM->GetStage();
+			char *targetName = (char *)(bytecode + *(uint64_t *)self->pc);
+			self->pc += sizeof(uint64_t);
 
 			int64_t lastBackdrop = stage->GetCostume();
 			for (;;)
@@ -773,19 +793,19 @@ void Script::Main()
 			// do nothing (handled in bytecode, see compiler.cpp)
 			break;
 		case Op_onevent:
-			pc += sizeof(uint64_t); // skip event
+			self->pc += sizeof(uint64_t); // skip event
 			break;
 		case Op_send: {
 			int64_t len;
 			const char *message = ToString(StackAt(-1), &len);
-			vm->Send(std::string(message, len));
+			VM->Send(std::string(message, len));
 			Pop();
 			break;
 		}
 		case Op_sendandwait: {
 			int64_t len;
 			const char *message = ToString(StackAt(-1), &len);
-			vm->SendAndWait(std::string(message, len));
+			VM->SendAndWait(std::string(message, len));
 			Pop();
 			break;
 		}
@@ -798,13 +818,9 @@ void Script::Main()
 		case Op_stopall: {
 			for (unsigned long sid = 0; sid < MAX_SCRIPTS; sid++)
 			{
-				Script *script = vm->OpenScript(sid);
-				if (script)
-				{
-					if (script != this)
-						vm->TerminateScript(script);
-					vm->CloseScript(script);
-				}
+				Script *script = VM->OpenScript(sid);
+				if (script && script != self)
+					VM->TerminateScript(script);
 			}
 
 			Terminate();
@@ -814,13 +830,9 @@ void Script::Main()
 		case Op_stopother: {
 			for (unsigned long sid = 0; sid < MAX_SCRIPTS; sid++)
 			{
-				Script *script = vm->OpenScript(sid);
-				if (script)
-				{
-					if (script->sprite == sprite && script != this)
-						vm->TerminateScript(script);
-					vm->CloseScript(script);
-				}
+				Script *script = VM->OpenScript(sid);
+				if (script && script->sprite == sprite && script != self)
+					VM->TerminateScript(script);
 			}
 
 			break;
@@ -828,10 +840,31 @@ void Script::Main()
 		case Op_onclone:
 			// do nothing
 			break;
-		case Op_clone:
-			Raise(NotImplemented, "clone");
+		case Op_clone: {
+			Value &targetName = CvtString(StackAt(-1));
+			if (targetName.type != ValueType_String)
+			{
+				Pop();
+				break;
+			}
+
+			if (StringEquals(targetName.u.string->str, "_myself_"))
+				self->sprite->Clone();
+			else
+			{
+				Sprite *target = VM->FindSprite(targetName);
+				if (target)
+					target->Clone();
+			}
+
+			Pop();
+			break;
+		}
 		case Op_deleteclone:
-			Raise(NotImplemented, "deleteclone");
+			// Only destroy clones, not the original sprite
+			if (self->sprite != BASE_INSTANCE_ID)
+				self->sprite->Destroy();
+			break;
 		case Op_touching: {
 			Value &v = CvtString(StackAt(-1)); // same as stack[0] = CvtString(stack[0]);
 			if (v.type != ValueType_String)
@@ -842,12 +875,12 @@ void Script::Main()
 
 			if (!strcmp(v.u.string->str, "_mouse_"))
 			{
-				auto &io = vm->GetIO();
+				auto &io = VM->GetIO();
 				SetBool(v, sprite->TouchingPoint(Vector2(io.GetMouseX(), io.GetMouseY())));
 				break;
 			}
 
-			Sprite *s = vm->FindSprite(v);
+			Sprite *s = VM->FindSprite(v);
 			if (!s)
 			{
 				SetBool(v, false);
@@ -866,7 +899,7 @@ void Script::Main()
 		case Op_ask:
 			Raise(NotImplemented, "ask");
 		case Op_getanswer:
-			Assign(Push(), vm->GetIO().GetAnswer());
+			Assign(Push(), VM->GetIO().GetAnswer());
 			break;
 		case Op_keypressed: {
 			Value &v = CvtString(StackAt(-1));
@@ -909,33 +942,33 @@ void Script::Main()
 				break;
 			}
 
-			SetBool(v, vm->GetIO().GetKey(scancode));
+			SetBool(v, VM->GetIO().GetKey(scancode));
 			break;
 		}
 		case Op_mousedown:
-			SetBool(Push(), vm->GetIO().IsMouseDown());
+			SetBool(Push(), VM->GetIO().IsMouseDown());
 			break;
 		case Op_mousex:
-			SetReal(Push(), vm->GetIO().GetMouseX());
+			SetReal(Push(), VM->GetIO().GetMouseX());
 			break;
 		case Op_mousey:
-			SetReal(Push(), vm->GetIO().GetMouseY());
+			SetReal(Push(), VM->GetIO().GetMouseY());
 			break;
 		case Op_setdragmode:
 			Raise(NotImplemented, "setdragmode");
 		case Op_getloudness:
 			Raise(NotImplemented, "getloudness");
 		case Op_gettimer:
-			SetReal(Push(), vm->GetTimer());
+			SetReal(Push(), VM->GetTimer());
 			break;
 		case Op_resettimer:
-			vm->ResetTimer();
+			VM->ResetTimer();
 			break;
 		case Op_propertyof: {
-			PropertyTarget target = (PropertyTarget)*(uint8_t *)pc;
-			pc++;
+			PropertyTarget target = (PropertyTarget)*(uint8_t *)self->pc;
+			self->pc++;
 
-			Sprite *s = vm->FindSprite(CvtString(StackAt(-1)));
+			Sprite *s = VM->FindSprite(CvtString(StackAt(-1)));
 			Pop(); // pop name
 
 			if (!s)
@@ -952,10 +985,10 @@ void Script::Main()
 				Push(); // none
 				break;
 			case PropertyTarget_BackdropNumber:
-				SetInteger(Push(), vm->GetStage()->GetCostume());
+				SetInteger(Push(), VM->GetStage()->GetCostume());
 				break;
 			case PropertyTarget_BackdropName:
-				Assign(Push(), vm->GetStage()->GetCostumeName());
+				Assign(Push(), VM->GetStage()->GetCostumeName());
 				break;
 			case PropertyTarget_XPosition:
 				SetReal(Push(), s->GetX());
@@ -988,7 +1021,7 @@ void Script::Main()
 		case Op_getdayssince2000:
 			Raise(NotImplemented, "getdayssince2000");
 		case Op_getusername:
-			Assign(Push(), vm->GetIO().GetUsername());
+			Assign(Push(), VM->GetIO().GetUsername());
 			break;
 		case Op_rand: {
 			Value &a = StackAt(-2);
@@ -1078,94 +1111,100 @@ void Script::Main()
 			Raise(VMError, "Extensions are not supported");
 		}
 	}
+
+	return 0;
 }
 
-Value &Script::Push()
+Value &Push()
 {
-	if (sp <= stack)
+	Script *self = VM->GetCurrentScript();
+	if (self->sp <= self->stack)
 		Raise(StackOverflow, "Stack overflow");
-	sp--;
-	InitializeValue(*sp);
-	return *sp;
+	self->sp--;
+	InitializeValue(*self->sp);
+	return *self->sp;
 }
 
-void Script::Pop()
+void Pop()
 {
-	if (sp >= stack + STACK_SIZE)
+	Script *self = VM->GetCurrentScript();
+	if (self->sp >= self->stack + STACK_SIZE)
 		Raise(StackUnderflow, "Stack underflow");
-	ReleaseValue(*sp);
+	ReleaseValue(*self->sp);
 #if _DEBUG
-	memset(sp, 0xab, sizeof(Value)); // fill with garbage
+	memset(self->sp, 0xab, sizeof(Value)); // fill with garbage
 #endif // _DEBUG
-	sp++;
+	self->sp++;
 }
 
-Value &Script::StackAt(int i)
+Value &StackAt(int i)
 {
+	Script *self = VM->GetCurrentScript();
+
 	Value *val;
 	if (i < 0)
 	{
-		val = sp - i - 1;
-		if (val >= bp)
+		val = self->sp - i - 1;
+		if (val >= self->bp)
 			Raise(AccessViolation, "Stack index out of bounds");
 	}
 	else
 	{
-		val = bp - i - 1;
-		if (val < sp)
+		val = self->bp - i - 1;
+		if (val < self->sp)
 			Raise(AccessViolation, "Stack index out of bounds");
 	}
 
 	return *val;
 }
 
-void Script::Sched()
+void Sched()
 {
 	ls_fiber_sched();
 
-	if (restart)
+	Script *self = VM->GetCurrentScript();
+	if (self->restart)
 	{
-		assert(sp == stack + STACK_SIZE);
-		longjmp(entryJmp, 1);
+		assert(self->sp == self->stack + STACK_SIZE);
+		longjmp(self->entryJmp, 1);
 	}
 }
 
-void Script::Terminate()
+void LS_NORETURN Terminate()
 {
-	vm->TerminateScript(this);
-
-	if (restart)
-	{
-		assert(sp == stack + STACK_SIZE);
-		longjmp(entryJmp, 1);
-	}
-
-	vm->Panic("Terminated script rescheduled without restart flag set");
+	VM->TerminateScript(VM->GetCurrentScript());
+	VM->Panic("Terminated script rescheduled");
 }
 
-void LS_NORETURN Script::Raise(ExceptionType type, const char *message)
+void LS_NORETURN Raise(ExceptionType type, const char *message)
 {
-	except = type;
-	exceptMessage = message;
+	Script *self = VM->GetCurrentScript();
+	self->except = type;
+	self->exceptMessage = message;
 	Terminate();
 }
 
-void Script::Sleep(double seconds)
+void Sleep(double seconds)
 {
-	sleepUntil = vm->GetTime() + seconds;
-	state = WAITING;
+	Script *self = VM->GetCurrentScript();
+	self->sleepUntil = VM->GetTime() + seconds;
+	self->state = WAITING;
 	Sched();
 }
 
-void Script::WaitForVoice(Voice *voice)
+void WaitForVoice(Voice *voice)
 {
-	waitVoice = voice;
-	state = WAITING;
+	Script *self = VM->GetCurrentScript();
+	self->waitVoice = voice;
+	self->state = WAITING;
 	Sched();
 }
 
-void Script::Glide(double x, double y, double t)
+void GlideTo(double x, double y, double t)
 {
+	Script *self = VM->GetCurrentScript();
+	Sprite *sprite = self->sprite;
+
 	if (t <= 0.0)
 	{
 		sprite->SetXY(x, y);
@@ -1179,36 +1218,19 @@ void Script::Glide(double x, double y, double t)
 	glide.y0 = sprite->GetY();
 	glide.x1 = x;
 	glide.y1 = y;
-	glide.start = vm->GetTime();
+	glide.start = VM->GetTime();
 	glide.end = glide.start + t;
 
-	state = WAITING;
+	self->state = WAITING;
 
 	Sched();
 }
 
-void Script::AskAndWait(const std::string &question)
+void AskWait(const std::string &question)
 {
-	askInput = true;
-	state = WAITING;
-	vm->EnqueueAsk(this, question);
+	Script *self = VM->GetCurrentScript();
+	self->askInput = true;
+	self->state = WAITING;
+	VM->EnqueueAsk(self, question);
 	Sched();
-}
-
-void Script::Dump()
-{
-	printf("Script %p\n", this);
-
-	if (state >= EMBRYO && state <= TERMINATED)
-		printf("    state = %s\n", GetStateName(state));
-	else
-		printf("    state = Unknown\n");
-
-	printf("    sprite = %s\n", sprite ? sprite->GetBase()->GetNameString() : "(null)");
-
-	printf("    sleepUntil = %g\n", sleepUntil);
-	printf("    waitInput = %s\n", waitInput ? "true" : "false");
-	printf("    stack = %p\n", stack);
-	printf("    sp = %p\n", sp);
-	printf("    pc = %p\n", pc); // TODO: display disassembly
 }

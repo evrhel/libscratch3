@@ -15,13 +15,11 @@ public:
 	Debugger &operator=(const Debugger &) = delete;
 	Debugger &operator=(Debugger &&) = delete;
 
-	Debugger(VirtualMachine *vm);
+	Debugger();
 	Debugger(const Debugger &) = delete;
 	Debugger(Debugger &&) = delete;
 	~Debugger();
 private:
-	VirtualMachine *_vm;
-
 	double _nextSampleTime;
 
 	float _audioHistogramTimes[AUDIO_HISTOGRAM_SIZE];

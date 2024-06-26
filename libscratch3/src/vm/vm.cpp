@@ -36,6 +36,9 @@ void SpriteList::Add(Sprite *sprite)
 	assert(sprite->_next == nullptr);
 	assert(sprite->_prev == nullptr);
 
+	if (_count == MAX_SPRITES)
+		VM->Panic("Too many sprites");
+
 	if (!_tail)
 		_head = _tail = sprite;
 	else
@@ -82,6 +85,8 @@ void SpriteList::Insert(Sprite *LS_RESTRICT before, Sprite *LS_RESTRICT sprite)
 
 	if (sprite->_next != nullptr || sprite->_prev != nullptr)
 		Remove(sprite); // remove and reinsert
+	else if (_count == MAX_SPRITES)
+		VM->Panic("Too many sprites");
 
 	if (before)
 	{
@@ -92,9 +97,6 @@ void SpriteList::Insert(Sprite *LS_RESTRICT before, Sprite *LS_RESTRICT sprite)
 			before->_next->_prev = sprite;
 		else
 			_tail = sprite;
-
-		if (before->_prev)
-			before->_prev->_next = sprite;
 
 		before->_next = sprite;
 	}
@@ -181,6 +183,8 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 {
 	assert(_bytecode == nullptr);
 
+	VM = this;
+
 	_bytecode = bytecode;
 	_bytecodeSize = size;
 	_progName = name;
@@ -206,6 +210,7 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 			{
 				Scratch3Logf(S, SCRATCH3_SEVERITY_ERROR, "Multiple stages found");
 				Cleanup();
+				VM = nullptr;
 				return SCRATCH3_ERROR_INVALID_PROGRAM;
 			}
 
@@ -216,7 +221,7 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 		as.Init(bytecode, size, &si, _options.stream);
 
 		// Create base sprite
-		Sprite *sprite = as.Instantiate(this, nullptr);
+		Sprite *sprite = as.Instantiate(nullptr);
 		_baseSprites[as.GetName()] = sprite;
 
 		// Create initializer, if any
@@ -226,7 +231,7 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 
 			SCRIPT_ALLOC_INFO &ai = _initScripts.back();
 			ai.sprite = sprite;
-			ai.info = (bc::Script *)(bytecode + si.initializer.offset);
+			ai.info = &si.initializer;
 		}
 
 		// Create script stubs
@@ -248,9 +253,11 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 	{
 		Scratch3Logf(S, SCRATCH3_SEVERITY_ERROR, "No stage found");
 		Cleanup();
+		VM = nullptr;
 		return SCRATCH3_ERROR_INVALID_PROGRAM;
 	}
 
+	VM = nullptr;
 	return SCRATCH3_ERROR_SUCCESS;
 }
 
@@ -262,13 +269,20 @@ static int ScriptEntryThunk(void *scriptPtr)
 	if (setjmp(script->entryJmp) == 1)
 	{
 		if (!script->restart)
-			script->vm->Panic("Script restarted without restart flag");
+			VM->Panic("Script restarted without restart flag");
 	}
 
 	script->restart = false;
+	script->exitCode = -1;
+	
+	// Reset the stack
+	VM->ReleaseStack(script);
 
-	// Run the script, does not return
-	script->Main();
+	// Run the script
+	script->exitCode = ScriptMain();
+
+	VM->TerminateScript(script);
+	abort(); // unreachable
 }
 
 int VirtualMachine::VMStart()
@@ -276,12 +290,18 @@ int VirtualMachine::VMStart()
 	if (_running)
 		return SCRATCH3_ERROR_ALREADY_RUNNING;
 
+	VM = this;
+
 	_shouldStop = false;
 
 	_nextScript = 0;
 
 	_lastSlowRender = -1e9;
 	_nextSchedule = 0;
+
+	memset(_scriptTable, 0, sizeof(_scriptTable));
+	_allocatedScripts = 0;
+	_nextEntry = 0;
 
 	// temporary panic handler
 	_panicJmpSet = false;
@@ -307,7 +327,7 @@ int VirtualMachine::VMStart()
 
 	// Initialize graphics resources
 	for (AbstractSprite *as = _abstractSprites; as < _abstractSprites + _nAbstractSprites; as++)
-		as->Load(this);
+		as->Load();
 
 	_messageListeners.clear();
 	_keyListeners.clear();
@@ -320,21 +340,17 @@ int VirtualMachine::VMStart()
 		Opcode opcode = (Opcode)*ptr;
 		ptr++;
 
-		STATIC_EVENT_HANDLER seh;
-		seh.ai = ai;
-		seh.script = nullptr;
-
 		switch (opcode)
 		{
 		default:
 			Panic("Script entry is not an event");
 		case Op_onflag:
-			_flagListeners.push_back(seh);
+			_flagListeners.push_back(AllocScript(ai));
 			break;
 		case Op_onkey: {
 			uint16_t sc = *(uint16_t *)ptr;
 			ptr += sizeof(uint16_t);
-			_keyListeners[(SDL_Scancode)sc].push_back(seh);
+			_keyListeners[(SDL_Scancode)sc].push_back(AllocScript(ai));
 			break;
 		}
 		case Op_onclick:
@@ -355,7 +371,7 @@ int VirtualMachine::VMStart()
 		case Op_onevent: {
 			char *evt = (char *)(_bytecode + *(uint64_t *)ptr);
 			ptr += sizeof(uint64_t);
-			_messageListeners[evt].push_back(seh);
+			_messageListeners[evt].push_back(AllocScript(ai));
 			break;
 		}
 		case Op_onclone:
@@ -409,7 +425,7 @@ int VirtualMachine::VMStart()
 		if (script->state != TERMINATED)
 			Panic("Initialization script did not terminate");
 
-		CloseScript(script);
+		FreeScript(script);
 	}
 	_initScripts.clear();
 
@@ -417,11 +433,14 @@ int VirtualMachine::VMStart()
 
 	_lastExecution = ls_nanotime();
 
+	VM = nullptr;
 	return 0;
 }
 
 int VirtualMachine::VMUpdate()
 {
+	VM = this;
+
 	// set panic handler
 	if (!_panicJmpSet)
 	{
@@ -434,12 +453,16 @@ int VirtualMachine::VMUpdate()
 
 			// panic
 			printf("<PANIC> %s\n", _panicMessage);
+			VM = nullptr;
 			return -1;
 		}
 	}
 
 	if (_shouldStop)
+	{
+		VM = nullptr;
 		return 1;
+	}
 
 	_io.PollEvents();
 
@@ -461,6 +484,7 @@ int VirtualMachine::VMUpdate()
 
 	Render();
 
+	VM = nullptr;
 	return 0;
 }
 
@@ -498,6 +522,8 @@ void VirtualMachine::SendFlagClicked()
 
 void VirtualMachine::Send(const std::string &message)
 {
+	assert(VM == this);
+
 	auto it = _messageListeners.find(message);
 	if (it == _messageListeners.end())
 		return;
@@ -509,9 +535,11 @@ void VirtualMachine::Send(const std::string &message)
 	// fair scheduling.
 	_nextScript = 0;
 
+	// TODO: this does not handle sending messages to self
+
 	// Start all message handlers
-	for (STATIC_EVENT_HANDLER &seh : it->second)
-		RunEventHandler(&seh);
+	for (Script *s : it->second)
+		RestartScript(s);
 }
 
 void VirtualMachine::SendAndWait(const std::string &message)
@@ -557,6 +585,8 @@ Value &VirtualMachine::GetStaticVariable(uint32_t id)
 
 Sprite *VirtualMachine::FindSprite(const Value &name)
 {
+	assert(VM == this);
+
 	if (name.type != ValueType_String)
 		return nullptr;
 
@@ -571,6 +601,8 @@ void VirtualMachine::ResetTimer()
 
 void VirtualMachine::StartVoice(Voice *voice)
 {
+	assert(VM == this);
+
 	if (voice->IsPlaying())
 	{
 		voice->Play();
@@ -583,6 +615,8 @@ void VirtualMachine::StartVoice(Voice *voice)
 
 void VirtualMachine::StopAllSounds()
 {
+	assert(VM == this);
+
 	for (Voice *voice : _activeVoices)
 		voice->Stop();
 	_activeVoices.clear();
@@ -590,6 +624,8 @@ void VirtualMachine::StopAllSounds()
 
 void VirtualMachine::OnClick(int64_t x, int64_t y)
 {
+	assert(VM == this);
+
 	Vector2 point(x, y);
 	for (Sprite *sprite = _spriteList->Tail(); sprite; sprite = sprite->GetPrev())
 	{
@@ -599,8 +635,8 @@ void VirtualMachine::OnClick(int64_t x, int64_t y)
 		if (sprite->TouchingPoint(point))
 		{
 			// sprite was clicked
-			for (auto &seh : sprite->GetBase()->GetClickListeners())
-				_clickQueue.push(const_cast<STATIC_EVENT_HANDLER *>(&seh));
+			for (Script *s : sprite->GetBase()->GetClickListeners())
+				_clickQueue.push(s);
 			break;
 		}
 	}
@@ -608,6 +644,8 @@ void VirtualMachine::OnClick(int64_t x, int64_t y)
 
 Script *VirtualMachine::AllocScript(const SCRIPT_ALLOC_INFO &ai)
 {
+	assert(VM == this);
+
 	if (ai.sprite == nullptr || ai.info == nullptr)
 		Panic("Invalid script start info");
 
@@ -621,9 +659,14 @@ Script *VirtualMachine::AllocScript(const SCRIPT_ALLOC_INFO &ai)
 	assert(script->state == EMBRYO);
 
 	script->sprite = ai.sprite;
-	script->fiber = ls_fiber_create(ScriptEntryThunk, script);
+
 	if (!script->fiber)
-		Panic("Failed to create fiber");
+	{
+		script->fiber = ls_fiber_create(ScriptEntryThunk, script);
+		if (!script->fiber)
+			Panic("Failed to create fiber");
+	}
+
 	script->sleepUntil = 0.0;
 	script->waitInput = false;
 	script->askInput = false;
@@ -631,46 +674,81 @@ Script *VirtualMachine::AllocScript(const SCRIPT_ALLOC_INFO &ai)
 	script->pc = script->entry;
 	script->autoStart = false;
 	script->scheduled = false;
-	script->restart = false;
+	script->restart = true;
 
-	script->stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
 	if (!script->stack)
 	{
-		ls_close(script->fiber);
-		Panic("Failed to allocate stack");
+		script->stack = (Value *)malloc(STACK_SIZE * sizeof(Value));
+		if (!script->stack)
+		{
+			ls_close(script->fiber), script->fiber = nullptr;
+			Panic("Failed to allocate stack");
+		}
 	}
 
 	script->sp = script->stack + STACK_SIZE;
+	script->bp = script->sp;
 
 	script->except = Exception_None;
 	script->exceptMessage = nullptr;
 
 	script->state = SUSPENDED;
 
-	script->refCount = 1;
-
 	return script;
 }
 
-void VirtualMachine::CloseScript(Script *script)
+void VirtualMachine::FreeScript(Script *script)
 {
+	assert(VM == this);
+
+	size_t index = script - _scriptTable;
+	if (index >= MAX_SCRIPTS)
+		Panic("Script is not owned by this VM");
+	
+	// Release the script
+	// We reuse the fiber and the allocated stack
+
+	script->sprite = nullptr;
+	script->sleepUntil = 0.0;
+	script->waitInput = false;
+	script->askInput = false;
+	script->waitVoice = nullptr;
+	script->ticks = 0;
+	script->entry = 0;
+	script->pc = 0;
+	
+	ReleaseStack(script);
+
+	script->autoStart = false;
+	script->scheduled = false;
+	script->restart = false;
+
+	script->except = Exception_None;
+	script->exceptMessage = nullptr;
+
+	script->exitCode = 0;
+
+	script->state = EMBRYO; // set last!
+
+	if (index < _nextEntry)
+		_nextEntry = index;
+
+	_allocatedScripts--;
+}
+
+void VirtualMachine::ReleaseStack(Script *script)
+{
+	assert(VM == this);
+
 	size_t index = script - _scriptTable;
 	if (index >= MAX_SCRIPTS)
 		Panic("Script is not owned by this VM");
 
 	if (script->state == EMBRYO)
-		Panic("Closing unallocated script");
+		Panic("Unallocated script");
 
-	assert(script->refCount != 0);
+	assert(script->stack != nullptr);
 
-	if (--script->refCount != 0)
-		return;
-	
-	// Release the script
-
-	assert(script->fiber != nullptr);
-
-	// Release stack
 	Value *const stackEnd = script->stack + STACK_SIZE;
 	while (script->sp < stackEnd)
 	{
@@ -680,30 +758,25 @@ void VirtualMachine::CloseScript(Script *script)
 
 	assert(script->sp == stackEnd);
 
-	free(script->stack);
-
-	ls_close(script->fiber);
-
-	memset(script, 0, sizeof(Script));
-	script->state = EMBRYO;
-
-	if (index < _nextEntry)
-		_nextEntry = index;
+	script->bp = script->sp;
 }
 
 Script *VirtualMachine::OpenScript(unsigned long id)
 {
+	assert(VM == this);
+
 	if (id >= MAX_SCRIPTS)
 		Panic("Script ID out of range");
 	Script *script = _scriptTable + id;
 	if (script->state == EMBRYO)
 		return nullptr;
-	script->refCount++;
 	return script;
 }
 
 void VirtualMachine::RestartScript(Script *script)
 {
+	assert(VM == this);
+
 	size_t index = script - _scriptTable;
 	if (index >= MAX_SCRIPTS)
 		Panic("Script is not owned by this VM");
@@ -722,6 +795,8 @@ void VirtualMachine::RestartScript(Script *script)
 
 void VirtualMachine::TerminateScript(Script *script)
 {
+	assert(VM == this);
+
 	size_t index = script - _scriptTable;
 	if (index >= MAX_SCRIPTS)
 		Panic("Script is not owned by this VM");
@@ -730,7 +805,10 @@ void VirtualMachine::TerminateScript(Script *script)
 		Panic("Unallocated script");
 
 	if (script->state == TERMINATED)
+	{
+		assert(_current != script);
 		return; // already terminated
+	}
 
 	script->state = TERMINATED;
 
@@ -738,16 +816,45 @@ void VirtualMachine::TerminateScript(Script *script)
 	{
 		// yield control to the VM
 		ls_fiber_sched();
+		assert(_current == script);
 
-		abort(); // should be unreachable
+		if (script->restart)
+			longjmp(script->entryJmp, 1);
+
+		Panic("Terminated script rescheduled");
 	}
 }
 
-void VirtualMachine::RunEventHandler(STATIC_EVENT_HANDLER *seh)
+void VirtualMachine::DeleteSprite(Sprite *sprite)
 {
-	if (!seh->script)
-		seh->script = AllocScript(seh->ai);
-	RestartScript(seh->script);
+	assert(VM == this);
+	assert(_current == nullptr);
+
+	for (Script *s = _scriptTable; s < _scriptTable + MAX_SCRIPTS; s++)
+	{
+		if (s->sprite == sprite)
+			FreeScript(s);
+	}
+
+	delete _spriteList->Remove(sprite);
+}
+
+void VirtualMachine::DeleteClones()
+{
+	assert(VM == this);
+	assert(_current == nullptr);
+
+	for (Sprite *s = _spriteList->Head(); s;)
+	{
+		if (s->GetInstanceId() == BASE_INSTANCE_ID)
+			s = s->GetNext();
+		else
+		{
+			Sprite *next = s->GetNext();
+			DeleteSprite(s);
+			s = next;
+		}
+	}
 }
 
 void VirtualMachine::OnKeyDown(int scancode)
@@ -756,15 +863,15 @@ void VirtualMachine::OnKeyDown(int scancode)
 	if (it == _keyListeners.end())
 		return;
 
-	for (STATIC_EVENT_HANDLER &seh : it->second)
-		RunEventHandler(&seh);
+	for (Script *s : it->second)
+		RestartScript(s);
 
 	// "any" key
 	it = _keyListeners.find((SDL_Scancode)-1);
 	if (it != _keyListeners.end())
 	{
-		for (STATIC_EVENT_HANDLER &seh : it->second)
-			RunEventHandler(&seh);
+		for (Script *s : it->second)
+			RestartScript(s);
 	}
 }
 
@@ -775,7 +882,7 @@ void VirtualMachine::OnResize()
 }
 
 VirtualMachine::VirtualMachine(Scratch3 *S, const Scratch3VMOptions *options) :
-	S(S), _io(this), _debug(this)
+	S(S), _io(this)
 {
 	_options = *options;
 	if (_options.framerate <= 0)
@@ -836,7 +943,7 @@ void VirtualMachine::Render()
 	_render->BeginRender();
 
 	for (Sprite *s = _spriteList->Head(); s; s = s->GetNext())
-		s->Update(this);
+		s->Update();
 
 	_render->Render();
 
@@ -900,19 +1007,28 @@ void VirtualMachine::Render()
 
 void VirtualMachine::Cleanup()
 {
+	VM = this;
+
 	for (unsigned long id = 0; id < MAX_SCRIPTS; id++)
 	{
 		Script &s = _scriptTable[id];
 		if (s.state != EMBRYO)
-			CloseScript(&s);
+			FreeScript(&s);
+
+		if (s.stack)
+			free(s.stack), s.stack = nullptr;
+
+		if (s.fiber)
+			ls_close(s.fiber);
+
+		memset(&s, 0, sizeof(Script));
 	}
 
 	ls_convert_to_thread();
 
 	if (_spriteList)
 	{
-		for (Sprite *s = _spriteList->Head(); s; s = s->GetNext())
-			delete s;
+		// will delete all sprites
 		delete _spriteList, _spriteList = nullptr;
 	}
 
@@ -945,10 +1061,15 @@ void VirtualMachine::Cleanup()
 	_running = false;
 
 	_baseSprites.clear();
+
+	VM = nullptr;
 }
 
 void VirtualMachine::DispatchEvents()
 {
+	assert(VM == this);
+	assert(_current == nullptr);
+
 	// Flag clicked
 	if (_flagClicked)
 	{
@@ -961,11 +1082,11 @@ void VirtualMachine::DispatchEvents()
 				continue;
 			TerminateScript(s);
 		}
-		
-		DestroyAllClones();
 
-		for (STATIC_EVENT_HANDLER &seh : _flagListeners)
-			RunEventHandler(&seh);
+		DeleteClones();
+
+		for (Script *s : _flagListeners)
+			RestartScript(s);
 
 		_flagClicked = false;
 	}
@@ -975,7 +1096,7 @@ void VirtualMachine::DispatchEvents()
 	{
 		while (!_clickQueue.empty())
 		{
-			RunEventHandler(_clickQueue.front());
+			RestartScript(_clickQueue.front());
 			_clickQueue.pop();
 		}
 	}
@@ -1002,20 +1123,24 @@ void VirtualMachine::Scheduler()
 		Script &script = *(_scriptTable + _nextScript);
 		_nextScript++;
 
+		if (script.state == EMBRYO)
+			continue; // not allocated
+
 		if (script.scheduled)
 			continue; // already scheduled this frame
 
-		if (!script.fiber)
-			continue; // cannot be scheduled
-
-		if (script.state == EMBRYO || script.state == TERMINATED)
+		if (script.state == SUSPENDED)
 		{
 			if (!script.autoStart)
-				continue; // not active
-			script.Start();
+				continue;
+			script.state = RUNNABLE;
 		}
-
-		_current = &script;
+		else if (script.state == TERMINATED)
+		{
+			if (!script.autoStart)
+				continue;
+			RestartScript(&script);
+		}
 
 		if (script.state == WAITING)
 		{
@@ -1059,6 +1184,7 @@ void VirtualMachine::Scheduler()
 		script.scheduled = true;
 
 		// schedule the script
+		_current = &script;
 		ls_fiber_switch(script.fiber);
 		_current = nullptr;
 
@@ -1082,20 +1208,20 @@ void VirtualMachine::Scheduler()
 			return;
 		}
 
-		if (script.state == TERMINATED)
-			script.Reset(); // script terminated, reset it
+		if (script.sprite->IsDeleted())
+			DeleteSprite(script.sprite);
 	}
 
 	// Reset scheduled flag for next frame
-	for (Script &script : _scripts)
-		script.scheduled = false;
+	for (Script *s = _scriptTable; s < _scriptTable + MAX_SCRIPTS; s++)
+		s->scheduled = false;
 
 	// remove any playing sounds from the list
-	for (auto it = _playingSounds.begin(); it != _playingSounds.end();)
+	for (auto it = _activeVoices.begin(); it != _activeVoices.end();)
 	{
-		Sound *snd = *it;
-		if (!snd->IsPlaying())
-			it = _playingSounds.erase(it);
+		Voice *voice = *it;
+		if (!voice->IsPlaying())
+			it = _activeVoices.erase(it);
 		else
 			it++;
 	}
@@ -1103,3 +1229,5 @@ void VirtualMachine::Scheduler()
 	_activeScripts = activeScripts;
 	_waitingScripts = waitingScripts;
 }
+
+LS_THREADLOCAL VirtualMachine *VM = nullptr;

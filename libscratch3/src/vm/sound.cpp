@@ -156,11 +156,18 @@ bool AbstractSound::Load()
 	return true;
 }
 
+Voice *AbstractSound::CreateVoice()
+{
+	// TODO: implement
+	return nullptr;
+}
+
 AbstractSound::AbstractSound() :
 	_streamed(false),
 	_data(nullptr), _dataSize(0),
 	_streamSize(0), _audioStream(nullptr),
-	_frameCount(0), _nChannels(0), _sampleRate(0)
+	_frameCount(0), _nChannels(0), _sampleRate(0),
+	_voiceCount(0)
 {
 	InitializeValue(_name);
 }
@@ -287,7 +294,7 @@ int Voice::paMonoCallback(
 	(void)statusFlags;
 
 	assert(framesPerBuffer == BUFFER_LENGTH);
-	assert(sound->_nChannels == 1);
+	assert(voice->GetSound()->GetChannelCount() == 1);
 
 	// TODO: write to a stereo buffer
 
@@ -421,7 +428,7 @@ int Voice::paStereoCallback(
 	(void)statusFlags;
 
 	assert(framesPerBuffer == BUFFER_LENGTH);
-	assert(sound->_nChannels == 2);
+	assert(voice->GetSound()->GetChannelCount() == 2);
 
 	if (resampleRatio == 1.0f)
 	{

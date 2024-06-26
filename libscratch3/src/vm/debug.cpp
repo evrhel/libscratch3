@@ -15,8 +15,8 @@ void Debugger::Render()
 	{
 		if (ImGui::BeginTabBar("DebugTabs"))
 		{
-			GLRenderer *render = _vm->GetRenderer();
-			auto &io = _vm->GetIO();
+			GLRenderer *render = VM->GetRenderer();
+			auto &io = VM->GetIO();
 
 			SDL_Window *window = render->GetWindow();
 			int width, height;
@@ -134,7 +134,7 @@ void Debugger::Render()
 				ls_get_time(&ts);
 
 				ImGui::SeparatorText("Timers");
-				ImGui::LabelText("Timer", "%.2f", _vm->GetTimer());
+				ImGui::LabelText("Timer", "%.2f", VM->GetTimer());
 				ImGui::LabelText("Year", "%d", ts.year);
 				ImGui::LabelText("Month", "%d", ts.month);
 				ImGui::LabelText("Date", "%d", ts.day);
@@ -156,29 +156,29 @@ void Debugger::Render()
 
 			if (ImGui::BeginTabItem("Virtual Machine"))
 			{
-				int framerate = _vm->GetOptions().framerate;
+				int framerate = VM->GetOptions().framerate;
 
 				ImGui::SeparatorText("Information");
-				ImGui::LabelText("Program Name", "%s", _vm->GetProgramName().c_str());
+				ImGui::LabelText("Program Name", "%s", VM->GetProgramName().c_str());
 				ImGui::LabelText("Framerate", "%d Hz", framerate);
 
 				constexpr double kNsToSec = 1.0 / 1000000000;
 
 				ImGui::SeparatorText("Performance");
-				ImGui::LabelText("Interpreter Time", "%.2f ms", (_vm->_interpreterTime * kNsToSec * 1000));
-				ImGui::LabelText("Execution Rate", "%.0f kHz", 1 / (1000 * kNsToSec * _vm->_interpreterTime));
-				ImGui::LabelText("Quota", "%.2f%%", (_vm->_interpreterTime * kNsToSec * framerate) * 100.0);
-				ImGui::LabelText("Idle", "%.2f%%", (1.0 - _vm->_interpreterTime * kNsToSec * _vm->_render->GetFramerate()) * 100.0);
+				ImGui::LabelText("Interpreter Time", "%.2f ms", (VM->_interpreterTime * kNsToSec * 1000));
+				ImGui::LabelText("Execution Rate", "%.0f kHz", 1 / (1000 * kNsToSec * VM->_interpreterTime));
+				ImGui::LabelText("Quota", "%.2f%%", (VM->_interpreterTime * kNsToSec * framerate) * 100.0);
+				ImGui::LabelText("Idle", "%.2f%%", (1.0 - VM->_interpreterTime * kNsToSec * render->GetFramerate()) * 100.0);
 
 				ImGui::SeparatorText("Scheduler");
-				ImGui::LabelText("Suspended", "%s", _vm->IsSuspended() ? "true" : "false");
-				ImGui::LabelText("Time", "%.2f", _vm->GetTime());
-				ImGui::LabelText("Script Count", "%zu", _vm->_scripts.size());
-				ImGui::LabelText("Running", "%d", _vm->_activeScripts);
-				ImGui::LabelText("Waiting", "%d", _vm->_waitingScripts);
+				ImGui::LabelText("Suspended", "%s", VM->IsSuspended() ? "true" : "false");
+				ImGui::LabelText("Time", "%.2f", VM->GetTime());
+				ImGui::LabelText("Script Count", "%zu/%zu", VM->GetAllocatedScripts(), (size_t)MAX_SCRIPTS);
+				ImGui::LabelText("Running", "%d", VM->_activeScripts);
+				ImGui::LabelText("Waiting", "%d", VM->_waitingScripts);
 
 				ImGui::SeparatorText("Global Variables");
-				uint8_t *bytecode = _vm->GetBytecode();
+				uint8_t *bytecode = VM->GetBytecode();
 				bc::Header *header = (bc::Header *)bytecode;
 				bc::uint64 count = *(bc::uint64 *)(bytecode + header->rdata);
 				Value *vars = (Value *)(bytecode + header->data);
@@ -222,35 +222,48 @@ void Debugger::Render()
 				ImGui::SeparatorText("Control");
 
 				if (ImGui::Button("Send Flag Clicked"))
-					_vm->SendFlagClicked();
+					VM->SendFlagClicked();
 
-				if (_vm->IsSuspended())
+				if (VM->IsSuspended())
 				{
 					if (ImGui::Button("Resume"))
-						_vm->VMResume();
+						VM->VMResume();
 				}
 				else
 				{
 					if (ImGui::Button("Suspend"))
-						_vm->VMSuspend();
+						VM->VMSuspend();
 				}
 
 				if (ImGui::Button("Terminate"))
-					_vm->VMTerminate();
+					VM->VMTerminate();
 
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Sprites"))
 			{
-				ImGui::SeparatorText("Information");
-				ImGui::LabelText("Sprite Count", "%d", (int)(_vm->_spritesEnd - _vm->_sprites - 1));
+				AbstractSprite *abstractSprites = VM->GetAbstractSprites();
+				size_t nAbstractSprites = VM->GetAbstractSpriteCount();
 
-				ImGui::SeparatorText("Sprites");
-				for (Sprite *s = _vm->_sprites; s < _vm->_spritesEnd; s++)
+				ImGui::SeparatorText("Information");
+				ImGui::LabelText("Sprite Count", "%zu", nAbstractSprites);
+				ImGui::LabelText("Instantiations", "%zu/%zu", VM->GetSpriteList()->Count(), (size_t)MAX_SPRITES);
+
+				ImGui::SeparatorText("Abstract Sprites");
+				for (size_t i = 0; i < nAbstractSprites; i++)
 				{
-					if (ImGui::CollapsingHeader(s->GetNameString()))
-						s->DebugUI();
+					AbstractSprite &as = abstractSprites[i];
+					char name[128];
+					snprintf(name, sizeof(name), "%p (%s)", &as, as.GetNameString());
+
+					if (ImGui::CollapsingHeader(name))
+					{
+						ImGui::LabelText("Name", "%s", as.GetNameString());
+						ImGui::LabelText("Costume Count", "%lld", as.CostumeCount());
+						ImGui::LabelText("Sound Count", "%lld", as.GetSoundCount());
+						ImGui::LabelText("Field Count", "%zu", as.GetFieldCount());
+					}
 				}
 
 				ImGui::EndTabItem();
@@ -279,19 +292,20 @@ void Debugger::Render()
 				ImGui::SameLine();
 				ImGui::Checkbox("Embryo", &showEmbryo);
 
-				for (Script &script : _vm->_scripts)
+				Script *scriptTable = VM->GetScriptTable();
+				for (Script *script = scriptTable; script < scriptTable + MAX_SCRIPTS; script++)
 				{
-					switch (script.state)
+					switch (script->state)
 					{
 					default:
 						abort();
 						break;
 					case EMBRYO:
-						if (!showEmbryo)
-							continue;
-						break;
+						//if (!showEmbryo)
+						//	continue;
+						//break;
+						continue;
 					case RUNNABLE:
-					case RUNNING:
 						if (!showRunning)
 							continue;
 						break;
@@ -311,20 +325,22 @@ void Debugger::Render()
 
 
 					char name[128];
-					snprintf(name, sizeof(name), "%p (%s)", &script, script.sprite->GetNameString());
+					snprintf(name, sizeof(name), "%p (%s)", &script, script->sprite->GetBase()->GetNameString());
 
 					if (ImGui::CollapsingHeader(name))
 					{
-						double wakeup = script.sleepUntil ? script.sleepUntil - _vm->GetTime() : 0.0;
+						double wakeup = script->sleepUntil ? script->sleepUntil - VM->GetTime() : 0.0;
 						if (wakeup < 0.0)
 							wakeup = 0.0;
 
-						ImGui::LabelText("State", "%s", GetStateName(script.state));
-						ImGui::LabelText("Sprite", "%s", script.sprite->GetNameString());
+						ImGui::LabelText("State", "%s", GetStateName(script->state));
+						ImGui::LabelText("Sprite", "%s", script->sprite->GetBase()->GetNameString());
 						ImGui::LabelText("Wakeup", "%.2f", wakeup);
-						ImGui::LabelText("Wait Input", script.waitInput ? "true" : "false");
-						ImGui::LabelText("Ask Input", script.askInput ? "true" : "false");
-						ImGui::LabelText("Sound Wait", script.waitSound ? script.waitSound->GetNameString() : "(none)");
+						ImGui::LabelText("Wait Input", script->waitInput ? "true" : "false");
+						ImGui::LabelText("Ask Input", script->askInput ? "true" : "false");
+						ImGui::LabelText("Sound Wait", script->waitVoice ?
+							script->waitVoice->GetSound()->GetName()->str :
+							"(none)");
 					}
 				}
 
@@ -339,10 +355,10 @@ void Debugger::Render()
 
 				ImGui::SeparatorText("Information");
 
-				ImGui::LabelText("Host Supports Audio", "%s", _vm->HasAudio() ? "true" : "false");
+				ImGui::LabelText("Host Supports Audio", "%s", VM->HasAudio() ? "true" : "false");
 				ImGui::LabelText("Buffer Length", "%d", BUFFER_LENGTH);
 
-				if (_vm->HasAudio())
+				if (VM->HasAudio())
 				{
 					const PaDeviceInfo *info = Pa_GetDeviceInfo(Pa_GetDefaultOutputDevice());
 					ImGui::LabelText("Output Device", "%s", info->name);
@@ -353,24 +369,21 @@ void Debugger::Render()
 				}
 
 				STEREO_SAMPLE sample{ 0.0f, 0.0f };
-				int loaded = 0;
-				for (Sound *sound : _vm->GetSounds())
+				for (Voice *voice : VM->GetVoices())
 				{
-					if (sound->IsLoaded())
-						loaded++;
-					sample.L += sound->GetCurrentSample().L;
-					sample.R += sound->GetCurrentSample().R;
+					sample.L += voice->GetSample().L;
+					sample.R += voice->GetSample().R;
 				}
 
-				ImGui::LabelText("Sounds Loaded", "%d/%zu", loaded, _vm->GetSounds().size());
+				ImGui::LabelText("Voice Count", "%d/%zu", VM->GetVoices().size());
 
 				float oldLMax = _audioHistogramLMax, oldRMax = _audioHistogramRMax;
 				float oldLMin = _audioHistogramLMin, oldRMin = _audioHistogramRMin;
 
 				// shift histogram
-				if (_nextSampleTime < _vm->GetTime())
+				if (_nextSampleTime < VM->GetTime())
 				{
-					_nextSampleTime = _vm->GetTime() + (1.0 / 60.0);
+					_nextSampleTime = VM->GetTime() + (1.0 / 60.0);
 
 					_audioHistogramLMax = -INFINITY, _audioHistogramRMax = -INFINITY;
 					_audioHistogramLMin = INFINITY, _audioHistogramRMin = INFINITY;
@@ -476,32 +489,32 @@ void Debugger::Render()
 
 				ImGui::Checkbox("Unloaded", &showUnloaded);
 
-				for (Sound *s : _vm->GetSounds())
+				for (Voice *v : VM->GetVoices())
 				{
-					if (s->IsLoaded())
-					{
-						if (s->IsPlaying() && !showPlaying)
+					//if (v->IsLoaded())
+					//{
+						if (v->IsPlaying() && !showPlaying)
 							continue;
 
-						if (!s->IsPlaying() && !showStopped)
+						if (!v->IsPlaying() && !showStopped)
 							continue;
-					}
-					else if (!showUnloaded)
-						continue;
+					//}
+					//else if (!showUnloaded)
+					//	continue;
 
 					char name[128];
-					snprintf(name, sizeof(name), "%p (%s)", s, s->GetNameString());
+					snprintf(name, sizeof(name), "%p (%s)", v, v->GetSound()->GetName()->str);
 
 					if (ImGui::CollapsingHeader(name))
 					{
-						unsigned long pos = s->GetStreamPos();
-						unsigned long size = s->GetSampleCount();
-						int rate = s->GetSampleRate();
+						unsigned long pos = v->GetStreamPos();
+						unsigned long size = v->GetSound()->GetFrameCount();
+						int rate = v->GetSound()->GetSampleRate();
 
-						double duration = s->GetDuration();
+						double duration = v->GetSound()->GetDuration();
 						double location = duration * pos / size;
 
-						ImGui::LabelText("Name", "%s", s->GetNameString());
+						ImGui::LabelText("Name", "%s", v->GetSound()->GetName()->str);
 
 						ImGui::LabelText("Rate", "%d Hz", rate);
 
@@ -513,14 +526,14 @@ void Debugger::Render()
 						sec = location - min * 60;
 						ImGui::LabelText("Position", "%d:%02d (%.2f sec)", min, sec, location);
 
-						ImGui::LabelText("Channels", "%d", s->GetChannelCount());
+						ImGui::LabelText("Channels", "%d", v->GetSound()->GetChannelCount());
 
-						ImGui::LabelText("Loaded", s->IsLoaded() ? "true" : "false");
-						if (s->IsLoaded())
-						{
-							ImGui::LabelText("Playing", s->IsPlaying() ? "true" : "false");
-							ImGui::LabelText("CPU", "%.2f%%", Pa_GetStreamCpuLoad(s->GetStream()) * 100.0);
-						}
+						//ImGui::LabelText("Loaded", s->IsLoaded() ? "true" : "false");
+						//if (s->IsLoaded())
+						//{
+						ImGui::LabelText("Playing", v->IsPlaying() ? "true" : "false");
+						//ImGui::LabelText("CPU", "%.2f%%", Pa_GetStreamCpuLoad(v->GetStream()) * 100.0);
+						//}
 					}
 				}
 
@@ -533,8 +546,7 @@ void Debugger::Render()
 	ImGui::End();
 }
 
-Debugger::Debugger(VirtualMachine *vm) :
-	_vm(vm)
+Debugger::Debugger()
 {
 	memset(_audioHistogramTimes, 0, sizeof(_audioHistogramTimes));
 	for (int i = 0; i < AUDIO_HISTOGRAM_SIZE; i++)

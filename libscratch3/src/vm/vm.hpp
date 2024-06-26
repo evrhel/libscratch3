@@ -23,6 +23,11 @@
 
 #define MAX_SCRIPTS 512
 
+// Stack size for each script
+#define STACK_SIZE 512
+
+#define MAX_SPRITES 512
+
 class Loader;
 class VirtualMachine;
 class AbstractSprite;
@@ -204,6 +209,9 @@ public:
 
 	inline double GetTimer() const { return GetTime() - _timerStart; }
 
+	constexpr AbstractSprite *GetAbstractSprites() const { return _abstractSprites; }
+	constexpr size_t GetAbstractSpriteCount() const { return _nAbstractSprites; }
+
 	constexpr SpriteList *GetSpriteList() const { return _spriteList; }
 
 	Sprite *FindSprite(const Value &name);
@@ -229,24 +237,23 @@ public:
 
 	constexpr const std::vector<SCRIPT_ALLOC_INFO> &GetScriptStubs() const { return _scriptStubs; }
 
-	constexpr const Script *GetScriptTable() const { return _scriptTable; }
+	constexpr Script *GetScriptTable() { return _scriptTable; }
+	constexpr size_t GetAllocatedScripts() const { return _allocatedScripts; }
 
 	//! \brief Allocate a script
 	//! 
 	//! Allocates a script in the script table. The script will be
 	//! put into a suspended state upon return. Start the script by
-	//! calling Script::Start. Release the returned script by calling
-	//! CloseScript.
+	//! calling RestartScript.
 	//! 
 	//! \param ai The allocation information
 	//! 
 	//! \return The allocated script, panics on failure
 	Script *AllocScript(const SCRIPT_ALLOC_INFO &ai);
 
-	//! \brief Close a handle to a script
-	//! 
-	//! \param script The script to close
-	void CloseScript(Script *script);
+	void FreeScript(Script *script);
+
+	void ReleaseStack(Script *script);
 
 	//! \brief Get a script by ID
 	//! 
@@ -271,12 +278,10 @@ public:
 	//! \param script The script to terminate
 	void TerminateScript(Script *script);
 
-	constexpr Script *GetCurrentScript() const { return _current; }
+	void DeleteSprite(Sprite *sprite);
+	void DeleteClones();
 
-	//! \brief Run an event handler
-	//! 
-	//! \param seh The event handler to run
-	void RunEventHandler(STATIC_EVENT_HANDLER *seh);
+	constexpr Script *GetCurrentScript() const { return _current; }
 
 	constexpr void Reschedule() { _nextScript = 0; }
 
@@ -323,12 +328,12 @@ private:
 	std::vector<SCRIPT_ALLOC_INFO> _scriptStubs; // Script start stubs
 
 	std::vector<SCRIPT_ALLOC_INFO> _initScripts; // Initialization scripts
-	std::vector<STATIC_EVENT_HANDLER> _flagListeners; // Flag listeners
-	std::unordered_map<std::string, std::vector<STATIC_EVENT_HANDLER>> _messageListeners; // Message listeners
-	std::unordered_map<SDL_Scancode, std::vector<STATIC_EVENT_HANDLER>> _keyListeners; // Key listeners
+	std::vector<Script *> _flagListeners; // Flag listeners
+	std::unordered_map<std::string, std::vector<Script *>> _messageListeners; // Message listeners
+	std::unordered_map<SDL_Scancode, std::vector<Script *>> _keyListeners; // Key listeners
 	
 	bool _flagClicked; // Flag clicked event
-	std::queue<STATIC_EVENT_HANDLER *> _clickQueue; // Scripts to send the click event
+	std::queue<Script *> _clickQueue; // Scripts to send the click event
 
 	std::queue<std::pair<Script *, std::string>> _askQueue; // Scripts waiting for input
 	Script *_asker; // Current input requester
@@ -413,3 +418,6 @@ private:
 
 	friend class Debugger;
 };
+
+//! \brief Current virtual machine
+extern LS_THREADLOCAL VirtualMachine *VM;

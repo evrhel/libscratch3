@@ -62,6 +62,8 @@ static inline bool PrepareSprite(const Sprite *sprite, SpriteShader *ss)
     ss->SetGhostEffect(gec.GetGhostFactor());
     ss->SetTexture(tex);
     ss->SetColor(Vector4(1.0f));
+
+    return true;
 }
 
 static bool CreateQuad(GLuint *vao, GLuint *vbo, GLuint *ebo)
@@ -386,11 +388,12 @@ void GLRenderer::Render()
     _spriteShader->SetProj(_proj);
 
     glBindVertexArray(_quadVao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEbo);
 
     _objectsDrawn++;
     for (Sprite *s = _sprites->Head(); s; s = s->GetNext())
     {
-        if (!PrepareSprite(s, _spriteShader));
+        if (!PrepareSprite(s, _spriteShader))
             continue; // not visible
 
         glDrawElements(GL_TRIANGLES, QUAD_INDEX_COUNT, GL_UNSIGNED_BYTE, 0);

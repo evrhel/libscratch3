@@ -100,7 +100,7 @@ void IOHandler::RenderIO()
 
 		if (ImGui::Begin("Input", nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav))
 		{
-			ImGui::Text("%s is asking: %s", _asker->sprite->GetNameString(), _question.c_str());
+			ImGui::Text("%s is asking: %s", _asker->sprite->GetBase()->GetNameString(), _question.c_str());
 
 			ImGui::PushItemWidth(ImGui::GetWindowWidth() - 2 * padding);
 			if (ImGui::InputText("##input", _inputBuf, sizeof(_inputBuf), ImGuiInputTextFlags_EnterReturnsTrue))

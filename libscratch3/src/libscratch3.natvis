@@ -76,23 +76,37 @@
 			</ArrayItems>
 		</Expand>
 	</Type>
-
-	<Type Name="Sprite">
-		<DisplayString>{_name.u.string->str,s8b} ({_x,g}, {_y,g})</DisplayString>
+	
+	<Type Name="AbstractSprite">
+		<DisplayString>{_name.u.string->str,s8b}</DisplayString>
 		<Expand>
 			<Item Name="[Name]">_name.u.string->str,s8</Item>
-			<Item Name="[Shown]">_shown</Item>
-			<Item Name="[X]">_x,g</Item>
-			<Item Name="[Y]">_y,g</Item>
-			<Item Name="[Size]">_size,g</Item>
-			<Item Name="[Direction]">_direction,g</Item>
-			<Item Name="[Costume Index]">_costume</Item>
-			<Item Name="[Costume Name]">_costumes[_costume - 1]._name.u.string->str,s8</Item>
-			<Item Name="[Costume Count]">_nCostumes</Item>
-			<ArrayItems>
-				<Size>_nCostumes</Size>
-				<ValuePointer>_costumes</ValuePointer>
-			</ArrayItems>
+			<Item Name="[Costumes]">_costumes,_nCostumes</Item>
+			<Item Name="[Sounds]">_sounds,_nSounds</Item>
+			<Item Name="[Field Count]">_nFields</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Sprite">
+		<DisplayString>{_base->_name.u.string->str,s8b} ({_instanceId})</DisplayString>
+		<Expand>
+			<Item Name="[Name]">_base->_name.u.string->str,s8</Item>
+			<Item Name="[Instance ID]">_instanceId</Item>
+			<Item Name="[Visible]">_visible</Item>
+			<Item Name="[X]">_x</Item>
+			<Item Name="[Y]">_y</Item>
+			<Item Name="[Size]">_size</Item>
+			<Item Name="[Direction]">_direction</Item>
+			<Item Name="[Costume]">_costume</Item>
+			<Item Name="[Costume Name]">_base->_costumes[_costume - 1]._name.u.string->str,s8</Item>
+			<Item Name="[DSP]">_dsp</Item>
+			<Item Name="[Voices]">_voices,_base->_nSounds</Item>
+			<Item Name="[Glide]">_glide</Item>
+			<Item Name="[Message]">_message</Item>
+			<Item Name="[Graphics Controller]">_gec</Item>
+			<Item Name="[Next]">*_next</Item>
+			<Item Name="[Prev]">*_prev</Item>
+			<Item Name="[Fields]">_fields,_base->_nFields</Item>
 		</Expand>
 	</Type>
 
@@ -112,6 +126,19 @@
 			<Item Name="[Name]">_name.u.string->str,s8</Item>
 			<Item Name="[Rate]">_rate</Item>
 			<Item Name="[Sample Count]">_sampleCount</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="SpriteList">
+		<DisplayString>{{Count = {_count}}</DisplayString>
+		<Expand>
+			<Item Name="Count">_count</Item>
+			<LinkedListItems>
+				<Size>_count</Size>
+				<HeadPointer>_head</HeadPointer>
+				<NextPointer>_next</NextPointer>
+				<ValueNode>*this</ValueNode>
+			</LinkedListItems>
 		</Expand>
 	</Type>
 </AutoVisualizer>

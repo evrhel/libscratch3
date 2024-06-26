@@ -96,7 +96,7 @@ vec4 brightnessEffect(vec4 color)
 
 vec4 ghostEffect(vec4 color)
 {
-    return mix(color, vec4(0.0), uGhostEffect);
+    return vec4(color.rgb, color.a * (1 - uGhostEffect));
 }
 
 void main()

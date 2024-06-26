@@ -15,7 +15,6 @@
 #include "../codegen/util.hpp"
 #include "../render/renderer.hpp"
 
-#define MAX_INSTANCES 256
 #define BASE_INSTANCE_ID 0
 
 using namespace mutil;
@@ -70,15 +69,19 @@ public:
     constexpr int64_t GetSoundCount() const { return _nSounds; }
 
     //! \brief Create a new instance of this sprite
+    //!
+    //! The instantiated sprite is added to the virtual machine's
+    //! sprite list, so it is not the responsibility of the caller
+    //! to manage the sprite's memory. Doing so results in undefined
+    //! behavior.
     //! 
-    //! \param vm The virtual machine to use for creating the sprite
     //! \param tmpl The template sprite to use, or nullptr to create
     //! a new sprite from the the initial state. If not nullptr, the
     //! sprite must be an instance of this sprite.
     //! 
     //! \return The new sprite. Panics if the sprite could not be
     //! created.
-    Sprite *Instantiate(VirtualMachine *vm, Sprite *tmpl);
+    Sprite *Instantiate(Sprite *tmpl);
 
     //! \brief Initialize the sprite
     //!
@@ -99,20 +102,15 @@ public:
     //! Loads any necessary data for the sprite, such as the costumes
     //! and sounds. Must be called from the render thread. The sprite
     //! will be tied to the given virtual machine.
-    //!
-    //! \param vm The virtual machine to use for loading
-    void Load(VirtualMachine *vm);
+    void Load();
 
     //! \brief Render debug information about the sprite
     void DebugUI() const;
 
     constexpr const size_t GetFieldCount() const { return _nFields; }
 
-    constexpr const std::vector<STATIC_EVENT_HANDLER> &GetClickListeners() const { return _clickListeners; }
+    constexpr const std::vector<Script *> &GetClickListeners() const { return _clickListeners; }
     constexpr const std::vector<bc::Script *> &GetCloneEntry() const { return _cloneEntry; }
-
-    constexpr Sprite *const *GetInstances() const { return _instances; }
-    constexpr uint32_t GetInstanceCount() const { return _nInstances; }
 
     AbstractSprite();
     ~AbstractSprite();
@@ -130,11 +128,9 @@ private:
 
     size_t _nFields;
 
-    std::vector<STATIC_EVENT_HANDLER> _clickListeners;
+    std::vector<Script *> _clickListeners;
     std::vector<bc::Script *> _cloneEntry;
 
-    Sprite *_instances[MAX_INSTANCES];
-    uint32_t _nInstances;
     uint32_t _nextInstanceId;
 
     void Cleanup();
@@ -145,6 +141,7 @@ class Sprite final
 public:
     constexpr AbstractSprite *GetBase() const { return _base; }
     constexpr uint32_t GetInstanceId() const { return _instanceId; }
+    constexpr bool IsDeleted() const { return _delete; }
 
     constexpr bool IsVisible() const { return _visible; }
     constexpr double GetX() const { return _x; }
@@ -189,7 +186,7 @@ public:
 
     void SetMessage(const Value &message, bool think);
 
-    void Update(VirtualMachine *vm);
+    void Update();
 
     bool TouchingPoint(const Vector2 &point) const;
     bool TouchingSprite(const Sprite *sprite) const;
@@ -205,7 +202,7 @@ public:
     constexpr Sprite *GetNext() const { return _next; }
     constexpr Sprite *GetPrev() const { return _prev; }
 
-    Value &GetField(VirtualMachine *vm, uint32_t id) const;
+    Value &GetField(uint32_t id) const;
 
     constexpr const Value *GetFields() const { return _fields; }
 
@@ -217,10 +214,8 @@ public:
     //! scripts to run. The clone will be placed one layer below
     //! the original sprite.
     //! 
-    //! \param vm The virtual machine
-    //! 
     //! \return The clone
-    Sprite *Clone(VirtualMachine *vm);
+    Sprite *Clone();
 
     //! \brief Destroy this sprite
     //! 
@@ -229,18 +224,19 @@ public:
     //! this function does not return.
     //! 
     //! \param vm The virtual machine
-    void Destroy(VirtualMachine *vm);
+    void Destroy();
 
     Sprite &operator=(const Sprite &) = delete;
     Sprite &operator=(Sprite &&) = delete;
 
-    Sprite(VirtualMachine *vm, AbstractSprite *base, uint32_t instanceId);
+    Sprite(AbstractSprite *base, uint32_t instanceId);
     Sprite(const Sprite &) = delete;
     Sprite(Sprite &&) = delete;
     ~Sprite();
 private:
     AbstractSprite *_base;
     uint32_t _instanceId;
+    bool _delete; // Whether the sprite is scheduled for deletion
 
     //////////////////////////////////////////////////////////////////////////
     // Sprite properties
@@ -289,11 +285,6 @@ private:
     // Fields
 
     Value *_fields;
-
-    //////////////////////////////////////////////////////////////////////////
-    // Scripting
-
-    std::unordered_set<Script *> _scripts;
 
     friend class SpriteList;
     friend class AbstractSprite;
