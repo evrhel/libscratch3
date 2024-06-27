@@ -189,6 +189,8 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 	_bytecodeSize = size;
 	_progName = name;
 
+	_sounds.clear();
+
 	bc::Header *header = (bc::Header *)bytecode;
 	bc::SpriteTable *st = (bc::SpriteTable *)(bytecode + header->stable);
 
@@ -244,6 +246,9 @@ int VirtualMachine::Load(const std::string &name, uint8_t *bytecode, size_t size
 			ai.sprite = sprite;
 			ai.info = scripts + j;
 		}
+
+		for (AbstractSound *snd = as.GetSounds(); snd < as.GetSounds() + as.GetSoundCount(); snd++)
+			_sounds.push_back(snd);
 
 		if (si.isStage)
 			_stage = sprite;
@@ -626,6 +631,7 @@ void VirtualMachine::StopAllSounds()
 void VirtualMachine::OnClick(int64_t x, int64_t y)
 {
 	assert(VM == this);
+	printf("Click at %lld, %lld\n", x, y);
 
 	Vector2 point(x, y);
 	for (Sprite *sprite = _spriteList->Tail(); sprite; sprite = sprite->GetPrev())
@@ -636,6 +642,7 @@ void VirtualMachine::OnClick(int64_t x, int64_t y)
 		if (sprite->TouchingPoint(point))
 		{
 			// sprite was clicked
+			printf("Sprite %s clicked\n", sprite->GetBase()->GetNameString());
 			for (Script *s : sprite->GetBase()->GetClickListeners())
 				_clickQueue.push(s);
 			break;
@@ -1088,11 +1095,11 @@ void VirtualMachine::DispatchEvents()
 	// Sprite clicked
 	if (!_clickQueue.empty())
 	{
-		while (!_clickQueue.empty())
+		do
 		{
 			RestartScript(_clickQueue.front());
 			_clickQueue.pop();
-		}
+		} while (!_clickQueue.empty());
 	}
 
 	// Ask input

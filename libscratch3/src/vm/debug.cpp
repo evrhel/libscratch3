@@ -264,7 +264,7 @@ void Debugger::Render()
 						ImGui::LabelText("Sound Count", "%lld", as.GetSoundCount());
 						ImGui::LabelText("Field Count", "%zu", as.GetFieldCount());
 						ImGui::LabelText("Instances", "%zu/%zu", as.GetInstanceCount(), (size_t)MAX_INSTANCES);
-						ImGui::LabelText("Memory Usage", "%zu KiB", as.GetSpriteSize() * MAX_INSTANCES / 1024);
+						ImGui::LabelText("Reserved Memory", "%zu KiB", as.GetSpriteSize() * MAX_INSTANCES / 1024);
 					}
 				}
 
@@ -327,7 +327,7 @@ void Debugger::Render()
 
 
 					char name[128];
-					snprintf(name, sizeof(name), "%p (%s)", &script, script->sprite->GetBase()->GetNameString());
+					snprintf(name, sizeof(name), "%p (%s %u)", &script, script->sprite->GetBase()->GetNameString(), script->sprite->GetInstanceId());
 
 					if (ImGui::CollapsingHeader(name))
 					{
@@ -351,191 +351,205 @@ void Debugger::Render()
 			
 			if (ImGui::BeginTabItem("Audio"))
 			{
-				static bool showPlaying = true;
-				static bool showStopped = false;
-				static bool showUnloaded = false;
-
-				ImGui::SeparatorText("Information");
-
-				ImGui::LabelText("Host Supports Audio", "%s", VM->HasAudio() ? "true" : "false");
-				ImGui::LabelText("Buffer Length", "%d", BUFFER_LENGTH);
-
-				if (VM->HasAudio())
+				if (!VM->HasAudio())
 				{
-					const PaDeviceInfo *info = Pa_GetDeviceInfo(Pa_GetDefaultOutputDevice());
-					ImGui::LabelText("Output Device", "%s", info->name);
+					ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
+					ImGui::Text("No audio device available");
+					ImGui::PopStyleColor();
 				}
 				else
 				{
-					ImGui::LabelText("Output Device", "(none)");
-				}
 
-				STEREO_SAMPLE sample{ 0.0f, 0.0f };
-				for (Voice *voice : VM->GetVoices())
-				{
-					sample.L += voice->GetSample().L;
-					sample.R += voice->GetSample().R;
-				}
+					static bool showPlaying = true;
+					static bool showStopped = false;
+					static bool showUnloaded = false;
 
-				ImGui::LabelText("Voice Count", "%d/%zu", VM->GetVoices().size());
+					ImGui::SeparatorText("Information");
 
-				float oldLMax = _audioHistogramLMax, oldRMax = _audioHistogramRMax;
-				float oldLMin = _audioHistogramLMin, oldRMin = _audioHistogramRMin;
+					ImGui::LabelText("Buffer Length", "%d", BUFFER_LENGTH);
 
-				// shift histogram
-				if (_nextSampleTime < VM->GetTime())
-				{
-					_nextSampleTime = VM->GetTime() + (1.0 / 60.0);
-
-					_audioHistogramLMax = -INFINITY, _audioHistogramRMax = -INFINITY;
-					_audioHistogramLMin = INFINITY, _audioHistogramRMin = INFINITY;
-					for (int i = 0; i < AUDIO_HISTOGRAM_SIZE - 1; i++)
+					if (VM->HasAudio())
 					{
-						float tmp = _audioHistogramL[i] = _audioHistogramL[i + 1];
-						if (tmp > _audioHistogramLMax)
-							_audioHistogramLMax = tmp;
-						else if (tmp < _audioHistogramLMin)
-							_audioHistogramLMin = tmp;
-
-						tmp = _audioHistogramR[i] = _audioHistogramR[i + 1];
-						if (tmp > _audioHistogramRMax)
-							_audioHistogramRMax = tmp;
-						else if (tmp < _audioHistogramRMin)
-							_audioHistogramRMin = tmp;
+						const PaDeviceInfo *info = Pa_GetDeviceInfo(Pa_GetDefaultOutputDevice());
+						ImGui::LabelText("Output Device", "%s", info->name);
+					}
+					else
+					{
+						ImGui::LabelText("Output Device", "(none)");
 					}
 
-					_audioHistogramL[AUDIO_HISTOGRAM_SIZE - 1] = sample.L;
-					if (sample.L > _audioHistogramLMax)
-						_audioHistogramLMax = sample.L;
-					else if (sample.L < _audioHistogramLMin)
-						_audioHistogramLMin = sample.L;
+					STEREO_SAMPLE sample{ 0.0f, 0.0f };
+					size_t playing = 0;
+					for (Voice *voice : VM->GetVoices())
+					{
+						sample.L += voice->GetSample().L;
+						sample.R += voice->GetSample().R;
 
-					_audioHistogramR[AUDIO_HISTOGRAM_SIZE - 1] = sample.R;
-					if (sample.R > _audioHistogramRMax)
-						_audioHistogramRMax = sample.R;
-					else if (sample.R < _audioHistogramRMin)
-						_audioHistogramRMin = sample.R;
-				}
-				
-				if (_audioHistogramLMax < oldLMax)
-					_audioHistogramLMax = oldLMax * 0.99f;
+						if (voice->IsPlaying())
+							playing++;
+					}
 
-				if (_audioHistogramLMin > oldLMin)
-					_audioHistogramLMin = oldLMin * 0.99f;
+					ImGui::LabelText("Sound Count", "%zu", VM->GetSounds().size());
+					ImGui::LabelText("Voice Count", "%zu/%zu", playing, VM->GetVoices().size());
 
-				if (_audioHistogramRMax < oldRMax)
-					_audioHistogramRMax = oldRMax * 0.99f;
+					float oldLMax = _audioHistogramLMax, oldRMax = _audioHistogramRMax;
+					float oldLMin = _audioHistogramLMin, oldRMin = _audioHistogramRMin;
 
-				if (_audioHistogramRMin > oldRMin)
-					_audioHistogramRMin = oldRMin * 0.99f;
+					// shift histogram
+					if (_nextSampleTime < VM->GetTime())
+					{
+						_nextSampleTime = VM->GetTime() + (1.0 / 60.0);
 
-				if (ImPlot::BeginPlot("Stream (L)", ImVec2(-1, 0), ImPlotFlags_None))
-				{
-					ImPlot::SetupAxisLimits(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
-					ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
+						_audioHistogramLMax = -INFINITY, _audioHistogramRMax = -INFINITY;
+						_audioHistogramLMin = INFINITY, _audioHistogramRMin = INFINITY;
+						for (int i = 0; i < AUDIO_HISTOGRAM_SIZE - 1; i++)
+						{
+							float tmp = _audioHistogramL[i] = _audioHistogramL[i + 1];
+							if (tmp > _audioHistogramLMax)
+								_audioHistogramLMax = tmp;
+							else if (tmp < _audioHistogramLMin)
+								_audioHistogramLMin = tmp;
 
-					ImPlot::SetupAxisTicks(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, 9);
+							tmp = _audioHistogramR[i] = _audioHistogramR[i + 1];
+							if (tmp > _audioHistogramRMax)
+								_audioHistogramRMax = tmp;
+							else if (tmp < _audioHistogramRMin)
+								_audioHistogramRMin = tmp;
+						}
 
-					ImPlot::SetupFinish();
+						_audioHistogramL[AUDIO_HISTOGRAM_SIZE - 1] = sample.L;
+						if (sample.L > _audioHistogramLMax)
+							_audioHistogramLMax = sample.L;
+						else if (sample.L < _audioHistogramLMin)
+							_audioHistogramLMin = sample.L;
 
-					ImPlot::PlotLine("##histogramL", _audioHistogramTimes, _audioHistogramL, AUDIO_HISTOGRAM_SIZE);
+						_audioHistogramR[AUDIO_HISTOGRAM_SIZE - 1] = sample.R;
+						if (sample.R > _audioHistogramRMax)
+							_audioHistogramRMax = sample.R;
+						else if (sample.R < _audioHistogramRMin)
+							_audioHistogramRMin = sample.R;
+					}
 
-					const float xs[] = { -AUDIO_HISTOGRAM_SIZE, 0.0f };
-					const float hi[] = { _audioHistogramLMax, _audioHistogramLMax };
-					const float lo[] = { _audioHistogramLMin, _audioHistogramLMin };
+					if (_audioHistogramLMax < oldLMax)
+						_audioHistogramLMax = oldLMax * 0.99f;
 
-					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(255, 0, 0, 255));
-					ImPlot::PlotLine("##max", xs, hi, 2);
-					ImPlot::PopStyleColor();
+					if (_audioHistogramLMin > oldLMin)
+						_audioHistogramLMin = oldLMin * 0.99f;
 
-					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(0, 255, 0, 255));
-					ImPlot::PlotLine("##min", xs, lo, 2);
-					ImPlot::PopStyleColor();
+					if (_audioHistogramRMax < oldRMax)
+						_audioHistogramRMax = oldRMax * 0.99f;
 
-					ImPlot::EndPlot();
-				}
+					if (_audioHistogramRMin > oldRMin)
+						_audioHistogramRMin = oldRMin * 0.99f;
 
-				if (ImPlot::BeginPlot("Stream (R)", ImVec2(-1, 0), ImPlotFlags_None))
-				{
-					ImPlot::SetupAxisLimits(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
-					ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
+					if (ImPlot::BeginPlot("Stream (L)", ImVec2(-1, 0), ImPlotFlags_None))
+					{
+						ImPlot::SetupAxisLimits(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
+						ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
 
-					ImPlot::SetupAxisTicks(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, 9);
+						ImPlot::SetupAxisTicks(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, 9);
 
-					ImPlot::SetupFinish();
+						ImPlot::SetupFinish();
 
-					ImPlot::PlotLine("##histogramR", _audioHistogramTimes, _audioHistogramR, AUDIO_HISTOGRAM_SIZE);
+						ImPlot::PlotLine("##histogramL", _audioHistogramTimes, _audioHistogramL, AUDIO_HISTOGRAM_SIZE);
 
-					const float xs[] = { -AUDIO_HISTOGRAM_SIZE, 0.0f };
-					const float hi[] = { _audioHistogramRMax, _audioHistogramRMax };
-					const float lo[] = { _audioHistogramRMin, _audioHistogramRMin };
+						const float xs[] = { -AUDIO_HISTOGRAM_SIZE, 0.0f };
+						const float hi[] = { _audioHistogramLMax, _audioHistogramLMax };
+						const float lo[] = { _audioHistogramLMin, _audioHistogramLMin };
 
-					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(255, 0, 0, 255));
-					ImPlot::PlotLine("##max", xs, hi, 2);
-					ImPlot::PopStyleColor();
+						ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(255, 0, 0, 255));
+						ImPlot::PlotLine("##max", xs, hi, 2);
+						ImPlot::PopStyleColor();
 
-					ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(0, 255, 0, 255));
-					ImPlot::PlotLine("##min", xs, lo, 2);
-					ImPlot::PopStyleColor();
+						ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(0, 255, 0, 255));
+						ImPlot::PlotLine("##min", xs, lo, 2);
+						ImPlot::PopStyleColor();
 
-					ImPlot::EndPlot();
-				}
+						ImPlot::EndPlot();
+					}
 
-				ImGui::SeparatorText("Sounds");
+					if (ImPlot::BeginPlot("Stream (R)", ImVec2(-1, 0), ImPlotFlags_None))
+					{
+						ImPlot::SetupAxisLimits(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, ImGuiCond_Always);
+						ImPlot::SetupAxisLimits(ImAxis_Y1, -1.0f, 1.0f, ImGuiCond_Always);
 
-				ImGui::Checkbox("Playing", &showPlaying);
-				ImGui::SameLine();
+						ImPlot::SetupAxisTicks(ImAxis_X1, -AUDIO_HISTOGRAM_SIZE, 0, 9);
 
-				ImGui::Checkbox("Stopped", &showStopped);
-				ImGui::SameLine();
+						ImPlot::SetupFinish();
 
-				ImGui::Checkbox("Unloaded", &showUnloaded);
+						ImPlot::PlotLine("##histogramR", _audioHistogramTimes, _audioHistogramR, AUDIO_HISTOGRAM_SIZE);
 
-				for (Voice *v : VM->GetVoices())
-				{
-					//if (v->IsLoaded())
-					//{
+						const float xs[] = { -AUDIO_HISTOGRAM_SIZE, 0.0f };
+						const float hi[] = { _audioHistogramRMax, _audioHistogramRMax };
+						const float lo[] = { _audioHistogramRMin, _audioHistogramRMin };
+
+						ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(255, 0, 0, 255));
+						ImPlot::PlotLine("##max", xs, hi, 2);
+						ImPlot::PopStyleColor();
+
+						ImPlot::PushStyleColor(ImPlotCol_Line, IM_COL32(0, 255, 0, 255));
+						ImPlot::PlotLine("##min", xs, lo, 2);
+						ImPlot::PopStyleColor();
+
+						ImPlot::EndPlot();
+					}
+
+					ImGui::SeparatorText("Sounds");
+
+					ImGui::Checkbox("Playing", &showPlaying);
+					ImGui::SameLine();
+
+					ImGui::Checkbox("Stopped", &showStopped);
+					ImGui::SameLine();
+
+					ImGui::Checkbox("Unloaded", &showUnloaded);
+
+					for (Voice *v : VM->GetVoices())
+					{
+						//if (v->IsLoaded())
+						//{
 						if (v->IsPlaying() && !showPlaying)
 							continue;
 
 						if (!v->IsPlaying() && !showStopped)
 							continue;
-					//}
-					//else if (!showUnloaded)
-					//	continue;
-
-					char name[128];
-					snprintf(name, sizeof(name), "%p (%s)", v, v->GetSound()->GetName()->str);
-
-					if (ImGui::CollapsingHeader(name))
-					{
-						unsigned long pos = v->GetStreamPos();
-						unsigned long size = v->GetSound()->GetFrameCount();
-						int rate = v->GetSound()->GetSampleRate();
-
-						double duration = v->GetSound()->GetDuration();
-						double location = duration * pos / size;
-
-						ImGui::LabelText("Name", "%s", v->GetSound()->GetName()->str);
-
-						ImGui::LabelText("Rate", "%d Hz", rate);
-
-						int min = static_cast<int>(duration / 60);
-						int sec = duration - min * 60;
-						ImGui::LabelText("Duration", "%d:%02d (%.2f sec)", min, sec, duration);
-
-						min = static_cast<int>(location / 60);
-						sec = location - min * 60;
-						ImGui::LabelText("Position", "%d:%02d (%.2f sec)", min, sec, location);
-
-						ImGui::LabelText("Channels", "%d", v->GetSound()->GetChannelCount());
-
-						//ImGui::LabelText("Loaded", s->IsLoaded() ? "true" : "false");
-						//if (s->IsLoaded())
-						//{
-						ImGui::LabelText("Playing", v->IsPlaying() ? "true" : "false");
-						//ImGui::LabelText("CPU", "%.2f%%", Pa_GetStreamCpuLoad(v->GetStream()) * 100.0);
 						//}
+						//else if (!showUnloaded)
+						//	continue;
+
+						char name[128];
+						snprintf(name, sizeof(name), "%p (%s)", v, v->GetSound()->GetName()->str);
+
+						if (ImGui::CollapsingHeader(name))
+						{
+							unsigned long pos = v->GetStreamPos();
+							unsigned long size = v->GetSound()->GetFrameCount();
+							int rate = v->GetSound()->GetSampleRate();
+
+							double duration = v->GetSound()->GetDuration();
+							double location = duration * pos / size;
+
+							ImGui::LabelText("Name", "%s", v->GetSound()->GetName()->str);
+
+							ImGui::LabelText("Rate", "%d Hz", rate);
+
+							int min = static_cast<int>(duration / 60);
+							int sec = duration - min * 60;
+							ImGui::LabelText("Duration", "%d:%02d (%.2f sec)", min, sec, duration);
+
+							min = static_cast<int>(location / 60);
+							sec = location - min * 60;
+							ImGui::LabelText("Position", "%d:%02d (%.2f sec)", min, sec, location);
+
+							ImGui::LabelText("Channels", "%d", v->GetSound()->GetChannelCount());
+
+							//ImGui::LabelText("Loaded", s->IsLoaded() ? "true" : "false");
+							//if (s->IsLoaded())
+							//{
+							ImGui::LabelText("Playing", v->IsPlaying() ? "true" : "false");
+							//ImGui::LabelText("CPU", "%.2f%%", Pa_GetStreamCpuLoad(v->GetStream()) * 100.0);
+							//}
+						}
 					}
 				}
 

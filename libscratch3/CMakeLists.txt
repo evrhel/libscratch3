@@ -48,6 +48,15 @@ endif()
 
 add_library(libscratch3 SHARED ${SOURCES})
 
+# Streaming SIMD Extensions 4.1
+if (MSVC)
+	target_compile_options(libscratch3 PRIVATE /arch:SSE4.1)
+	target_compile_definitions(libscratch3 PRIVATE __SSE4_1__)
+else()
+	target_compile_options(libscratch3 PRIVATE -msse4.1)
+	target_compile_definitions(libscratch3 PRIVATE __SSE4_1__)
+endif()
+
 target_include_directories(libscratch3 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(libscratch3 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../rapidjson/include)
 

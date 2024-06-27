@@ -386,7 +386,7 @@ void Sprite::Update()
     if (VM->GetTime() < _glide.end)
     {
         // linear interpolation
-        double t = (VM->GetTime() - _glide.start) / (_glide.end / _glide.start);
+        double t = (VM->GetTime() - _glide.start) / (_glide.end - _glide.start);
         double x = _glide.x0 + t * (_glide.x1 - _glide.x0);
         double y = _glide.y0 + t * (_glide.y1 - _glide.y0);
         SetXY(x, y);
@@ -427,7 +427,6 @@ void Sprite::Update()
 
         // Compute model matrix
         _model = mTransPos * torotation(q) * mTransCenter * mScale;
-        _invModel = inverse(_model);
 
         // Update bounding box
         ApplyTransformation(CenterAABB(_bbox), _model);
