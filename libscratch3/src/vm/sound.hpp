@@ -120,8 +120,6 @@ public:
 	//! \return Whether the sound was successfully loaded.
 	bool Load();
 
-	Voice *CreateVoice();
-
 	constexpr size_t GetStreamSize() const { return _streamSize; }
 	constexpr const float *GetAudioStream() const { return _audioStream; }
 	constexpr unsigned long GetFrameCount() const { return _frameCount; }
@@ -163,8 +161,11 @@ private:
 class Voice final
 {
 public:
+	void *operator new (size_t) = delete;
+	void operator delete (void *) = delete;
+
 	constexpr AbstractSound *GetSound() const { return _sound; }
-	constexpr DSPController *GetDSP() { return &_dsp; }
+	constexpr DSPController *GetDSP() const { return _dsp; }
 	constexpr bool IsPlaying() const { return _isPlaying; }
 	constexpr unsigned long GetStreamPos() const { return _streamPos; }
 
@@ -173,16 +174,19 @@ public:
 
 	constexpr const STEREO_SAMPLE &GetSample() const { return _sample; }
 
+	void Init(AbstractSound *sound, DSPController *dsp);
+	void Release();
+
 	Voice &operator=(const Voice &) = delete;
 	Voice &operator=(Voice &&) = delete;
 
-	Voice();
+	Voice() = delete;
 	Voice(const Voice &) = delete;
 	Voice(Voice &&) = delete;
-	~Voice();
+	~Voice() = delete;
 private:
 	AbstractSound *_sound;
-	DSPController _dsp;
+	DSPController *_dsp;
 
 	PaStream *_stream;
 	bool _isPlaying;

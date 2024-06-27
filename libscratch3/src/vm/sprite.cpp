@@ -181,6 +181,9 @@ bool AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Spri
 
     // TODO: fields
     _spriteSize = offsetof(Sprite, _fields);
+    _spriteSize += _nFields * sizeof(Value);
+    _spriteSize += _nSounds * sizeof(Voice);
+
     _nInstances = 0;
 
     // Allocate sprite pool
@@ -292,16 +295,18 @@ Sprite *AbstractSprite::Alloc()
         if (!s->IsAllocated())
         {
             s->_base = this;
-            s->_instanceId = ((_pool - p) / _spriteSize) + 1;
+            s->_instanceId = ((p - _pool) / _spriteSize) + 1;
             s->_delete = false;
 
             s->_dsp.ClearEffects();
-            s->_voices = nullptr;
-
             s->_gec.ClearEffects();
 
             s->_next = nullptr;
             s->_prev = nullptr;
+
+            Voice *voices = s->GetVoices();
+            for (size_t i = 0; i < _nSounds; i++)
+                voices[i].Init(_sounds + i, &s->_dsp);
 
             _nInstances++;
 
@@ -325,8 +330,6 @@ void AbstractSprite::Free(Sprite *sprite)
 
     sprite->_prev = nullptr;
     sprite->_next = nullptr;
-
-    sprite->_voices = nullptr;
 
     sprite->_delete = false;
     sprite->_instanceId = UNALLOCATED_INSTANCE_ID;
@@ -523,9 +526,10 @@ void Sprite::DebugUI() const
     ImGui::LabelText("Pan", "%.0f", _dsp.GetPan());
 
     ImGui::SeparatorText("Voices");
+    Voice *voices = GetVoices();
     for (int64_t i = 0; i < _base->GetSoundCount(); i++)
     {
-        Voice &v = _voices[i];
+        Voice &v = voices[i];
         AbstractSound *as = v.GetSound();
 
         const char *name = as->GetName()->str;

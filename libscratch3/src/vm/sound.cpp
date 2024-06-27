@@ -156,12 +156,6 @@ bool AbstractSound::Load()
 	return true;
 }
 
-Voice *AbstractSound::CreateVoice()
-{
-	// TODO: implement
-	return nullptr;
-}
-
 AbstractSound::AbstractSound() :
 	_streamed(false),
 	_data(nullptr), _dataSize(0),
@@ -249,22 +243,17 @@ void Voice::Stop()
 	_sample = STEREO_SAMPLE{ 0.0f, 0.0f };
 }
 
-Voice::Voice() :
-	_sound(nullptr),
-	_stream(nullptr),
-	_isPlaying(false),
-	_streamPos(0),
-	_sample({ 0.0f, 0.0f })
+void Voice::Init(AbstractSound *sound, DSPController *dsp)
 {
-
+	_sound = sound;
+	_dsp = dsp;
+	_stream = nullptr;
+	_isPlaying = false;
+	_streamPos = 0;
+	_sample = STEREO_SAMPLE{ 0.0f, 0.0f };
 }
 
-Voice::~Voice()
-{
-	Cleanup();
-}
-
-void Voice::Cleanup()
+void Voice::Release()
 {
 	if (_stream)
 		Pa_CloseStream(_stream), _stream = nullptr;
@@ -281,7 +270,7 @@ int Voice::paMonoCallback(
 	Voice *const voice = static_cast<Voice *>(userData);
 	float *const out = static_cast<float *>(outputBuffer);
 
-	const DSPController &dsp = voice->_dsp;
+	const DSPController &dsp = *voice->_dsp;
 	const float volume = dsp.GetVolumeMultiplier(); // [0.0, 1.0]
 	const float resampleRatio = dsp.GetResampleRatio(); // [0.0, inf)
 	const float panFactor = dsp.GetPanFactor(); // [-1.0, 1.0]
@@ -415,7 +404,7 @@ int Voice::paStereoCallback(
 	Voice *voice = static_cast<Voice *>(userData);
 	STEREO_SAMPLE *stereoOut = static_cast<STEREO_SAMPLE *>(outputBuffer);
 
-	const DSPController &dsp = voice->_dsp;
+	const DSPController &dsp = *voice->_dsp;
 	const float volume = dsp.GetVolumeMultiplier(); // [0.0, 1.0]
 	const float resampleRatio = dsp.GetResampleRatio(); // [0.0, inf)
 	const float panFactor = dsp.GetPanFactor(); // [-1.0, 1.0]

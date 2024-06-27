@@ -657,7 +657,7 @@ int ScriptMain()
 			}
 
 			int64_t sid = sprite->GetBase()->FindSound(v.u.string);
-			Voice *voice = sprite->GetVoiceFor(sid);
+			Voice *voice = sprite->GetVoice(sid);
 			if (voice == nullptr)
 			{
 				Pop();
@@ -680,7 +680,7 @@ int ScriptMain()
 			}
 
 			int64_t sid = sprite->GetBase()->FindSound(v.u.string);
-			Voice *voice = sprite->GetVoiceFor(sid);
+			Voice *voice = sprite->GetVoice(sid);
 			if (voice == nullptr)
 			{
 				Pop();
