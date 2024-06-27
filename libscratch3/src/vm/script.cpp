@@ -466,7 +466,7 @@ int ScriptMain()
 			break;
 		}
 		case Op_nextcostume:
-			sprite->SetCostume(sprite->GetCostume() + 1);
+			sprite->SetCostume(sprite->GetCostumeIndex() + 1);
 			break;
 		case Op_setbackdrop: {
 			Value &v = StackAt(-1);
@@ -492,7 +492,7 @@ int ScriptMain()
 		}
 		case Op_nextbackdrop: {
 			Sprite *stage = VM->GetStage();
-			stage->SetCostume(stage->GetCostume() + 1);
+			stage->SetCostume(stage->GetCostumeIndex() + 1);
 			break;
 		}
 		case Op_addsize:
@@ -635,16 +635,14 @@ int ScriptMain()
 			break;
 		}
 		case Op_getcostume:
-			SetInteger(Push(), sprite->GetCostume());
+			SetInteger(Push(), sprite->GetCostumeIndex());
 			break;
-		case Op_getcostumename: {
-			int64_t costume = sprite->GetCostume();
-			Costume *c = sprite->GetBase()->GetCostume(costume);
-			Assign(Push(), c->GetNameValue());
+		case Op_getcostumename:
+			Assign(Push(), sprite->GetCostume()->GetNameValue());
 			break;
-		}
 		case Op_getbackdrop:
-			Raise(NotImplemented, "getbackdrop");
+			Assign(Push(), VM->GetStage()->GetCostume()->GetNameValue());
+			break;
 		case Op_getsize:
 			SetReal(Push(), sprite->GetSize());
 			break;
@@ -769,11 +767,11 @@ int ScriptMain()
 			char *targetName = (char *)(bytecode + *(uint64_t *)self->pc);
 			self->pc += sizeof(uint64_t);
 
-			int64_t lastBackdrop = stage->GetCostume();
+			int64_t lastBackdrop = stage->GetCostumeIndex();
 			for (;;)
 			{
 				// check if backdrop has changed
-				int64_t currentBackdrop = stage->GetCostume();
+				int64_t currentBackdrop = stage->GetCostumeIndex();
 				if (lastBackdrop == currentBackdrop)
 				{
 					Sched();
@@ -783,7 +781,7 @@ int ScriptMain()
 				lastBackdrop = currentBackdrop;
 
 				// if matching target, break
-				const Value &name = stage->GetCostumeName();
+				const Value &name = stage->GetCostume()->GetNameValue();
 				if (!strcmp(name.u.string->str, targetName))
 					break;
 			}
@@ -985,10 +983,10 @@ int ScriptMain()
 				Push(); // none
 				break;
 			case PropertyTarget_BackdropNumber:
-				SetInteger(Push(), VM->GetStage()->GetCostume());
+				SetInteger(Push(), VM->GetStage()->GetCostumeIndex());
 				break;
 			case PropertyTarget_BackdropName:
-				Assign(Push(), VM->GetStage()->GetCostumeName());
+				Assign(Push(), VM->GetStage()->GetCostume()->GetNameValue());
 				break;
 			case PropertyTarget_XPosition:
 				SetReal(Push(), s->GetX());
@@ -997,10 +995,10 @@ int ScriptMain()
 				SetReal(Push(), s->GetY());
 				break;
 			case PropertyTarget_CostumeNumber:
-				SetInteger(Push(), s->GetCostume());
+				SetInteger(Push(), s->GetCostumeIndex());
 				break;
 			case PropertyTarget_CostumeName:
-				Assign(Push(), s->GetCostumeName());
+				Assign(Push(), s->GetCostume()->GetNameValue());
 				break;
 			case PropertyTarget_Size:
 				SetReal(Push(), s->GetSize());

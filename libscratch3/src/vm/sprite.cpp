@@ -375,21 +375,6 @@ void AbstractSprite::Cleanup()
     }
 }
 
-const Value &Sprite::GetCostumeName() const
-{
-    return _base->GetCostume(_costume)->GetNameValue();
-}
-
-void Sprite::SetCostume(int64_t costume)
-{
-    int64_t newCostume = (costume - 1) % _base->CostumeCount();
-    if (_costume != newCostume)
-    {
-        _costume = newCostume;
-        _transDirty = true;
-    }
-}
-
 void Sprite::SetMessage(const Value &message, bool think)
 {
     Assign(_message, message);

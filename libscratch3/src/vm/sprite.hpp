@@ -168,8 +168,8 @@ public:
     constexpr double GetDirection() const { return _direction; }
     constexpr bool IsDraggable() const { return _draggable; }
     constexpr RotationStyle GetRotationStyle() const { return _rotationStyle; }
-    constexpr int64_t GetCostume() const { return _costume; }
-    const Value &GetCostumeName() const;
+    constexpr int64_t GetCostumeIndex() const { return _costume; }
+    constexpr Costume *GetCostume() const { return _base->GetCostume(_costume); }
 
     constexpr void SetVisible(bool visible) { _visible = visible; _transDirty = true; }
     constexpr void SetX(double x) { _x = x; _transDirty = true; }
@@ -180,7 +180,15 @@ public:
     constexpr void SetDraggable(bool draggable) { _draggable = draggable; }
     constexpr void SetRotationStyle(RotationStyle rotationStyle) { _rotationStyle = rotationStyle; }
 
-    void SetCostume(int64_t costume);
+    constexpr void SetCostume(const int64_t costume)
+    {
+        const int64_t newCostume = (costume - 1) % _base->CostumeCount() + 1;
+        if (_costume != newCostume)
+        {
+            _costume = newCostume;
+            _transDirty = true;
+        }
+    }
 
     constexpr void InvalidateTransform() { _transDirty = true; }
 
