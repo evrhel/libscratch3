@@ -426,7 +426,10 @@ int VirtualMachine::VMStart()
 			longjmp(_panicJmp, 1);
 
 		if (script->except != Exception_None)
+		{
+			printf("<EXCEPTION> %s: %s\n", ExceptionString(script->except), script->exceptMessage);
 			Panic("Initialization script raised an exception");
+		}
 
 		if (script->state != TERMINATED)
 			Panic("Initialization script did not terminate");
