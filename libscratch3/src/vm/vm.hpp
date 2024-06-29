@@ -18,6 +18,8 @@
 
 #include <scratch3/scratch3.h>
 
+#include "../defs.hpp"
+
 #include "memory.hpp"
 #include "script.hpp"
 #include "io.hpp"
@@ -423,4 +425,4 @@ private:
 };
 
 //! \brief Current virtual machine
-extern LS_THREADLOCAL VirtualMachine *VM;
+extern SCRATCH3_STORAGE VirtualMachine *VM;

@@ -226,6 +226,8 @@ void Voice::Play()
 	_isPlaying = true;
 	_sample = STEREO_SAMPLE{ 0.0f, 0.0f };
 
+	(void)Pa_StopStream(_stream); // ignore errors
+
 	err = Pa_StartStream(_stream);
 	if (err != paNoError)
 		printf("Voice::Play: Pa_StartStream failed: %s\n", Pa_GetErrorText(err));

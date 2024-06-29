@@ -341,6 +341,7 @@ void GLRenderer::BeginRender()
     _time = ls_time64() - _startTime;
     _deltaTime = _time - _lastTime;
     _fps = 1.0 / _deltaTime;
+    _objectsDrawn = 0;
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame();
@@ -390,7 +391,6 @@ void GLRenderer::Render()
     glBindVertexArray(_quadVao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEbo);
 
-    _objectsDrawn++;
     for (Sprite *s = _sprites->Head(); s; s = s->GetNext())
     {
         if (!PrepareSprite(s, _spriteShader))

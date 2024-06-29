@@ -4,6 +4,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "../defs.hpp"
+
 // initial capacity for lists
 #define INITIAL_CAPACITY 8
 

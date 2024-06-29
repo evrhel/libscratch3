@@ -676,7 +676,7 @@ double ToReal(const Value &v)
 
 const char *ToString(const Value &v, int64_t *len)
 {
-	static LS_THREADLOCAL char buf[64];
+	static SCRATCH3_STORAGE char buf[64];
 	int cch;
 
 	switch (v.type)

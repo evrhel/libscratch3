@@ -590,7 +590,10 @@ int ScriptMain()
 		case Op_gotolayer: {
 			Sprite *stage = VM->GetStage();
 			if (sprite == stage)
+			{
+				(void)self->pc++;
 				break;
+			}
 
 			SpriteList *sprites = VM->GetSpriteList();
 
@@ -599,10 +602,10 @@ int ScriptMain()
 			default:
 				Raise(InvalidArgument, "Invalid layer");
 			case LayerType_Front:
-				sprites->Insert(stage, sprite);
+				sprites->Insert(sprites->Tail(), sprite);
 				break;
 			case LayerType_Back:
-				sprites->Insert(sprites->Tail(), sprite);
+				sprites->Insert(stage, sprite);
 				break;
 			}
 

@@ -324,6 +324,10 @@ void AbstractSprite::Free(Sprite *sprite)
 
     // Release all resources
 
+    Voice *voices = sprite->GetVoices();
+    for (size_t i = 0; i < _nSounds; i++)
+        voices[i].Release();
+
     for (uint32_t i = 0; i < _nFields; i++)
         ReleaseValue(sprite->_fields[i]);
     ReleaseValue(sprite->_message);

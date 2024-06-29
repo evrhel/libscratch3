@@ -279,6 +279,7 @@ static int ScriptEntryThunk(void *scriptPtr)
 
 	script->restart = false;
 	script->exitCode = -1;
+	script->pc = script->entry;
 	
 	// Reset the stack
 	VM->ReleaseStack(script);
@@ -634,7 +635,6 @@ void VirtualMachine::StopAllSounds()
 void VirtualMachine::OnClick(int64_t x, int64_t y)
 {
 	assert(VM == this);
-	printf("Click at %lld, %lld\n", x, y);
 
 	Vector2 point(x, y);
 	for (Sprite *sprite = _spriteList->Tail(); sprite; sprite = sprite->GetPrev())
@@ -645,7 +645,6 @@ void VirtualMachine::OnClick(int64_t x, int64_t y)
 		if (sprite->TouchingPoint(point))
 		{
 			// sprite was clicked
-			printf("Sprite %s clicked\n", sprite->GetBase()->GetNameString());
 			for (Script *s : sprite->GetBase()->GetClickListeners())
 				_clickQueue.push(s);
 			break;
@@ -1234,4 +1233,4 @@ void VirtualMachine::Scheduler()
 	_waitingScripts = waitingScripts;
 }
 
-LS_THREADLOCAL VirtualMachine *VM = nullptr;
+SCRATCH3_STORAGE VirtualMachine *VM = nullptr;
