@@ -65,13 +65,11 @@ public:
 
 	//! \brief Insert a sprite into the list
 	//! 
-	//! before and sprite must be different.
-	//! 
 	//! \param before The sprite which will come before the new sprite,
 	//! or nullptr to insert at the front. Must be in the list.
 	//! \param sprite The sprite to insert. If already in the list,
 	//! it will be moved.
-	void Insert(Sprite *LS_RESTRICT before, Sprite *LS_RESTRICT sprite);
+	void Insert(Sprite *before, Sprite *sprite);
 
 	//! \brief Move a sprite
 	//! 

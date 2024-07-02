@@ -16,22 +16,36 @@ uniform sampler2D uTexture;
 
 uniform vec4 uColor;
 
+const float kEpsilon = 0.0001;
+
 vec3 rgb2hsv(vec3 c)
 {
-    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+    const vec4 offsets = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 a = c.b > c.g ? vec4(c.bg, offsets.wz) : vec4(c.gb, offsets.xy);
+    vec4 b = c.r > a.x ? vec4(c.r, a.yzx) : vec4(a.xyw, c.r);
 
-    float d = q.x - min(q.w, q.y);
-    float e = 1.0e-10;
-    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+    float m = min(b.y, b.w);
+
+    float C = b.x - m;
+    float V = b.x;
+    float H = abs(b.z + (b.w - b.y) / (6.0 * C + kEpsilon));
+
+    return vec3(H, C / (b.x + kEpsilon), V);
+}
+
+vec3 hue2rgb(float H)
+{
+    float r = abs(H * 6.0 - 3.0) - 1.0;
+    float g = 2.0 - abs(H * 6.0 - 2.0);
+    float b = 2.0 - abs(H * 6.0 - 4.0);
+    return clamp(vec3(r, g, b), 0.0, 1.0);
 }
 
 vec3 hsv2rgb(vec3 c)
 {
-    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    vec3 rgb = hue2rgb(c.x);
+    float C = c.z * c.y;
+    return rgb * C + c.z - C;
 }
 
 vec2 mosaicEffect(vec2 uv)
@@ -72,6 +86,11 @@ vec2 fisheyeEffect(vec2 uv)
 
 vec4 colorEffect(vec4 color)
 {
+    // Return immediately if no effect is applied
+    // We must do this as a small change is always applied even if the effect is 0.0
+    if (uColorEffect == 0.0)
+        return color;
+    
     vec3 hsv = rgb2hsv(color.rgb);
 
     const float minBrightness = 0.11 / 2.0;
@@ -80,7 +99,7 @@ vec4 colorEffect(vec4 color)
     if (hsv.z < minBrightness)
         hsv = vec3(0.0, 1.0, minBrightness);
     else if (hsv.y < minSaturation)
-        hsv = vec3(hsv.x, minSaturation, hsv.z);
+        hsv = vec3(0.0, minSaturation, hsv.z);
 
     hsv.x = mod(hsv.x + uColorEffect, 1.0);
     if (hsv.x < 0.0)
@@ -110,14 +129,12 @@ void main()
 
     vec4 color = texture(uTexture, texCoord);
 
-    const float epsilon = 0.0001;
+    //color.rgb = clamp(color.rgb / (color.a + kEpsilon), 0.0, 1.0);
+    
+    color = colorEffect(color);
 
-    //color.rgb = clamp(color.rgb / (color.a + epsilon), 0.0, 1.0);
-
-    //color = colorEffect(color);
     color = brightnessEffect(color);
 
-    //color.rgb *= color.a + epsilon;
 
     color = ghostEffect(color);
 

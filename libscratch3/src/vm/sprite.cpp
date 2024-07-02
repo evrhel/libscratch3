@@ -460,6 +460,9 @@ bool Sprite::TouchingPoint(const Vector2 &point) const
     if (!_visible)
         return false;
 
+    if (_gec.GetGhostEffect() >= 100)
+		return false; // invisible
+
     if (!AABBContains(_bbox, point))
         return false;
 
@@ -471,6 +474,9 @@ bool Sprite::TouchingSprite(const Sprite *sprite) const
 {
     if (!_visible || !sprite->_visible)
         return false;
+
+    if (_gec.GetGhostEffect() >= 100 || sprite->_gec.GetGhostEffect() >= 100)
+        return false; // invisible
 
     if (!AABBIntersect(_bbox, sprite->_bbox))
 		return false;

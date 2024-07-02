@@ -79,9 +79,12 @@ Sprite *SpriteList::Remove(Sprite *sprite)
 	return sprite;
 }
 
-void SpriteList::Insert(Sprite *LS_RESTRICT before, Sprite *LS_RESTRICT sprite)
+void SpriteList::Insert(Sprite *before, Sprite *sprite)
 {
 	assert(sprite != nullptr);
+
+	if (before == sprite)
+		return; // no-op
 
 	if (sprite->_next != nullptr || sprite->_prev != nullptr)
 		Remove(sprite); // remove and reinsert

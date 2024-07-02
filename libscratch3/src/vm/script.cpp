@@ -1206,10 +1206,7 @@ void Sched()
 
 	Script *self = VM->GetCurrentScript();
 	if (self->restart)
-	{
-		assert(self->sp == self->stack + STACK_SIZE);
 		longjmp(self->entryJmp, 1);
-	}
 }
 
 void LS_NORETURN Terminate()

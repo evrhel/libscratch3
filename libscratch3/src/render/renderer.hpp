@@ -87,8 +87,9 @@ public:
     inline void AddMosaicEffect(const double amount) { SetMosaicEffect(_mosaicEffect + amount); }
     inline void SetMosaicEffect(const double effect)
     {
-        _mosaicEffect = effect;        
-        _mosaicFactor = clamp(mutil::round(mutil::abs(static_cast<float>(_mosaicEffect) + 10.0f) / 10.0f), 1.0f, 512.0f);
+        _mosaicEffect = effect;
+        if (_mosaicEffect < 0.0) _mosaicEffect = 0.0;
+        _mosaicFactor = clamp(mutil::round((static_cast<float>(_mosaicEffect) + 10.0f) / 10.0f), 1.0f, 512.0f);
 	}
 
     inline void AddGhostEffect(const double amount) { SetGhostEffect(_ghostEffect + amount); }
