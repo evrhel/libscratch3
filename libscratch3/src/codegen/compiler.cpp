@@ -1,6 +1,7 @@
 #include "compiler.hpp"
 
 #include <cstdio>
+#include <cassert>
 
 #include <lysys/lysys.hpp>
 
@@ -339,15 +340,16 @@ public:
 
 	virtual void Visit(VariableExpr *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined variable %s\n", node->id.c_str());
 			abort();
 		}
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 	}
 
 	virtual void Visit(BroadcastExpr *node)
@@ -1065,8 +1067,9 @@ public:
 
 	virtual void Visit(SetVariable *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Undefined variable %s\n", node->id.c_str());
 			abort();
@@ -1074,14 +1077,15 @@ public:
 
 		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_setstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_setfield : Op_setstatic);
+		cp.WriteText<bc::VarId>(id);
 	}
 
 	virtual void Visit(ChangeVariable *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Undefined variable %s\n", node->id.c_str());
 			abort();
@@ -1089,8 +1093,8 @@ public:
 
 		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_addstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_addfield : Op_addstatic);
+		cp.WriteText<bc::VarId>(id);
 	}
 
 	virtual void Visit(ShowVariable *node)
@@ -1209,7 +1213,7 @@ public:
 
 	virtual void Visit(DefineProc *node)
 	{
-		std::string proccode = currentSpriteName + node->proto->proccode;
+		std::string proccode = *currentSpriteName + node->proto->proccode;
 		auto it = procedureTable.find(proccode);
 		if (it != procedureTable.end())
 		{
@@ -1223,7 +1227,7 @@ public:
 	virtual void Visit(Call *node)
 	{
 		// lookup procedure
-		auto it = procedureTable.find(currentSpriteName + node->proccode);
+		auto it = procedureTable.find(GetQualifiedProcName(node->proccode));
 		if (it == procedureTable.end())
 		{
 			printf("Error: Undefined procedure %s\n", node->proccode.c_str());
@@ -1259,7 +1263,7 @@ public:
 
 		// import symbol
 		uint64_t offset = cp._text.size();
-		cp._importSymbols.emplace_back(offset, currentSpriteName + it->second.proto->proccode);
+		cp._importSymbols.emplace_back(offset, GetQualifiedProcName(it->second.proto->proccode));
 		cp.WriteText<bc::uint64>(0);
 	}
 
@@ -1378,8 +1382,9 @@ public:
 
 	virtual void Visit(VariableDef *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined variable %s\n", node->id.c_str());
 			abort();
@@ -1391,8 +1396,8 @@ public:
 
 		cp.PushValue(v);
 
-		cp.WriteOpcode(Op_setstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_setfield : Op_setstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		ReleaseValue(v);
 	}
@@ -1468,9 +1473,9 @@ public:
 			{
 				topLevel = true;
 
-				std::string name = currentSpriteName + proc->proto->proccode;
+				std::string proccode = GetQualifiedProcName(proc->proto->proccode);
 
-				auto it = cp._exportSymbols.find(name);
+				auto it = cp._exportSymbols.find(proccode);
 				if (it != cp._exportSymbols.end())
 				{
 					printf("Error: Duplicate procedure definition\n");
@@ -1478,9 +1483,9 @@ public:
 				}
 
 				// export symbol
-				cp._exportSymbols[name] = cp._text.size();
+				cp._exportSymbols[proccode] = cp._text.size();
 
-				currentProc = &procedureTable[name];
+				currentProc = &procedureTable[proccode];
 
 				cp.WriteOpcode(Op_enter);
 
@@ -1647,8 +1652,9 @@ public:
 	{
 		bc::Sprite *sprite = (bc::Sprite *)cp.AllocStable(sizeof(bc::Sprite));
 
-		currentSpriteName = node->name;
+		currentSpriteName = &node->name;
 		currentSprite = sprite;
+		currentSpriteDef = node;
 
 		// Basic data
 		cp.CreateString(&sprite->name, node->name);
@@ -1679,6 +1685,9 @@ public:
 			// No initializer needed
 			sprite->initializer.offset = 0;
 		}
+		
+		// Stage variables are stored statically, not as fields
+		sprite->numFields = node->isStage ? 0 : node->variables->variables.size();
 
 		// Write scripts
 		node->scripts->Accept(this);
@@ -1687,8 +1696,9 @@ public:
 		node->costumes->Accept(this);
 		node->sounds->Accept(this);
 
+		currentSpriteDef = nullptr;
 		currentSprite = nullptr;
-		currentSpriteName.clear();
+		currentSpriteName = nullptr;
 	}
 
 	virtual void Visit(SpriteDefList *node)
@@ -1725,6 +1735,8 @@ public:
 
 		if (!stage)
 			return;
+
+		currentSpriteName = &stage->name;
 
 		uint64_t offset = cp._data.size();
 
@@ -1765,6 +1777,8 @@ public:
 
 			ReleaseValue(v);
 		}
+
+		currentSpriteName = nullptr;
 	}
 
 	virtual void Visit(Program *node)
@@ -1782,9 +1796,10 @@ public:
 	const Scratch3CompilerOptions &options;
 	bool topLevel = false;
 
-	std::string currentSpriteName;
+	const std::string *currentSpriteName = nullptr;
 	bc::Sprite *currentSprite = nullptr;
 	ProcInfo *currentProc = nullptr;
+	SpriteDef *currentSpriteDef = nullptr;
 
 	std::unordered_map<std::string, bc::VarId> staticVariables; // name -> VarId
 
@@ -1792,6 +1807,40 @@ public:
 
 	Compiler(CompiledProgram *cp, Loader *loader, const Scratch3CompilerOptions *options) :
 		cp(*cp), loader(*loader), options(*options) {}
+
+	std::string GetQualifiedProcName(const std::string &proccode) const
+	{
+		assert(currentSpriteName != nullptr);
+		return *currentSpriteName + "::" + proccode;
+	}
+
+	bc::VarId FindVariable(const std::string &name, bool *isField, bool *found) const
+	{
+		assert(currentSprite != nullptr);
+
+		auto it = staticVariables.find(name);
+		if (it != staticVariables.end())
+		{
+			*found = true;
+			*isField = false;
+			return it->second;
+		}
+
+		auto &vars = currentSpriteDef->variables->variables;
+		for (size_t i = 0; i < vars.size(); i++)
+		{
+			if (StringEqualsRaw(vars[i]->id.c_str(), name.c_str()))
+			{
+				*found = true;
+				*isField = true;
+				return i;
+			}
+		}
+
+		*found = false;
+		*isField = false;
+		return 0;
+	}
 };
 
 uint8_t *CompiledProgram::Export(size_t *outSize) const

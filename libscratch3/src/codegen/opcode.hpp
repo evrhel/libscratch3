@@ -12,6 +12,10 @@ enum Opcode : uint8_t
 	Op_getstatic,
 	Op_addstatic,
 
+	Op_setfield,
+	Op_getfield,
+	Op_addfield,
+
 	Op_listcreate, // Create list
 
 	Op_jmp, // Relative jump

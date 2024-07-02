@@ -144,6 +144,9 @@ bool AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Spri
     if (_name.type != ValueType_String)
         return false;
     _info = info;
+    
+    // Allocate field
+    _nFields = info->numFields;
 
     // Allocate costumes
     _nCostumes = info->numCostumes;
@@ -179,7 +182,6 @@ bool AbstractSprite::Init(uint8_t *bytecode, size_t bytecodeSize, const bc::Spri
 		_soundNameMap[_sounds[i].GetName()] = i;
 	}
 
-    // TODO: fields
     _spriteSize = offsetof(Sprite, _fields);
     _spriteSize += _nFields * sizeof(Value);
     _spriteSize += _nSounds * sizeof(Voice);

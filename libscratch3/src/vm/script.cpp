@@ -79,7 +79,6 @@ int ScriptMain()
 		case Op_setstatic: {
 			bc::VarId *id = (bc::VarId *)self->pc;
 			self->pc += sizeof(bc::VarId);
-
 			Assign(VM->GetStaticVariable(id->ToInt()), StackAt(-1));
 			Pop();
 			break;
@@ -94,6 +93,27 @@ int ScriptMain()
 			bc::VarId *id = (bc::VarId *)self->pc;
 			self->pc += sizeof(bc::VarId);
 			Value &v = VM->GetStaticVariable(id->ToInt());
+			SetReal(v, ToReal(v) + ToReal(StackAt(-1)));
+			Pop();
+			break;
+		}
+		case Op_setfield: {
+			bc::VarId *id = (bc::VarId *)self->pc;
+			self->pc += sizeof(bc::VarId);
+			Assign(sprite->GetField(id->ToInt()), StackAt(-1));
+			Pop();
+			break;
+		}
+		case Op_getfield: {
+			bc::VarId *id = (bc::VarId *)self->pc;
+			self->pc += sizeof(bc::VarId);
+			Assign(Push(), sprite->GetField(id->ToInt()));
+			break;
+		}
+		case Op_addfield: {
+			bc::VarId *id = (bc::VarId *)self->pc;
+			self->pc += sizeof(bc::VarId);
+			Value &v = sprite->GetField(id->ToInt());
 			SetReal(v, ToReal(v) + ToReal(StackAt(-1)));
 			Pop();
 			break;

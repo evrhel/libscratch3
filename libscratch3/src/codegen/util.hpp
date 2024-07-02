@@ -70,6 +70,7 @@ namespace bc
 		_bool draggable;
 		uint8 rotationStyle;
 		Script initializer;
+		uint64 numFields;
 		uint64 numScripts;
 		ptr<Script> scripts;
 		uint64 numCostumes;
