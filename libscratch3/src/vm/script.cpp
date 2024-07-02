@@ -407,8 +407,29 @@ int ScriptMain()
 			sprite->SetDirection(ToReal(StackAt(-1)) + sprite->GetDirection());
 			Pop();
 			break;
-		case Op_goto:
-			Raise(NotImplemented, "goto");
+		case Op_goto: {
+			Value &v = CvtString(StackAt(-1));
+			if (v.type != ValueType_String)
+			{
+				SetBool(v, false);
+				break;
+			}
+
+			if (!strcmp(v.u.string->str, "_mouse_"))
+			{
+				auto &io = VM->GetIO();
+				sprite->SetXY(io.GetMouseX(), io.GetMouseY());
+			}
+			else
+			{
+				Sprite *s = VM->FindSprite(v);
+				if (s)
+					sprite->SetXY(s->GetX(), s->GetY());
+			}
+
+			Pop();
+			break;
+		}
 		case Op_gotoxy:
 			sprite->SetXY(ToReal(StackAt(-2)), ToReal(StackAt(-1)));
 			Pop();
