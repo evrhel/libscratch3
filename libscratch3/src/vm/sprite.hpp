@@ -172,9 +172,44 @@ public:
     constexpr Costume *GetCostume() const { return _base->GetCostume(_costume); }
 
     constexpr void SetVisible(bool visible) { _visible = visible; _transDirty = true; }
-    constexpr void SetX(double x) { _x = x; _transDirty = true; }
-    constexpr void SetY(double y) { _y = y; _transDirty = true; }
-    constexpr void SetXY(double x, double y) { _x = x; _y = y; _transDirty = true; }
+
+    constexpr void SetX(double x)
+    {
+        _x = x;
+        if (_x < -240)
+            _x = -240;
+        else if (_x > 240)
+            _x = 240;
+        _transDirty = true;
+    }
+
+    constexpr void SetY(double y)
+    {
+        _y = y;
+        if (_y < -180)
+            _y = -180;
+        else if (_y > 180)
+            _y = 180;
+        _transDirty = true;
+    }
+
+    constexpr void SetXY(double x, double y)
+    {
+        _x = x;
+        if (_x < -240)
+            _x = -240;
+        else if (_x > 240)
+            _x = 240;
+
+        _y = y;
+        if (_y < -180)
+            _y = -180;
+        else if (_y > 180)
+            _y = 180;
+      
+        _transDirty = true;
+    }
+
     constexpr void SetSize(double size) { _size = size; _transDirty = true; }
     constexpr void SetDirection(double direction) { _direction = direction; _transDirty = true; }
     constexpr void SetDraggable(bool draggable) { _draggable = draggable; }

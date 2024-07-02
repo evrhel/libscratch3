@@ -1213,7 +1213,7 @@ public:
 
 	virtual void Visit(DefineProc *node)
 	{
-		std::string proccode = *currentSpriteName + node->proto->proccode;
+		std::string proccode = GetQualifiedProcName(node->proto->proccode);
 		auto it = procedureTable.find(proccode);
 		if (it != procedureTable.end())
 		{
