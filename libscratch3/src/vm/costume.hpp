@@ -118,6 +118,8 @@ private:
 	uint8_t *_data;
 	uint64_t _dataSize;
 
+	int _nComponents; // number of components in the bitmap data
+
 	void Upload();
 
 	void Cleanup();

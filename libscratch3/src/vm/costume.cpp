@@ -35,11 +35,17 @@ void Costume::Load()
 		// load image
 		int width, height, channels;
 		_bitmapData = stbi_load_from_memory(_data, _dataSize,
-			&width, &height, &channels, 4);
-
+			&width, &height, &channels, 0);
 		if (!_bitmapData)
 		{
 			printf("Costume::Load: Failed to load image %s\n", GetNameString());
+			return;
+		}
+
+		if (channels != 3 && channels != 4)
+		{
+			printf("Costume::Load: Invalid number of channels %d\n", channels);
+			stbi_image_free(_bitmapData), _bitmapData = nullptr;
 			return;
 		}
 
@@ -54,6 +60,7 @@ void Costume::Load()
 
 		_texWidth = width;
 		_texHeight = height;
+		_nComponents = channels;
 
 		_size = IntVector2(_texWidth, _texHeight);
 		_logicalSize = Vector2(_size) / static_cast<float>(_bitmapResolution);
@@ -80,13 +87,8 @@ void Costume::Load()
 		_size = IntVector2(_svgWidth, _svgHeight);
 		_logicalSize = Vector2(_size);
 		_logicalCenter = Vector2(_center);
-		
-		if (!_streamed)
-		{
-			// preload some LODs (arbitrary)
-			(void)GetTexture(Vector2(1));
-			(void)GetTexture(Vector2(2));
-		}
+
+		_nComponents = 4; // always RGBA
 	}
 
 #if LS_DEBUG
@@ -175,11 +177,28 @@ void Costume::Upload()
 	printf("Costume::Upload: Uploading %s\n", GetNameString());
 #endif // LS_DEBUG
 
+	GLenum format, internalFormat;
+	switch (_nComponents)
+	{
+	case 3:
+		format = GL_RGB;
+		internalFormat = GL_RGB8;
+		break;
+	case 4:
+		format = GL_RGBA;
+		internalFormat = GL_RGBA8;
+		break;
+	default:
+		printf("Costume::Upload: Invalid number of components %d\n", _nComponents);
+		_uploadError = true;
+		return;
+	}
+
 	// upload to gpu
 	glGenTextures(1, _textures);
 	glBindTexture(GL_TEXTURE_2D, _textures[0]);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _texWidth, _texHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, _bitmapData);
+	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, _texWidth, _texHeight, 0, format, GL_UNSIGNED_BYTE, _bitmapData);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
