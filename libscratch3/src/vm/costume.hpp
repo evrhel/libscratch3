@@ -52,11 +52,11 @@ public:
 
 	//! \brief Checks if a point is inside the costume
 	//!
-	//! \param x The X coordinate of the point, in units
-	//! \param y The Y coordinate of the point, in units
+	//! \param x The X coordinate of the point, in pixels
+	//! \param y The Y coordinate of the point, in pixels
 	//!
 	//! \return Whether the point is inside the costume
-	bool TestCollision(int32_t x, int32_t y) const;
+	bool CheckCollision(int32_t x, int32_t y);
 
 	//! \brief Initialize the costume
 	//!
@@ -120,9 +120,13 @@ private:
 
 	int _nComponents; // number of components in the bitmap data
 
+	uint8_t *_collisionMask; // collision mask for the costume
+
 	void Upload();
 
 	void Cleanup();
 
 	GLuint RenderLod(double scale);
+
+	bool GenerateCollisionMask();
 };

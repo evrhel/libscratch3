@@ -139,9 +139,18 @@ GLuint Costume::GetTexture(const Vector2 &scale)
 	return _textures[lod];
 }
 
-bool Costume::TestCollision(int32_t x, int32_t y) const
+bool Costume::CheckCollision(int32_t x, int32_t y)
 {
-	return true;
+	if (x < 0 || y < 0 || x >= _size.x || y >= _size.y)
+		return false;
+
+	if (_nComponents != 4)
+		return true; // no alpha channel, assume all pixels are collidable
+
+	if (!GenerateCollisionMask())
+		return false;
+
+	return _collisionMask[y * _size.x + x];
 }
 
 Costume::Costume() :
@@ -149,7 +158,9 @@ Costume::Costume() :
 	_streamed(false), _uploaded(false), _uploadError(false),
 	_texWidth(0), _texHeight(0),
 	_bitmapResolution(0),
-	_data(nullptr), _dataSize(0)
+	_data(nullptr), _dataSize(0),
+	_nComponents(0),
+	_collisionMask(nullptr)
 {
 	_handle = nullptr;
 	_svgWidth = _svgHeight = 0;
@@ -206,7 +217,8 @@ void Costume::Upload()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-	stbi_image_free(_bitmapData), _bitmapData = nullptr;
+	if (_collisionMask)
+		stbi_image_free(_bitmapData), _bitmapData = nullptr; // no longer needed
 
 	_uploaded = true;
 }
@@ -230,6 +242,9 @@ void Costume::Cleanup()
 
 	if (_bitmapData)
 		stbi_image_free(_bitmapData), _bitmapData = nullptr;
+
+	if (_collisionMask)
+		free(_collisionMask), _collisionMask = nullptr;
 
 	_texWidth = _texHeight = 0;
 	_svgWidth = _svgHeight = 0;
@@ -256,12 +271,16 @@ GLuint Costume::RenderLod(double scale)
 	// setup cairo surface
 	cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 	if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+	{
+		printf("Costume::RenderLod: Failed to create cairo surface\n");
 		return 0;
+	}
 
 	// create cairo context
 	cairo_t *cr = cairo_create(surface);
 	if (cairo_status(cr) != CAIRO_STATUS_SUCCESS)
 	{
+		printf("Costume::RenderLod: Failed to create cairo context\n");
 		cairo_surface_destroy(surface);
 		return 0;
 	}
@@ -274,6 +293,7 @@ GLuint Costume::RenderLod(double scale)
 	// render to cairo surface
 	if (!rsvg_handle_render_cairo(_handle, cr))
 	{
+		printf("Costume::RenderLod: Failed to render SVG %s\n", GetNameString());
 		cairo_destroy(cr);
 		cairo_surface_destroy(surface);
 		return 0;
@@ -294,8 +314,105 @@ GLuint Costume::RenderLod(double scale)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	// cleanup surface and context
-	cairo_surface_destroy(surface), data = nullptr;
-	cairo_destroy(cr), cr = nullptr;
+	cairo_surface_destroy(surface);
+	cairo_destroy(cr);
 
 	return texture;
+}
+
+bool Costume::GenerateCollisionMask()
+{
+	if (_collisionMask)
+		return true; // already generated
+
+	if (_nComponents != 4)
+	{
+		printf("Costume::GenerateCollisionMask: Invalid number of components %d\n", _nComponents);
+		return false;
+	}
+
+	size_t size = (size_t)_size.x * (size_t)_size.y;
+
+	if (_handle)
+	{
+		// setup cairo surface
+		cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, _svgWidth, _svgHeight);
+		if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+		{
+			printf("Costume::GenerateSVGCollisionMask: Failed to create cairo surface\n");
+			return false;
+		}
+
+		// create cairo context
+		cairo_t *cr = cairo_create(surface);
+		if (cairo_status(cr) != CAIRO_STATUS_SUCCESS)
+		{
+			printf("Costume::GenerateSVGCollisionMask: Failed to create cairo context\n");
+			cairo_surface_destroy(surface);
+			return false;
+		}
+
+		// render to cairo surface
+		if (!rsvg_handle_render_cairo(_handle, cr))
+		{
+			printf("Costume::GenerateSVGCollisionMask: Failed to render SVG %s\n", GetNameString());
+			cairo_destroy(cr);
+			cairo_surface_destroy(surface);
+			return false;
+		}
+
+		unsigned char *data = cairo_image_surface_get_data(surface);
+
+		_collisionMask = (uint8_t *)malloc(size);
+		if (!_collisionMask)
+		{
+			printf("Costume::GenerateSVGCollisionMask: Failed to allocate memory for collision mask\n");
+			cairo_surface_destroy(surface);
+			cairo_destroy(cr);
+			return false;
+		}
+
+		// generate collision mask
+		for (size_t i = 0; i < size; i++)
+		{
+			unsigned char *pixel = data + i * 4;
+			_collisionMask[i] = pixel[3] >= MASK_THRESHOLD;
+		}
+
+		// cleanup surface and context
+		cairo_surface_destroy(surface);
+		cairo_destroy(cr);
+	}
+	else
+	{
+		if (!_bitmapData)
+		{
+			printf("Costume::GenerateCollisionMask: No bitmap data\n");
+			return false;
+		}
+
+		_collisionMask = (uint8_t *)malloc(size);
+		if (!_collisionMask)
+		{
+			printf("Costume::GenerateCollisionMask: Failed to allocate memory for collision mask\n");
+			return false;
+		}
+
+		// generate collision mask
+		for (size_t y = 0; y < _size.y; y++)
+		{
+			size_t srcOff = y * _size.x;
+			size_t dstOff = (_size.y - y - 1) * _size.x; // flip y
+			for (size_t x = 0; x < _size.x; x++)
+			{
+				unsigned char *pixel = _bitmapData + (srcOff + x) * 4;
+				_collisionMask[dstOff + x] = pixel[3] >= MASK_THRESHOLD;
+			}
+		}
+
+		if (_uploaded)
+			stbi_image_free(_bitmapData), _bitmapData = nullptr; // no longer needed
+	}
+
+	return true;
 }

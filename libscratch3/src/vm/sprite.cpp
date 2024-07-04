@@ -463,11 +463,20 @@ bool Sprite::TouchingPoint(const Vector2 &point) const
     if (_gec.GetGhostEffect() >= 100)
 		return false; // invisible
 
+    // fast check
     if (!AABBContains(_bbox, point))
         return false;
 
-    // TODO: perform more accurate check
-    return true;
+    // check against costume collision mask
+
+    Costume *c = _base->GetCostume(_costume);
+
+    // normalize point to costume size
+    Vector2 N = (point - _bbox.lo) / (_bbox.hi - _bbox.lo);
+    N.y = 1.0f - N.y; // flip Y axis
+
+    const IntVector2 &size = c->GetSize();
+    return c->CheckCollision(N.x * size.x, N.y * size.y);
 }
 
 bool Sprite::TouchingSprite(const Sprite *sprite) const
