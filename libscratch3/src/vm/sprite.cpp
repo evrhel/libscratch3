@@ -54,11 +54,13 @@ static inline AABB &ApplyTransformation(AABB &self, const Matrix4 &model)
     return CornersToAABB(self, corners);
 }
 
-// check if two AABBs intersect
-static constexpr bool AABBIntersect(const AABB &a, const AABB &b)
+// intersection of two AABBs
+static constexpr AABB AABBIntersection(const AABB &a, const AABB &b)
 {
-    return a.lo.x <= b.hi.x && a.hi.x >= b.lo.x &&
-           a.lo.y <= b.hi.y && a.hi.y >= b.lo.y;
+    return AABB{
+        Vector2(mutil::max(a.lo.x, b.lo.x), mutil::max(a.lo.y, b.lo.y)),
+        Vector2(mutil::min(a.hi.x, b.hi.x), mutil::min(a.hi.y, b.hi.y))
+    };
 }
 
 // check if AABB contains point
@@ -455,6 +457,21 @@ void Sprite::Update()
     }
 }
 
+// check against costume collision mask
+static inline bool CheckPointExp(const Sprite *s, const Vector2 &point)
+{
+    Costume *c = s->GetCostume();
+
+    // normalize point to costume size
+    const AABB &bbox = s->GetBoundingBox();
+    Vector2 N = (point - bbox.lo) / (bbox.hi - bbox.lo);
+    N.y = 1.0f - N.y; // flip Y axis
+
+    // scale to costume size and check collision
+    const IntVector2 &size = c->GetSize();
+    return c->CheckCollision(N.x * size.x, N.y * size.y);
+}
+
 bool Sprite::TouchingPoint(const Vector2 &point) const
 {
     if (!_visible)
@@ -467,16 +484,7 @@ bool Sprite::TouchingPoint(const Vector2 &point) const
     if (!AABBContains(_bbox, point))
         return false;
 
-    // check against costume collision mask
-
-    Costume *c = _base->GetCostume(_costume);
-
-    // normalize point to costume size
-    Vector2 N = (point - _bbox.lo) / (_bbox.hi - _bbox.lo);
-    N.y = 1.0f - N.y; // flip Y axis
-
-    const IntVector2 &size = c->GetSize();
-    return c->CheckCollision(N.x * size.x, N.y * size.y);
+    return CheckPointExp(this, point);
 }
 
 bool Sprite::TouchingSprite(const Sprite *sprite) const
@@ -487,11 +495,27 @@ bool Sprite::TouchingSprite(const Sprite *sprite) const
     if (_gec.GetGhostEffect() >= 100 || sprite->_gec.GetGhostEffect() >= 100)
         return false; // invisible
 
-    if (!AABBIntersect(_bbox, sprite->_bbox))
-		return false;
+    AABB I = AABBIntersection(_bbox, sprite->_bbox);
+    if (I.lo.x > I.hi.x || I.lo.y > I.hi.y)
+		return false; // no intersection
 
-    // TODO: perform more accurate check
-    return true;
+    const Vector2 size = I.hi - I.lo;
+
+    // iterate over the bounding box of the intersection
+    Vector2 L;
+    for (; L.y < size.y; L.y++)
+    {
+        for (L.x = 0; L.x < size.x; L.x++)
+        {
+            const Vector2 P = I.lo + L;
+            
+            // check if point is inside both sprites
+            if (CheckPointExp(this, P) && CheckPointExp(sprite, P))
+                return true;
+        }
+    }
+
+    return false;
 }
 
 Value &Sprite::GetField(uint32_t id)

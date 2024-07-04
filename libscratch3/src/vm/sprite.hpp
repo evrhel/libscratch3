@@ -244,6 +244,7 @@ public:
     bool TouchingSprite(const Sprite *sprite) const;
 
     constexpr const Matrix4 &GetModel() const { return _model; }
+    constexpr const Matrix4 &GetInvModel() const { return _invModel; }
     constexpr const AABB &GetBoundingBox() const { return _bbox; }
 
     constexpr GraphicEffectController &GetGraphicEffects() { return _gec; }
@@ -340,7 +341,7 @@ private:
     //////////////////////////////////////////////////////////////////////////
     // Rendering
 
-    Matrix4 _model;
+    Matrix4 _model, _invModel;
     AABB _bbox;
 
     GraphicEffectController _gec;
