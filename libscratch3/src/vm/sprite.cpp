@@ -55,6 +55,8 @@ static inline AABB &ApplyTransformation(AABB &self, const Matrix4 &model)
 }
 
 // intersection of two AABBs
+//
+// no intersection if lo.x > hi.x or lo.y > hi.y
 static constexpr AABB AABBIntersection(const AABB &a, const AABB &b)
 {
     return AABB{
@@ -495,20 +497,20 @@ bool Sprite::TouchingSprite(const Sprite *sprite) const
     if (_gec.GetGhostEffect() >= 100 || sprite->_gec.GetGhostEffect() >= 100)
         return false; // invisible
 
-    AABB I = AABBIntersection(_bbox, sprite->_bbox);
+    const AABB I = AABBIntersection(_bbox, sprite->_bbox);
     if (I.lo.x > I.hi.x || I.lo.y > I.hi.y)
 		return false; // no intersection
 
     const Vector2 size = I.hi - I.lo;
+    if (size.x < 1 || size.y < 1)
+		return false; // too small
 
-    // iterate over the bounding box of the intersection
-    Vector2 L;
-    for (; L.y < size.y; L.y++)
+    // iterate over the intersection area
+    Vector2 P;
+    for (P.y = I.lo.y; P.y < I.hi.y; P.y++)
     {
-        for (L.x = 0; L.x < size.x; L.x++)
-        {
-            const Vector2 P = I.lo + L;
-            
+        for (P.x = I.lo.x; P.x < I.hi.x; P.x++)
+        {            
             // check if point is inside both sprites
             if (CheckPointExp(this, P) && CheckPointExp(sprite, P))
                 return true;
