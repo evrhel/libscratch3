@@ -240,8 +240,8 @@ public:
 
     void Update();
 
-    bool TouchingPoint(const Vector2 &point) const;
-    bool TouchingSprite(const Sprite *sprite) const;
+    bool TouchingPoint(const Vector2 &point);
+    bool TouchingSprite(const Sprite *sprite);
 
     constexpr const Matrix4 &GetModel() const { return _model; }
     constexpr const Matrix4 &GetInvModel() const { return _invModel; }

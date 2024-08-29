@@ -446,6 +446,9 @@ int VirtualMachine::VMStart()
 
 	_lastExecution = ls_nanotime();
 
+	if (_options.suspend)
+		VMSuspend();
+
 	VM = nullptr;
 	return 0;
 }

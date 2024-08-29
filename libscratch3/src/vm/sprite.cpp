@@ -474,13 +474,12 @@ static inline bool CheckPointExp(const Sprite *s, const Vector2 &point)
     return c->CheckCollision(N.x * size.x, N.y * size.y);
 }
 
-bool Sprite::TouchingPoint(const Vector2 &point) const
+bool Sprite::TouchingPoint(const Vector2 &point)
 {
     if (!_visible)
         return false;
 
-    if (_gec.GetGhostEffect() >= 100)
-		return false; // invisible
+    Update(); // ensure transformation is up-to-date
 
     // fast check
     if (!AABBContains(_bbox, point))
@@ -489,13 +488,12 @@ bool Sprite::TouchingPoint(const Vector2 &point) const
     return CheckPointExp(this, point);
 }
 
-bool Sprite::TouchingSprite(const Sprite *sprite) const
+bool Sprite::TouchingSprite(const Sprite *sprite)
 {
     if (!_visible || !sprite->_visible)
         return false;
 
-    if (_gec.GetGhostEffect() >= 100 || sprite->_gec.GetGhostEffect() >= 100)
-        return false; // invisible
+    Update(); // ensure transformation is up-to-date
 
     const AABB I = AABBIntersection(_bbox, sprite->_bbox);
     if (I.lo.x > I.hi.x || I.lo.y > I.hi.y)

@@ -68,6 +68,7 @@ typedef struct _Scratch3VMOptions
 {
 	int debug;
 	int framerate;
+	int suspend;
 
 	int width, height;
 	int resizable;

@@ -880,7 +880,8 @@ public:
 		if (node->sl)
 			node->sl->Accept(this);
 
-		cp.WriteOpcode(Op_yield);
+		if (!InWarpMode())
+			cp.WriteOpcode(Op_yield);
 
 		// decrement counter
 		cp.WriteOpcode(Op_dec);
@@ -903,7 +904,11 @@ public:
 		if (node->sl)
 			node->sl->Accept(this);
 
-		cp.WriteOpcode(Op_yield);
+		if (!InWarpMode())
+			cp.WriteOpcode(Op_yield);
+		else
+			printf("Warning: Forever loop in warp mode\n");
+
 		cp.WriteAbsoluteJump(Op_jmp, start);
 	}
 
@@ -989,7 +994,9 @@ public:
 		size_t jnz = cp.WriteReference(Segment_text, Segment_text);
 		cp.WriteText<int64_t>(0); // placeholder
 
-		cp.WriteOpcode(Op_yield);
+		if (!InWarpMode())
+			cp.WriteOpcode(Op_yield);
+
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
 		// set jump destination for condition
@@ -1009,7 +1016,9 @@ public:
 		if (node->sl)
 			node->sl->Accept(this);
 
-		cp.WriteOpcode(Op_yield);
+		if (!InWarpMode())
+			cp.WriteOpcode(Op_yield);
+
 		cp.WriteAbsoluteJump(Op_jmp, top);
 
 		// set jump destination for condition
@@ -1460,7 +1469,7 @@ public:
 			if (proc != nullptr)
 			{
 				count--;
-				topLevel = true;
+				topLevel = false;
 				proc->Accept(this);
 			}
 		}
@@ -1471,7 +1480,7 @@ public:
 			DefineProc *proc = sl->sl[0]->As<DefineProc>();
 			if (proc != nullptr)
 			{
-				topLevel = true;
+				topLevel = false;
 
 				std::string proccode = GetQualifiedProcName(proc->proto->proccode);
 
@@ -1789,6 +1798,11 @@ public:
 
 		cp.FlushStringPool();
 		cp.Link();
+	}
+
+	inline bool InWarpMode() const
+	{
+		return currentProc && currentProc->proto->warp;
 	}
 
 	CompiledProgram &cp;

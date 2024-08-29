@@ -72,6 +72,7 @@ static void Usage()
 	printf("  -f, --fullscreen      Set fullscreen\n");
 	printf("  -b, --borderless      Set borderless\n");
 	printf("  -a, --free-aspect     Don't lock aspect ratio\n");
+	printf("  -u, --suspend         Suspend VM on start\n");
 }
 
 static void Version()
@@ -95,6 +96,7 @@ struct Options
 	bool fullscreen = false;
 	bool borderless = false;
 	bool freeAspectRatio = false;
+	bool suspend = false;
 
 	void Parse(int argc, char *argv[])
 	{
@@ -161,6 +163,8 @@ struct Options
 				borderless = true;
 			else if (!strcmp(arg, "--free-aspect"))
 				freeAspectRatio = true;
+			else if (!strcmp(arg, "--suspend"))
+				suspend = true;
 			else if (!strcmp(arg, "-Og"))
 			{
 				optimization = 0;
@@ -206,6 +210,9 @@ struct Options
 						break;
 					case 'a':
 						freeAspectRatio = true;
+						break;
+					case 'u':
+						suspend = true;
 						break;
 					case 'o':
 					case 'F':
@@ -348,6 +355,7 @@ int main(int argc, char *argv[])
 	memset(&vmOptions, 0, sizeof(vmOptions));
 	vmOptions.debug = opts.liveDebug;
 	vmOptions.framerate = opts.framerate;
+	vmOptions.suspend = opts.suspend;
 	vmOptions.width = opts.width;
 	vmOptions.height = opts.height;
 	vmOptions.resizable = opts.resizable;
