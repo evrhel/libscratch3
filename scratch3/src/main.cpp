@@ -232,7 +232,11 @@ struct Options
 static std::string GetName(const char *path)
 {
 	std::string name;
-	name.resize(ls_basename(path, nullptr, 0) - 1);
+	size_t cb = ls_basename(path, nullptr, 0);
+	if (cb == 0)
+		return path; // no basename
+
+	name.resize(cb - 1);
 	ls_basename(path, &name[0], name.size() + 1);
 	return name;
 }
