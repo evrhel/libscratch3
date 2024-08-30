@@ -36,6 +36,7 @@ public:
 	inline virtual void Visit(Sub *node) {}
 	inline virtual void Visit(Mul *node) {}
 	inline virtual void Visit(Div *node) {}
+	inline virtual void Visit(Neg *node) {}
 	inline virtual void Visit(Random *node) {}
 	inline virtual void Visit(Greater *node) {}
 	inline virtual void Visit(Less *node) {}

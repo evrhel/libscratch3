@@ -196,6 +196,12 @@ public:
 		cp.WriteOpcode(Op_div);
 	}
 
+	virtual void Visit(Neg *node)
+	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_neg);
+	}
+
 	virtual void Visit(Random *node)
 	{
 		node->e1->Accept(this);

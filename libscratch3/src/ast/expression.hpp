@@ -1,6 +1,7 @@
 #pragma once
 
 #include "astnode.hpp"
+#include "../vm/memory.hpp"
 
 #include <stdexcept>
 
@@ -8,6 +9,8 @@
 struct Expression : public ASTNode
 {
 	AST_IMPL(Expression, ASTNode);
+
+	OptionalValue eval; // evaluated value
 };
 
 // expression evaluatable to a constant expression
@@ -509,6 +512,15 @@ struct Div : public Consteval
 
 	AutoRelease<Expression> e1; // number
 	AutoRelease<Expression> e2; // number
+};
+
+// negation
+struct Neg : public Consteval
+{
+	EXPR_IMPL(Neg, Consteval);
+	AST_ACCEPTOR;
+
+	AutoRelease<Expression> e; // number
 };
 
 // (pick random $e1 to $e2)

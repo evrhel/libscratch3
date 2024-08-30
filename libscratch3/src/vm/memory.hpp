@@ -13,6 +13,8 @@
 
 enum ValueType
 {
+	ValueType_Undefined = -1, // undefined value
+
 	ValueType_None = 0, // no value
 
 	/* Numeric types */
@@ -295,3 +297,372 @@ struct _StringEqual
 
 template <typename T>
 using StringMap = std::unordered_map<const String *, T, _StringHasher, _StringEqual>;
+
+class OptionalValue
+{
+public:
+	constexpr bool HasValue() const { return _hasValue; }
+	constexpr ValueType Type() const { return _type; }
+	constexpr const Value &GetValue() const { return _value; }
+
+	inline OptionalValue &Erase()
+	{
+		if (_hasValue)
+		{
+			ReleaseValue(_value);
+			_hasValue = false;
+		}
+
+		return *this;
+	}
+
+	inline OptionalValue &SetUndefined()
+	{
+		Erase();
+		_type = ValueType_Undefined;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetEmpty()
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+		else
+			::SetEmpty(_value);
+
+		_hasValue = true;
+		_type = ValueType_None;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetInteger(int64_t val)
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+
+		::SetInteger(_value, val);
+		_hasValue = true;
+		_type = ValueType_Integer;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetInteger()
+	{
+		if (_hasValue)
+			ReleaseValue(_value);
+
+		_hasValue = false;
+		_type = ValueType_Integer;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetReal(double val)
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+
+		::SetReal(_value, val);
+		_hasValue = true;
+		_type = ValueType_Real;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetReal()
+	{
+		if (_hasValue)
+			ReleaseValue(_value);
+
+		_hasValue = false;
+		_type = ValueType_Real;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetBool(bool val)
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+
+		::SetBool(_value, val);
+		_hasValue = true;
+		_type = ValueType_Bool;
+
+		return *this;
+	}
+	
+	inline OptionalValue &SetBool()
+	{
+		if (_hasValue)
+			ReleaseValue(_value);
+
+		_hasValue = false;
+		_type = ValueType_Bool;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetString(const char *val)
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+
+		::SetString(_value, val);
+		_hasValue = true;
+		_type = ValueType_String;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetString(const std::string &val)
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+
+		::SetString(_value, val);
+		_hasValue = true;
+		_type = ValueType_String;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetString()
+	{
+		if (_hasValue)
+			ReleaseValue(_value);
+
+		_hasValue = false;
+		_type = ValueType_String;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetList()
+	{
+		if (_hasValue)
+			ReleaseValue(_value);
+
+		_hasValue = false;
+		_type = ValueType_List;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetParsedString(const char *val)
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+
+		::SetParsedString(_value, val);
+		_hasValue = true;
+		_type = (ValueType)_value.type;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetValue(const Value &val)
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+
+		Assign(_value, val);
+		_hasValue = true;
+		_type = (ValueType)val.type;
+
+		return *this;
+	}
+
+	inline OptionalValue &operator=(const OptionalValue &opt)
+	{
+		if (this == &opt)
+			return *this;
+
+		SetEmpty();
+
+		_hasValue = opt._hasValue;
+		_type = opt._type;
+
+		if (_hasValue)
+			Assign(_value, opt._value);
+
+		return *this;
+	}
+
+	inline OptionalValue &operator=(OptionalValue &&opt) noexcept
+	{
+		if (this == &opt)
+			return *this;
+		
+		if (_hasValue)
+			ReleaseValue(_value);
+
+		_value = opt._value;
+		_type = opt._type;
+		_hasValue = opt._hasValue;
+
+		opt._hasValue = false;
+		opt._type = ValueType_Undefined;
+
+		return *this;
+	}
+
+	inline OptionalValue &operator=(const Value &val)
+	{
+		if (!_hasValue)
+			InitializeValue(_value);
+
+		Assign(_value, val);
+		_hasValue = true;
+		_type = (ValueType)val.type;
+
+		return *this;
+	}
+
+	constexpr bool IsZeroLike() const
+	{
+		if (_type == ValueType_None || _type == ValueType_String || _type == ValueType_List)
+			return true;
+
+		if (!_hasValue)
+			return false;
+
+		switch (_type)
+		{
+		default:
+			return false;
+		case ValueType_Integer:
+			return _value.u.integer == 0;
+		case ValueType_Real:
+			return _value.u.real == 0.0;
+		}
+	}
+
+	constexpr bool IsOne() const
+	{
+		if (!_hasValue)
+			return false;
+
+		switch (_type)
+		{
+		default:
+			return false;
+		case ValueType_Integer:
+			return _value.u.integer == 1;
+		case ValueType_Real:
+			return _value.u.real == 1.0;
+		}
+	}
+
+	constexpr bool IsNegative() const
+	{
+		if (!_hasValue)
+			return false;
+
+		switch (_type)
+		{
+		default:
+			return false;
+		case ValueType_Integer:
+			return _value.u.integer < 0;
+		case ValueType_Real:
+			return _value.u.real < 0.0;
+		}
+	}
+
+	constexpr bool IsPositive() const
+	{
+		if (!_hasValue)
+			return false;
+
+		switch (_type)
+		{
+		default:
+			return false;
+		case ValueType_Integer:
+			return _value.u.integer > 0;
+		case ValueType_Real:
+			return _value.u.real > 0.0;
+		}
+	}
+
+	constexpr bool IsPossibleNumeric() const
+	{
+		return _type == ValueType_Undefined || _type == ValueType_None || _type == ValueType_Integer || _type == ValueType_Real;
+	}
+
+	constexpr bool IsNone() const
+	{
+		return _type == ValueType_None;
+	}
+
+	inline OptionalValue() : _hasValue(false), _type(ValueType_Undefined)
+	{
+		memset(&_value, 0, sizeof(Value));
+	}
+
+	inline OptionalValue(ValueType type) : _hasValue(false), _type(type)
+	{
+		memset(&_value, 0, sizeof(Value));
+	}
+
+	inline OptionalValue(int64_t val) : _hasValue(true), _type(ValueType_Integer)
+	{
+		InitializeValue(_value);
+		::SetInteger(_value, val);
+	}
+
+	inline OptionalValue(double val) : _hasValue(true), _type(ValueType_Real)
+	{
+		InitializeValue(_value);
+		::SetReal(_value, val);
+	}
+
+	inline OptionalValue(bool val) : _hasValue(true), _type(ValueType_Bool)
+	{
+		InitializeValue(_value);
+		::SetBool(_value, val);
+	}
+
+	inline OptionalValue(const char *val) : _hasValue(true), _type(ValueType_String)
+	{
+		InitializeValue(_value);
+		::SetString(_value, val);
+	}
+
+	inline OptionalValue(const std::string &val) : _hasValue(true), _type(ValueType_String)
+	{
+		InitializeValue(_value);
+		::SetString(_value, val);
+	}
+
+	inline OptionalValue(const Value &val) : _hasValue(true), _type((ValueType)val.type)
+	{
+		InitializeValue(_value);
+		Assign(_value, val);
+	}
+
+	inline OptionalValue(const OptionalValue &opt) : _hasValue(opt._hasValue), _type(opt._type)
+	{
+		if (_hasValue)
+		{
+			InitializeValue(_value);
+			Assign(_value, opt._value);
+		}
+		else
+			memset(&_value, 0, sizeof(Value));
+	}
+
+	inline ~OptionalValue()
+	{
+		if (_hasValue)
+			ReleaseValue(_value);
+	}
+private:
+	bool _hasValue;
+	ValueType _type;
+	Value _value;
+};

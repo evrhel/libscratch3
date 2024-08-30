@@ -180,6 +180,9 @@ SCRATCH3_EXTERN_C SCRATCH3_EXPORT int Scratch3Compile(Scratch3 *S, const Scratch
 		return SCRATCH3_ERROR_COMPILATION_FAILED;
 	Retain(prog);
 
+	if (options->optimization > 0)
+		Optimize(prog, options->optimization);
+
 	CompiledProgram *cprog = CompileProgram(prog, S->loader, options);
 	if (!cprog)
 	{

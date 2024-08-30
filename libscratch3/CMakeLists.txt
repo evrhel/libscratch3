@@ -22,6 +22,7 @@ set(src "src")
 set(SOURCES
 	${src}/ast/ast.cpp
 	${src}/ast/astdef.cpp
+	${src}/ast/optimize.cpp
 	${src}/ast/visitor.cpp
 	${src}/codegen/compiler.cpp
 	${src}/render/renderer.cpp

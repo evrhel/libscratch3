@@ -62,6 +62,7 @@ struct Add;
 struct Sub;
 struct Mul;
 struct Div;
+struct Neg;
 struct Random;
 struct Greater;
 struct Less;
@@ -327,6 +328,7 @@ enum AstType
 	Ast_Sub,
 	Ast_Mul,
 	Ast_Div,
+	Ast_Neg,
 	Ast_Random,
 	Ast_Greater,
 	Ast_Less,

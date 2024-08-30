@@ -58,26 +58,39 @@ static void Usage()
 {
 	printf("Usage: scratch3 [options...] <project>\n\n");
 	printf("Options:\n");
-	printf("  -h, --help            Show this message\n");
-	printf("  -v, --version         Show version\n");
-	printf("  -Og, -O0, -O1, -O2    Set optimization level, default -O2\n");
-	printf("  -c, --compile         Only compile project\n");
-	printf("  -o, --out <file>      Specify binary output file\n");
-	printf("  -d, --debug           Enable live debugging\n");
-	printf("  -F, --framerate       Set framerate\n");
-	printf("  -W, --width <width>   Set window width\n");
-	printf("  -H, --height <height> Set window height\n");
-	printf("  -r, --resizable       Set window resizable\n");
-	printf("  -s, --stream          Stream resources instead of loading all at once\n");
-	printf("  -f, --fullscreen      Set fullscreen\n");
-	printf("  -b, --borderless      Set borderless\n");
-	printf("  -a, --free-aspect     Don't lock aspect ratio\n");
-	printf("  -u, --suspend         Suspend VM on start\n");
+	printf("  -h, --help                 Show this message\n");
+	printf("  -v, --version              Show version\n");
+	printf("  -Og, -O0, -O1, -O2, -Oa    Set optimization level, default -O2\n");
+	printf("  -Oh                        Show optimization help\n");
+	printf("  -c, --compile              Only compile project\n");
+	printf("  -o, --out <file>           Specify binary output file\n");
+	printf("  -d, --debug                Enable live debugging\n");
+	printf("  -F, --framerate            Set framerate\n");
+	printf("  -W, --width <width>        Set window width\n");
+	printf("  -H, --height <height>      Set window height\n");
+	printf("  -r, --resizable            Set window resizable\n");
+	printf("  -s, --stream               Stream resources instead of loading all at once\n");
+	printf("  -f, --fullscreen           Set fullscreen\n");
+	printf("  -b, --borderless           Set borderless\n");
+	printf("  -a, --free-aspect          Don't lock aspect ratio\n");
+	printf("  -u, --suspend              Suspend VM on start\n");
 }
 
 static void Version()
 {
 	printf("scratch3 1.0\n");
+}
+
+static void OptimizationHelp()
+{
+	printf("Optimization levels:\n");
+	printf("  -O0    No optimization\n");
+	printf("  -O1    Basic optimization\n");
+	printf("  -O2    Full optimization\n");
+	printf("  -Og    Debug optimization\n");
+	printf("  -Oa    Aggressive optimization. Identifies common subexpressions and\n");
+	printf("         replaces them with a single instruction. This may cause some\n");
+	printf("         projects to behave differently.\n");
 }
 
 struct Options
@@ -176,6 +189,13 @@ struct Options
 				optimization = 1;
 			else if (!strcmp(arg, "-O2"))
 				optimization = 2;
+			else if (!strcmp(arg, "-Oa"))
+				optimization = 1000;
+			else if (!strcmp(arg, "-Oh"))
+			{
+				OptimizationHelp();
+				exit(0);
+			}
 			else if (arg[0] == '-')
 			{
 				arg++;

@@ -43,17 +43,29 @@ static Constexpr *ParseLiteral(rapidjson::Value &v)
 	Constexpr *c = new Constexpr();
 
 	if (v.IsString())
+	{
 		c->value = v.GetString();
+		c->eval.SetParsedString(v.GetString());
+	}
 	else if (v.IsInt())
+	{
 		c->value = std::to_string(v.GetInt());
+		c->eval.SetInteger(v.GetInt());
+	}
 	else if (v.IsDouble())
 	{
 		char buf[64];
 		snprintf(buf, sizeof(buf), "%g", v.GetDouble());
 		c->value = buf;
+		c->eval.SetReal(v.GetDouble());
 	}
 	else if (v.IsBool())
+	{
 		c->value = v.GetBool() ? "true" : "false";
+		c->eval.SetBool(v.GetBool());
+	}
+	else
+		c->eval.SetUndefined();
 
 	return c;
 }

@@ -8,6 +8,7 @@
 	</Type>
 	
 	<Type Name="Value">
+		<DisplayString Condition="type == ValueType_Undefined">Undefined</DisplayString>
 		<DisplayString Condition="type == ValueType_None">None</DisplayString>
 		<DisplayString Condition="type == ValueType_Integer">{u.integer}</DisplayString>
 		<DisplayString Condition="type == ValueType_Real">{u.real}</DisplayString>
