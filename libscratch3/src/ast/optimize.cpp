@@ -225,7 +225,7 @@ public:
 		else if (rhs.eval.IsZeroLike())
 			output = &lhs; // Remove addition by zero
 		else if (lhs.eval.HasValue() && rhs.eval.HasValue())
-			node->eval.SetReal(ToReal(lhs.eval.GetValue()) + ToReal(rhs.eval.GetValue()));
+			node->eval = lhs.eval + rhs.eval;
 
 		TryCollapse();
 	}
@@ -258,7 +258,7 @@ public:
 		else if (rhs.eval.IsZeroLike())
 			output = &lhs; // Remove subtraction by zero
 		else if (lhs.eval.HasValue() && rhs.eval.HasValue())
-			node->eval.SetReal(ToReal(lhs.eval.GetValue()) - ToReal(rhs.eval.GetValue()));
+			node->eval = lhs.eval - rhs.eval;
 
 		TryCollapse();
 	}
@@ -286,7 +286,7 @@ public:
 		else if (rhs.eval.IsOne())
 			output = &lhs; // Remove multiplication by one
 		else if (lhs.eval.HasValue() && rhs.eval.HasValue())
-			node->eval.SetReal(ToReal(lhs.eval.GetValue()) * ToReal(rhs.eval.GetValue()));
+			node->eval = lhs.eval * rhs.eval;
 
 		TryCollapse();
 	}
@@ -326,7 +326,7 @@ public:
 		else if (rhs.eval.IsOne())
 			output = &lhs; // Remove division by one
 		else if (lhs.eval.HasValue() && rhs.eval.HasValue())
-			node->eval.SetReal(ToReal(lhs.eval.GetValue()) / ToReal(rhs.eval.GetValue()));
+			node->eval = lhs.eval / rhs.eval;
 
 		TryCollapse();
 	}
@@ -345,7 +345,7 @@ public:
 		if (e.eval.IsZeroLike())
 			node->eval.SetInteger(0);
 		else if (e.eval.HasValue())
-			node->eval.SetReal(-ToReal(e.eval.GetValue()));
+			node->eval = -e.eval;
 
 		TryCollapse();
 	}
@@ -463,8 +463,13 @@ public:
 			else
 				node->eval.SetBool(false);
 		}
-		else if (rhs.eval.HasValue() && !Truth(rhs.eval.GetValue()))
-			node->eval.SetBool(false);
+		else if (rhs.eval.HasValue())
+		{
+			if (Truth(rhs.eval.GetValue()))
+				output = &lhs;
+			else
+				node->eval.SetBool(false);
+		}
 
 		TryCollapse();
 	}

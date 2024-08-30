@@ -646,7 +646,6 @@ int64_t ToInteger(const Value &v)
 	{
 	default:
 	case ValueType_None:
-	case ValueType_Bool:
 	case ValueType_String:
 	case ValueType_List:
 		return 0;
@@ -654,6 +653,8 @@ int64_t ToInteger(const Value &v)
 		return static_cast<int64_t>(round(v.u.real));
 	case ValueType_Integer:
 		return v.u.integer;
+	case ValueType_Bool:
+		return v.u.boolean ? 1 : 0;
 	}
 }
 
@@ -663,7 +664,6 @@ double ToReal(const Value &v)
 	{
 	default:
 	case ValueType_None:
-	case ValueType_Bool:
 	case ValueType_String:
 	case ValueType_List:
 		return 0.0;
@@ -671,6 +671,8 @@ double ToReal(const Value &v)
 		return v.u.real;
 	case ValueType_Integer:
 		return static_cast<double>(v.u.integer);
+	case ValueType_Bool:
+		return v.u.boolean ? 1.0 : 0.0;
 	}
 }
 
@@ -722,6 +724,239 @@ const char *GetRawString(const Value &v, int64_t *len)
 	case ValueType_String:
 		if (len) *len = v.u.string->len;
 		return v.u.string->str;
+	}
+}
+
+Value &ValueAdd(Value &lhs, const Value &rhs)
+{
+	switch (lhs.type)
+	{
+	default:
+		if (rhs.type == ValueType_Integer || rhs.type == ValueType_Real)
+			return Assign(lhs, rhs);
+		return SetInteger(lhs, 0);
+	case ValueType_Integer:
+		if (rhs.type == ValueType_Integer)
+			return SetInteger(lhs, lhs.u.integer + rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, lhs.u.integer + rhs.u.real);
+		if (rhs.type == ValueType_Bool)
+			return SetInteger(lhs, lhs.u.integer + (rhs.u.boolean ? 1 : 0));
+		return lhs;
+	case ValueType_Real:
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, lhs.u.real + rhs.u.real);
+		if (rhs.type == ValueType_Integer)
+			return SetReal(lhs, lhs.u.real + rhs.u.integer);
+		if (rhs.type == ValueType_Bool)
+			return SetReal(lhs, lhs.u.real + (rhs.u.boolean ? 1.0 : 0.0));
+		return lhs;
+	case ValueType_Bool:
+		if (rhs.type == ValueType_Bool)
+			return SetInteger(lhs, (lhs.u.boolean ? 1 : 0) + (rhs.u.boolean ? 1 : 0));
+		if (rhs.type == ValueType_Integer)
+			return SetInteger(lhs, (lhs.u.boolean ? 1 : 0) + rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, (lhs.u.boolean ? 1 : 0) + rhs.u.real);
+		return lhs;
+	}
+}
+
+Value &ValueSub(Value &lhs, const Value &rhs)
+{
+	switch (lhs.type)
+	{
+	default:
+		return ValueNeg(Assign(lhs, rhs));
+	case ValueType_Integer:
+		if (rhs.type == ValueType_Integer)
+			return SetInteger(lhs, lhs.u.integer - rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, lhs.u.integer - rhs.u.real);
+		return lhs;
+	case ValueType_Real:
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, lhs.u.real - rhs.u.real);
+		if (rhs.type == ValueType_Integer)
+			return SetReal(lhs, lhs.u.real - rhs.u.integer);
+		return lhs;
+	case ValueType_Bool:
+		if (rhs.type == ValueType_Bool)
+			return SetInteger(lhs, (lhs.u.boolean ? 1 : 0) - (rhs.u.boolean ? 1 : 0));
+		if (rhs.type == ValueType_Integer)
+			return SetInteger(lhs, (lhs.u.boolean ? 1 : 0) - rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, (lhs.u.boolean ? 1 : 0) - rhs.u.real);
+		return lhs;
+	}
+}
+
+Value &ValueMul(Value &lhs, const Value &rhs)
+{
+	switch (lhs.type)
+	{
+	default:
+		return SetInteger(lhs, 0);
+	case ValueType_Integer:
+		if (rhs.type == ValueType_Integer)
+			return SetInteger(lhs, lhs.u.integer * rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, lhs.u.integer * rhs.u.real);
+		return SetInteger(lhs, 0);
+	case ValueType_Real:
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, lhs.u.real * rhs.u.real);
+		if (rhs.type == ValueType_Integer)
+			return SetReal(lhs, lhs.u.real * rhs.u.integer);
+		return SetInteger(lhs, 0);
+	case ValueType_Bool:
+		if (rhs.type == ValueType_Bool)
+			return SetInteger(lhs, (lhs.u.boolean ? 1 : 0) * (rhs.u.boolean ? 1 : 0));
+		if (rhs.type == ValueType_Integer)
+			return SetInteger(lhs, (lhs.u.boolean ? 1 : 0) * rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetReal(lhs, (lhs.u.boolean ? 1 : 0) * rhs.u.real);
+		return SetInteger(lhs, 0);
+	}
+}
+
+Value &ValueDiv(Value &lhs, const Value &rhs)
+{
+	switch (rhs.type) // Notice switch on rhs
+	{
+	default:
+		goto handle_div0;
+	case ValueType_Integer:
+		if (rhs.u.integer == 0)
+			goto handle_div0;
+
+		if (lhs.type == ValueType_Integer)
+			return SetInteger(lhs, lhs.u.integer / rhs.u.real);
+		if (lhs.type == ValueType_Real)
+			return SetReal(lhs, lhs.u.integer / rhs.u.real);
+		return SetInteger(lhs, 0);
+	case ValueType_Real:
+		if (rhs.u.real == 0.0)
+			goto handle_div0;
+
+		if (lhs.type == ValueType_Real)
+			return SetReal(lhs, lhs.u.real / rhs.u.real);
+		if (rhs.type == ValueType_Integer)
+			return SetReal(lhs, lhs.u.real / rhs.u.integer);
+		return SetInteger(lhs, 0);
+	case ValueType_Bool:
+		if (!rhs.u.boolean)
+			goto handle_div0;
+
+		if (lhs.type == ValueType_Integer || lhs.type == ValueType_Real)
+			return lhs;
+
+		return SetInteger(lhs, 0);
+	}
+
+handle_div0:
+	if (lhs.type == ValueType_Integer)
+	{
+		if (lhs.u.integer == 0)
+			return SetReal(lhs, NAN);
+		if (lhs.u.integer < 0)
+			return SetReal(lhs, -INFINITY);
+		return SetReal(lhs, INFINITY);
+	}
+
+	if (lhs.type == ValueType_Real)
+	{
+		if (lhs.u.real == 0.0)
+			return SetReal(lhs, NAN);
+		if (lhs.u.real < 0.0)
+			return SetReal(lhs, -INFINITY);
+		return SetReal(lhs, INFINITY);
+	}
+
+	if (lhs.type == ValueType_Bool)
+		return SetReal(lhs, lhs.u.boolean ? INFINITY : NAN);
+
+	return SetReal(lhs, NAN);
+}
+
+Value &ValueNeg(Value &lhs)
+{
+	switch (lhs.type)
+	{
+	default:
+		return SetInteger(lhs, 0);
+	case ValueType_Integer:
+		return SetInteger(lhs, -lhs.u.integer);
+	case ValueType_Real:
+		return SetReal(lhs, -lhs.u.real);
+	case ValueType_Bool:
+		return SetInteger(lhs, lhs.u.boolean ? -1 : 0);
+	}
+}
+
+Value &ValueGreater(Value &lhs, const Value &rhs)
+{
+	switch (lhs.type)
+	{
+	default:
+		return SetBool(lhs, true);
+	case ValueType_Integer:
+		if (rhs.type == ValueType_Integer)
+			return SetBool(lhs, lhs.u.integer > rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetBool(lhs, lhs.u.integer > rhs.u.real);
+		if (rhs.type == ValueType_Bool)
+			return SetBool(lhs, lhs.u.integer > (rhs.u.boolean ? 1 : 0));
+		return SetBool(lhs, false);
+	case ValueType_Real:
+		if (rhs.type == ValueType_Real)
+			return SetBool(lhs, lhs.u.real > rhs.u.real);
+		if (rhs.type == ValueType_Integer)
+			return SetBool(lhs, lhs.u.real > rhs.u.integer);
+		if (rhs.type == ValueType_Bool)
+			return SetBool(lhs, lhs.u.real > (rhs.u.boolean ? 1.0 : 0.0));
+		return SetBool(lhs, false);
+	case ValueType_Bool:
+		if (rhs.type == ValueType_Bool)
+			return SetBool(lhs, lhs.u.boolean && !rhs.u.boolean);
+		if (rhs.type == ValueType_Integer)
+			return SetBool(lhs, (lhs.u.boolean ? 1 : 0) > rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetBool(lhs, (lhs.u.boolean ? 1 : 0) > rhs.u.real);
+		return SetBool(lhs, false);
+	}
+}
+
+Value &ValueLess(Value &lhs, const Value &rhs)
+{
+	switch (lhs.type)
+	{
+	default:
+		return SetBool(lhs, false);
+	case ValueType_Integer:
+		if (rhs.type == ValueType_Integer)
+			return SetBool(lhs, lhs.u.integer < rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetBool(lhs, lhs.u.integer < rhs.u.real);
+		if (rhs.type == ValueType_Bool)
+			return SetBool(lhs, lhs.u.integer < (rhs.u.boolean ? 1 : 0));
+		return SetBool(lhs, true);
+	case ValueType_Real:
+		if (rhs.type == ValueType_Real)
+			return SetBool(lhs, lhs.u.real < rhs.u.real);
+		if (rhs.type == ValueType_Integer)
+			return SetBool(lhs, lhs.u.real < rhs.u.integer);
+		if (rhs.type == ValueType_Bool)
+			return SetBool(lhs, lhs.u.real < (rhs.u.boolean ? 1.0 : 0.0));
+		return SetBool(lhs, true);
+	case ValueType_Bool:
+		if (rhs.type == ValueType_Bool)
+			return SetBool(lhs, !lhs.u.boolean && rhs.u.boolean);
+		if (rhs.type == ValueType_Integer)
+			return SetBool(lhs, (lhs.u.boolean ? 1 : 0) < rhs.u.integer);
+		if (rhs.type == ValueType_Real)
+			return SetBool(lhs, (lhs.u.boolean ? 1 : 0) < rhs.u.real);
+		return SetBool(lhs, true);
 	}
 }
 

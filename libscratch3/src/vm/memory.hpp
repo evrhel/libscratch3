@@ -193,6 +193,25 @@ const char *ToString(const Value &v, int64_t *len = nullptr);
 //! \return A string representation of the value
 const char *GetRawString(const Value &v, int64_t *len = nullptr);
 
+//
+/////////////////////////////////////////////////////////////////////
+// Operators
+//
+
+Value &ValueAdd(Value &lhs, const Value &rhs);
+Value &ValueSub(Value &lhs, const Value &rhs);
+Value &ValueMul(Value &lhs, const Value &rhs);
+Value &ValueDiv(Value &lhs, const Value &rhs);
+Value &ValueNeg(Value &lhs);
+
+Value &ValueGreater(Value &lhs, const Value &rhs);
+Value &ValueLess(Value &lhs, const Value &rhs);
+
+//
+/////////////////////////////////////////////////////////////////////
+// Allocation operations
+//
+
 //! \brief Allocate a string
 //!
 //! Allocates a String object with enough space to store a string of
@@ -666,3 +685,113 @@ private:
 	ValueType _type;
 	Value _value;
 };
+
+inline OptionalValue operator+(const OptionalValue &lhs, const OptionalValue &rhs)
+{
+	if (!lhs.HasValue() || !rhs.HasValue())
+	{
+		if (lhs.IsPossibleNumeric() && rhs.IsPossibleNumeric())
+			return OptionalValue(ValueType_Real);
+		return OptionalValue();
+	}
+
+	Value result;
+	InitializeValue(result);
+	Assign(result, lhs.GetValue());
+	ValueAdd(result, rhs.GetValue());
+
+	OptionalValue opt;
+	opt.SetValue(result);
+
+	ReleaseValue(result);
+
+	return opt;
+}
+
+inline OptionalValue operator-(const OptionalValue &lhs, const OptionalValue &rhs)
+{
+	if (!lhs.HasValue() || !rhs.HasValue())
+	{
+		if (lhs.IsPossibleNumeric() && rhs.IsPossibleNumeric())
+			return OptionalValue(ValueType_Real);
+		return OptionalValue();
+	}
+
+	Value result;
+	InitializeValue(result);
+	Assign(result, lhs.GetValue());
+	ValueSub(result, rhs.GetValue());
+
+	OptionalValue opt;
+	opt.SetValue(result);
+
+	ReleaseValue(result);
+
+	return opt;
+}
+
+inline OptionalValue operator*(const OptionalValue &lhs, const OptionalValue &rhs)
+{
+	if (!lhs.HasValue() || !rhs.HasValue())
+	{
+		if (lhs.IsPossibleNumeric() && rhs.IsPossibleNumeric())
+			return OptionalValue(ValueType_Real);
+		return OptionalValue();
+	}
+
+	Value result;
+	InitializeValue(result);
+	Assign(result, lhs.GetValue());
+	ValueMul(result, rhs.GetValue());
+
+	OptionalValue opt;
+	opt.SetValue(result);
+
+	ReleaseValue(result);
+
+	return opt;
+}
+
+inline OptionalValue operator/(const OptionalValue &lhs, const OptionalValue &rhs)
+{
+	if (!lhs.HasValue() || !rhs.HasValue())
+	{
+		if (lhs.IsPossibleNumeric() && rhs.IsPossibleNumeric())
+			return OptionalValue(ValueType_Real);
+		return OptionalValue();
+	}
+
+	Value result;
+	InitializeValue(result);
+	Assign(result, lhs.GetValue());
+	ValueDiv(result, rhs.GetValue());
+
+	OptionalValue opt;
+	opt.SetValue(result);
+
+	ReleaseValue(result);
+
+	return opt;
+}
+
+inline OptionalValue operator-(const OptionalValue &val)
+{
+	if (!val.HasValue())
+	{
+		if (val.IsPossibleNumeric())
+			return val;
+		return OptionalValue();
+	}
+
+	Value result;
+	InitializeValue(result);
+	Assign(result, val.GetValue());
+	ValueNeg(result);
+
+	OptionalValue opt;
+	opt.SetValue(result);
+
+	ReleaseValue(result);
+
+	return opt;
+}
