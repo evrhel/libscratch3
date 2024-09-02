@@ -202,6 +202,7 @@ Value &ValueAdd(Value &lhs, const Value &rhs);
 Value &ValueSub(Value &lhs, const Value &rhs);
 Value &ValueMul(Value &lhs, const Value &rhs);
 Value &ValueDiv(Value &lhs, const Value &rhs);
+Value &ValueMod(Value &lhs, const Value &rhs);
 Value &ValueNeg(Value &lhs);
 
 Value &ValueGreater(Value &lhs, const Value &rhs);
@@ -557,6 +558,26 @@ public:
 			return _value.u.integer == 0;
 		case ValueType_Real:
 			return _value.u.real == 0.0;
+		case ValueType_Bool:
+			return !_value.u.boolean;
+		}
+	}
+
+	constexpr bool IsZero() const
+	{
+		if (!_hasValue)
+			return false;
+
+		switch (_type)
+		{
+		default:
+			return false;
+		case ValueType_Integer:
+			return _value.u.integer == 0;
+		case ValueType_Real:
+			return _value.u.real == 0.0;
+		case ValueType_Bool:
+			return !_value.u.boolean;
 		}
 	}
 
@@ -573,6 +594,24 @@ public:
 			return _value.u.integer == 1;
 		case ValueType_Real:
 			return _value.u.real == 1.0;
+		case ValueType_Bool:
+			return _value.u.boolean;
+		}
+	}
+
+	constexpr bool IsNegativeOne() const
+	{
+		if (!_hasValue)
+			return false;
+
+		switch (_type)
+		{
+		default:
+			return false;
+		case ValueType_Integer:
+			return _value.u.integer == -1;
+		case ValueType_Real:
+			return _value.u.real == -1.0;
 		}
 	}
 

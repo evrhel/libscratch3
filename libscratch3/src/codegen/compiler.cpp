@@ -36,13 +36,8 @@ class Compiler : public Visitor
 public:
 	virtual void Visit(Constexpr *node)
 	{
-		Value v;
-		InitializeValue(v);
-		SetParsedString(v, node->value);
-
-		cp.PushValue(v);
-
-		ReleaseValue(v);
+		assert(node->eval.HasValue());
+		cp.PushValue(node->eval.GetValue());
 	}
 
 	virtual void Visit(XPos *node)
@@ -448,7 +443,10 @@ public:
 		topLevel = false;
 
 		for (AutoRelease<Statement> &stmt : node->sl)
-			stmt->Accept(this);
+		{
+			if (stmt)
+				stmt->Accept(this);
+		}
 
 		topLevel = oldTopLevel;
 
@@ -1014,9 +1012,23 @@ public:
 		int64_t top;
 
 		top = cp._text.size();
-		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_jnz);
+		/*if (node->e->Is(Ast_LogicalNot))
+		{
+			/* Invert jump condition */
+
+		/*	LogicalNot *ln = node->e.cast<LogicalNot>().get();
+
+			ln->e->Accept(this);
+			cp.WriteOpcode(Op_jz);
+		}
+		else*/
+		{
+			node->e->Accept(this);
+			cp.WriteOpcode(Op_jnz);
+		}
+
+		
 		size_t jnz = cp.WriteReference(Segment_text, Segment_text);
 
 		if (node->sl)
@@ -1166,8 +1178,6 @@ public:
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
 		}
-
-		cp.PushString(node->id);
 
 		cp.WriteOpcode(Op_getstatic);
 		cp.WriteText<bc::VarId>(it->second);
@@ -1405,16 +1415,12 @@ public:
 			abort();
 		}
 
-		Value v;
-		InitializeValue(v);
-		SetParsedString(v, node->value->value);
+		assert(node->value->eval.HasValue());
 
-		cp.PushValue(v);
+		cp.PushValue(node->value->eval.GetValue());
 
 		cp.WriteOpcode(isField ? Op_setfield : Op_setstatic);
 		cp.WriteText<bc::VarId>(id);
-
-		ReleaseValue(v);
 	}
 
 	virtual void Visit(VariableDefList *node)
@@ -1435,15 +1441,12 @@ public:
 			abort();
 		}
 
-		Value v;
-		InitializeValue(v);
-
 		int64_t size = static_cast<int64_t>(node->value.size());
 
 		for (int64_t i = size - 1; i >= 0; --i)
 		{
-			SetParsedString(v, node->value[i]->value);
-			cp.PushValue(v);
+			assert(node->value[i]->eval.HasValue());
+			cp.PushValue(node->value[i]->eval.GetValue());
 		}
 		
 		cp.WriteOpcode(Op_listcreate);
@@ -1451,8 +1454,6 @@ public:
 
 		cp.WriteOpcode(Op_setstatic);
 		cp.WriteText<bc::VarId>(it->second);
-
-		ReleaseValue(v);
 	}
 
 	virtual void Visit(ListDefList *node)
@@ -1682,7 +1683,7 @@ public:
 		sprite->visible = node->visible;
 		sprite->isStage = node->isStage;
 		sprite->draggable = node->draggable;
-		sprite->rotationStyle = RotationStyleFromString(node->rotationStyle);
+		sprite->rotationStyle = node->rotationStyle;
 
 		if (node->variables->variables.size() + node->lists->lists.size() > 0)
 		{

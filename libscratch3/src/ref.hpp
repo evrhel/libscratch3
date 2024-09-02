@@ -75,6 +75,31 @@ public:
 	//! \return A raw pointer to the object.
 	constexpr T *get() const { return _obj; }
 
+	template <typename U>
+	constexpr AutoRelease<U> cast() const { return reinterpret_cast<U *>(_obj); }
+
+	template <typename U>
+	inline AutoRelease<T> &set(AutoRelease<U> &other)
+	{
+		if (_obj != other.get())
+		{
+			Release(_obj);
+			_obj = Retain(reinterpret_cast<T *>(other.get()));
+		}
+		return *this;
+	}
+
+	template <typename U>
+	inline AutoRelease<T> &set(U *other)
+	{
+		if (_obj != other)
+		{
+			Release(_obj);
+			_obj = Retain(reinterpret_cast<T *>(other));
+		}
+		return *this;
+	}
+
 	//! \brief Check if the object is not nullptr.
 	//! 
 	//! \return True if the object is not nullptr.
@@ -100,10 +125,10 @@ public:
 	template <typename U>
 	inline AutoRelease<T> &operator=(AutoRelease<U> &other)
 	{
-		if (_obj != other._obj)
+		if (this != reinterpret_cast<AutoRelease<T> *>(&other))
 		{
 			_obj = Release(_obj);
-			_obj = Retain(static_cast<T *>(other._obj));
+			_obj = Retain(static_cast<T *>(other.get()));
 		}
 		return *this;
 	}
@@ -111,11 +136,12 @@ public:
 	template <typename U>
 	inline AutoRelease<T> &operator=(AutoRelease<U> &&other)
 	{
-		if (this != &other)
+		AutoRelease<T> *tmp = reinterpret_cast<AutoRelease<T> *>(&other);
+		if (this != tmp)
 		{
 			Release(_obj);
-			_obj = other._obj;
-			other._obj = nullptr;
+			_obj = tmp->_obj;
+			tmp->_obj = nullptr;
 		}
 
 		return *this;
@@ -129,7 +155,7 @@ public:
 	inline AutoRelease(U *obj) : _obj(Retain(static_cast<T *>(obj))) {}
 	
 	template <typename U>
-	inline AutoRelease(AutoRelease<U> &other) : _obj(Retain(static_cast<T *>(other._obj))) {}
+	inline AutoRelease(AutoRelease<U> &other) : _obj(Retain(static_cast<T *>(other.get()))) {}
 
 	inline AutoRelease(const AutoRelease &other) : _obj(Retain(other._obj)) {}
 	constexpr AutoRelease(AutoRelease &&other) : _obj(other._obj) { other._obj = nullptr; }

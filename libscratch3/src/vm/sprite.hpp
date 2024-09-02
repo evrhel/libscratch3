@@ -211,7 +211,15 @@ public:
     }
 
     constexpr void SetSize(double size) { _size = size; _transDirty = true; }
-    constexpr void SetDirection(double direction) { _direction = direction; _transDirty = true; }
+
+    inline void SetDirection(double direction)
+    {
+        direction = fmod(direction + 180, 360) - 180;
+
+        _direction = direction;
+        _transDirty = true;
+    }
+
     constexpr void SetDraggable(bool draggable) { _draggable = draggable; }
     constexpr void SetRotationStyle(RotationStyle rotationStyle) { _rotationStyle = rotationStyle; }
 
@@ -242,6 +250,7 @@ public:
 
     bool TouchingPoint(const Vector2 &point);
     bool TouchingSprite(const Sprite *sprite);
+    bool TouchingEdge();
 
     constexpr const Matrix4 &GetModel() const { return _model; }
     constexpr const Matrix4 &GetInvModel() const { return _invModel; }

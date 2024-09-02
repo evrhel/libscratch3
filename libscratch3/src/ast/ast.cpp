@@ -43,27 +43,13 @@ static Constexpr *ParseLiteral(rapidjson::Value &v)
 	Constexpr *c = new Constexpr();
 
 	if (v.IsString())
-	{
-		c->value = v.GetString();
 		c->eval.SetParsedString(v.GetString());
-	}
 	else if (v.IsInt())
-	{
-		c->value = std::to_string(v.GetInt());
 		c->eval.SetInteger(v.GetInt());
-	}
 	else if (v.IsDouble())
-	{
-		char buf[64];
-		snprintf(buf, sizeof(buf), "%g", v.GetDouble());
-		c->value = buf;
 		c->eval.SetReal(v.GetDouble());
-	}
 	else if (v.IsBool())
-	{
-		c->value = v.GetBool() ? "true" : "false";
 		c->eval.SetBool(v.GetBool());
-	}
 	else
 		c->eval.SetUndefined();
 
@@ -483,7 +469,38 @@ private:
 		else
 			Warn("Missing `direction` member in target");
 
-		// TODO: parse other members
+		if (target.HasMember("draggable"))
+		{
+			rapidjson::Value &draggable = target["draggable"];
+			if (!draggable.IsBool())
+			{
+				Error("Expected boolean parsing `draggable` in target");
+				goto failure;
+			}
+			else
+				sd->draggable = draggable.GetBool();
+		}
+		else
+			Warn("Missing `draggable` member in target");
+
+		if (target.HasMember("rotationStyle"))
+		{
+			rapidjson::Value &rotationStyle = target["rotationStyle"];
+			if (!rotationStyle.IsString())
+			{
+				Error("Expected string parsing `rotationStyle` in target");
+				goto failure;
+			}
+			else
+			{
+				sd->rotationStyle = RotationStyleFromString(rotationStyle.GetString());
+				if (sd->rotationStyle == RotationStyle_Unknown)
+				{
+					Warn("Unknown rotation style `%s` in target", rotationStyle.GetString());
+					sd->rotationStyle = RotationStyle_AllAround; // default
+				}
+			}
+		}
 
 		return sd;
 	failure:

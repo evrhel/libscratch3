@@ -3,6 +3,32 @@
 #include "ast.hpp"
 #include "../vm/memory.hpp"
 
+class StaticEnvironment
+{
+public:
+	OptionalValue &Lookup(const std::string &name)
+	{
+		return _variables[name];
+	}
+
+	void Clear()
+	{
+		_variables.clear();
+	}
+
+	StaticEnvironment()
+	{
+
+	}
+
+	~StaticEnvironment()
+	{
+
+	}
+private:
+	std::unordered_map<std::string, OptionalValue> _variables;
+};
+
 class OptimizeVisitor : public Visitor
 {
 public:
@@ -14,7 +40,6 @@ public:
 			if (e.eval.HasValue())
 			{
 				Constexpr *ce = new Constexpr();
-				ce->value = ToString(e.eval.GetValue());
 				ce->eval = e.eval;
 				output = ce;
 			}
@@ -206,13 +231,13 @@ public:
 
 	virtual void Visit(Add *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -232,13 +257,13 @@ public:
 
 	virtual void Visit(Sub *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -265,13 +290,13 @@ public:
 
 	virtual void Visit(Mul *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -285,6 +310,15 @@ public:
 			output = &rhs; // Remove multiplication by one
 		else if (rhs.eval.IsOne())
 			output = &lhs; // Remove multiplication by one
+		else if (lhs.eval.IsNegativeOne())
+		{
+			// Replace with negation instruction
+			AutoRelease<Neg> neg = new Neg();
+			neg->e = &rhs;
+			neg->Accept(this);
+
+			output = neg;
+		}
 		else if (lhs.eval.HasValue() && rhs.eval.HasValue())
 			node->eval = lhs.eval * rhs.eval;
 
@@ -293,13 +327,13 @@ public:
 
 	virtual void Visit(Div *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -333,9 +367,9 @@ public:
 
 	virtual void Visit(Neg *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		Expression &e = *node->e;
 
@@ -352,13 +386,13 @@ public:
 
 	virtual void Visit(Random *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		node->eval.SetReal();
 		output = node;
@@ -366,13 +400,13 @@ public:
 
 	virtual void Visit(Greater *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -388,13 +422,13 @@ public:
 
 	virtual void Visit(Less *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -410,16 +444,81 @@ public:
 
 	virtual void Visit(Equal *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
+
+		// Try to match the following patterns:
+		//  x = true -> x
+		//  x = false -> !x
+		//  true = x -> x
+		//  false = x -> !x
+
+		/*if (rhs.eval.HasValue() && !lhs.eval.HasValue())
+		{
+			switch (rhs.eval.Type())
+			{
+			default:
+				break;
+			case ValueType_Integer:
+			case ValueType_Real:
+			case ValueType_Bool:
+				if (rhs.eval.IsOne())
+				{
+					if (lhs.eval.Type() == ValueType_Bool)
+					{
+						output = &lhs;
+						return;
+					}
+				}
+				else if (rhs.eval.IsZero())
+				{
+					AutoRelease<LogicalNot> lnot = new LogicalNot();
+					lnot->e = &lhs;
+					
+					output = lnot;
+					lnot->Accept(this);
+
+					return;
+				}
+			}
+		}
+		else if (lhs.eval.HasValue() && !rhs.eval.HasValue())
+		{
+			switch (lhs.eval.Type())
+			{
+			default:
+				break;
+			case ValueType_Integer:
+			case ValueType_Real:
+			case ValueType_Bool:
+				if (lhs.eval.IsOne())
+				{
+					if (rhs.eval.Type() == ValueType_Bool)
+					{
+						output = &rhs;
+						return;
+					}
+				}
+				else if (lhs.eval.IsZero())
+				{
+					AutoRelease<LogicalNot> lnot = new LogicalNot();
+					lnot->e = &rhs;
+
+					output = lnot;
+					lnot->Accept(this);
+
+					return;
+				}
+			}
+		}*/
 
 		node->eval.SetBool();
 		output = node;
@@ -432,13 +531,13 @@ public:
 
 	virtual void Visit(LogicalAnd *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -476,13 +575,13 @@ public:
 
 	virtual void Visit(LogicalOr *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -512,7 +611,7 @@ public:
 	{
 		output = node;
 		node->e->Accept(this);
-		node->e	= (Expression *)output.get();
+		node->e	= output.cast<Expression>();
 
 		Expression &e = *node->e;
 
@@ -527,13 +626,13 @@ public:
 
 	virtual void Visit(Concat *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -562,13 +661,13 @@ public:
 
 	virtual void Visit(CharAt *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
 		output = node->e2.get();
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -576,34 +675,48 @@ public:
 		node->eval.SetString();
 		output = node;
 
-		// TODO: Implement
+		if (lhs.eval.HasValue() && rhs.eval.HasValue())
+		{
+			char c = ValueCharAt(lhs.eval.GetValue(), ToInteger(rhs.eval.GetValue()));
+			
+			Value tmp;
+			InitializeValue(tmp);
+			SetChar(tmp, c);
+
+			node->eval.SetValue(tmp);
+
+			ReleaseValue(tmp);
+		}
 
 		TryCollapse();
 	}
 
 	virtual void Visit(StringLength *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		Expression &e = *node->e;
 
 		node->eval.SetInteger();
 		output = node;
 
+		if (e.eval.HasValue())
+			node->eval.SetInteger(ValueLength(e.eval.GetValue()));
+
 		TryCollapse();
 	}
 
 	virtual void Visit(StringContains *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -611,20 +724,24 @@ public:
 		node->eval.SetBool();
 		output = node;
 
-		// TODO: Implement
+		if (lhs.eval.HasValue() && rhs.eval.HasValue())
+		{
+			bool contains = ValueContains(lhs.eval.GetValue(), rhs.eval.GetValue());
+			node->eval.SetBool(contains);
+		}
 
 		TryCollapse();
 	}
 
 	virtual void Visit(Mod *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1.get());
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
@@ -632,16 +749,27 @@ public:
 		node->eval.SetReal();
 		output = node;
 
-		// TODO: Implement
+		if (lhs.eval.HasValue() && rhs.eval.HasValue())
+		{
+			Value tmp;
+			InitializeValue(tmp);
+			Assign(tmp, lhs.eval.GetValue());
+
+			ValueMod(tmp, rhs.eval.GetValue());
+
+			node->eval.SetValue(tmp);
+
+			ReleaseValue(tmp);
+		}
 
 		TryCollapse();
 	}
 
 	virtual void Visit(Round *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		Expression &e = *node->e;
 
@@ -656,9 +784,9 @@ public:
 
 	virtual void Visit(MathFunc *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		Expression &e = *node->e;
 
@@ -721,143 +849,250 @@ public:
 
 	virtual void Visit(VariableExpr *node) override
 	{
+		/*OptionalValue &value = env.Lookup(node->name);
+		if (value.HasValue())
+		{
+			Constexpr *ce = new Constexpr();
+			ce->eval = value;
+			output = ce;
+
+			return;
+		}
+
+		node->eval = value;*/
+		node->eval.SetUndefined();
 		output = node;
 	}
 
 	virtual void Visit(BroadcastExpr *node) override
 	{
+		node->eval.SetString(node->id);
 		output = node;
 	}
 
 	virtual void Visit(ListExpr *node) override
 	{
+		OptionalValue &list = env.Lookup(node->name);
+		if (list.HasValue())
+		{
+			Constexpr *ce = new Constexpr();
+			ce->eval.SetValue(list.GetValue());
+
+			output = ce;
+			return;
+		}
+
 		node->eval.SetList();
 		output = node;
 	}
 
 	virtual void Visit(ListAccess *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		OptionalValue &list = env.Lookup(node->name);
+		if (list.HasValue() && node->e->eval.HasValue())
+		{
+			Constexpr *ce = new Constexpr();
+
+			Value tmp;
+			InitializeValue(tmp);
+
+			ListGet(tmp, list.GetValue(), ToInteger(node->e->eval.GetValue()));
+
+			ce->eval.SetValue(tmp);
+
+			ReleaseValue(tmp);
+
+			output = ce;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(IndexOf *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		OptionalValue &list = env.Lookup(node->name);
+		if (list.HasValue() && node->e->eval.HasValue())
+		{
+			Constexpr *ce = new Constexpr();
+
+			int64_t idx = ListIndexOf(list.GetValue(), node->e->eval.GetValue());
+
+			ce->eval.SetInteger(idx);
+
+			output = ce;
+			return;
+		}
 
 		output = node;
 	}
 	
 	virtual void Visit(ListLength *node) override
 	{
+		OptionalValue &value = env.Lookup(node->name);
+		if (value.HasValue())
+		{
+			Constexpr *ce = new Constexpr();
+			int64_t len = ListGetLength(value.GetValue());
+
+			ce->eval.SetInteger(len);
+
+			output = ce;
+			return;
+		}
+
 		node->eval.SetInteger();
 		output = node;
 	}
 
 	virtual void Visit(ListContains *node) override
 	{
+		output.set(node->e);
+		node->e->Accept(this);
+		node->e = output.cast<Expression>();
+
+		OptionalValue &list = env.Lookup(node->name);
+		if (list.HasValue() && node->e->eval.HasValue());
+		{
+			Constexpr *ce = new Constexpr();
+			bool contains = ListContainsValue(list.GetValue(), node->e->eval.GetValue());
+
+			ce->eval.SetBool(contains);
+
+			output = ce;
+			return;
+		}
+
 		node->eval.SetBool();
 		output = node;
 	}
 
 	virtual void Visit(MoveSteps *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.IsZero())
+		{
+			/* No effect */
+			output = nullptr;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(TurnDegrees *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.IsZero())
+		{
+			/* No effect */
+			output = nullptr;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(TurnNegDegrees *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.IsZero())
+		{
+			/* No effect */
+			output = nullptr;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(Goto *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(GotoXY *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(Glide *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
+
+		env.Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(GlideXY *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
 
-		output = node->e3.get();
+		output.set(node->e3);
 		node->e3->Accept(this);
-		node->e3 = (Expression *)output.get();
+		node->e3 = output.cast<Expression>();
+
+		env.Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(PointDir *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(PointTowards *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -866,34 +1101,48 @@ public:
 	{
 		output = node->e.get();
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.IsZero())
+		{
+			/* No effect */
+			output = nullptr;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(SetX *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(ChangeY *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.IsZero())
+		{
+			/* No effect */
+			output = nullptr;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(SetY *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -910,53 +1159,57 @@ public:
 
 	virtual void Visit(SayForSecs *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
+
+		env.Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(Say *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(ThinkForSecs *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
+
+		env.Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(Think *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(SwitchCostume *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -968,18 +1221,18 @@ public:
 
 	virtual void Visit(SwitchBackdrop *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(SwitchBackdropAndWait *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -991,36 +1244,43 @@ public:
 
 	virtual void Visit(ChangeSize *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.IsZero())
+		{
+			/* No effect */
+			output = nullptr;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(SetSize *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(ChangeGraphicEffect *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(SetGraphicEffect *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -1047,27 +1307,36 @@ public:
 
 	virtual void Visit(MoveLayer *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.IsZero())
+		{
+			/* No effect */
+			output = nullptr;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(PlaySoundUntilDone *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		env.Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(StartSound *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -1079,18 +1348,18 @@ public:
 
 	virtual void Visit(ChangeSoundEffect *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(SetSoundEffect *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -1102,18 +1371,25 @@ public:
 
 	virtual void Visit(ChangeVolume *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.IsZero())
+		{
+			/* No effect */
+			output = nullptr;
+			return;
+		}
 
 		output = node;
 	}
 
 	virtual void Visit(SetVolume *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -1150,101 +1426,232 @@ public:
 
 	virtual void Visit(Broadcast *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		env.Clear(); // Instruction may cause yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(BroadcastAndWait *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		env.Clear(); // Instruction may cause yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(WaitSecs *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		env.Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(Repeat *node) override
 	{
-		output = node->e.get();
-		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		env.Clear(); // Variables not preserved between iterations
 
-		output = node->sl.get();
+		if (!node->e)
+		{
+			/* No count, repeat 0 times */
+			output = nullptr;
+			return;
+		}
+
+		if (!node->sl)
+		{
+			// TODO: may cause inconsistencies
+			output = nullptr;
+			return;
+		}
+
+		output.set(node->e);
+		node->e->Accept(this);
+		node->e = output.cast<Expression>();
+
+		output.set(node->sl);
 		node->sl->Accept(this);
-		node->sl = (StatementList *)output.get();
+		node->sl = output.cast<StatementList>();
 
 		output = node;
 	}
 
 	virtual void Visit(Forever *node) override
 	{
-		output = node->sl.get();
+		env.Clear(); // Variables not preserved between iterations
+
+		if (!node->sl)
+		{
+			/* Must have a body */
+			node->sl = new StatementList();
+			output = node;
+			return;
+		}
+
+		output.set(node->sl);
 		node->sl->Accept(this);
-		node->sl = (StatementList *)output.get();
+		node->sl = output.cast<StatementList>();
 
 		output = node;
 	}
 
 	virtual void Visit(If *node) override
 	{
-		output = node->e.get();
-		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		if (!node->sl)
+		{
+			/* No branch */
+			output = nullptr;
+			return;
+		}
 
-		output = node->sl.get();
+		if (!node->e)
+		{
+			/* Condition always false */
+			output = nullptr;
+			return;
+		}
+
+		output.set(node->e);
+		node->e->Accept(this);
+		node->e = output.cast<Expression>();
+
+		if (node->e->eval.HasValue())
+		{
+			/* Evaluate condition */
+			if (Truth(node->e->eval.GetValue()))
+			{
+				output.set(node->sl);
+				node->sl->Accept(this);
+			}
+			else
+				output = nullptr;
+
+			return;
+		}
+
+		output.set(node->sl);
 		node->sl->Accept(this);
-		node->sl = (StatementList *)output.get();
+		node->sl = output.cast<StatementList>();
 
 		output = node;
 	}
 
 	virtual void Visit(IfElse *node) override
 	{
-		output = node->e.get();
+		if (!node->sl1 && !node->sl2)
+		{
+			/* No branches */
+			output = nullptr;
+			return;
+		}
+
+		if (!node->e)
+			goto only_else;
+
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
-		output = node->sl1.get();
+		if (node->e->eval.HasValue())
+		{
+			/* Evaluate condition */
+			if (Truth(node->e->eval.GetValue()))
+			{
+				if (node->sl1)
+				{
+					output.set(node->sl1);
+					node->sl1->Accept(this);
+				}
+				else
+					output = nullptr;
+			}
+			else
+			{
+			only_else:
+				if (node->sl2)
+				{
+					output.set(node->sl2);
+					node->sl2->Accept(this);
+				}
+				else
+					output = nullptr;
+			}
+
+			return;
+		}
+
+		if (!node->sl1)
+		{
+			/* Invert condition and swap branches */
+			AutoRelease<LogicalNot> notNode = new LogicalNot();
+			notNode->e = node->e;
+
+			AutoRelease<If> ifNode = new If();
+			ifNode->e = notNode.get();
+			ifNode->sl = node->sl2;
+
+			output.set(ifNode);
+			ifNode->Accept(this);
+
+			return;
+		}
+
+		if (!node->sl2)
+		{
+			/* Remove else branch */
+			AutoRelease<If> ifNode = new If();
+			ifNode->e = node->e;
+			ifNode->sl = node->sl1;
+
+			output.set(ifNode);
+			ifNode->Accept(this);
+
+			return;
+		}
+
+		output.set(node->sl1);
 		node->sl1->Accept(this);
-		node->sl1 = (StatementList *)output.get();
+		node->sl1 = output.cast<StatementList>();
 
-		output = node->sl2.get();
+		output.set(node->sl2);
 		node->sl2->Accept(this);
-		node->sl2 = (StatementList *)output.get();
+		node->sl2 = output.cast<StatementList>();
 
 		output = node;
 	}
 
 	virtual void Visit(WaitUntil *node) override
 	{
-		output = node->e.get();
+		env.Clear(); // Instruction causes yield, variables not preserved
+
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
 
 	virtual void Visit(RepeatUntil *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
-		output = node->sl.get();
+		env.Clear(); // Instruction causes yield, variables not preserved
+
+		output.set(node->sl);
 		node->sl->Accept(this);
-		node->sl = (StatementList *)output.get();
+		node->sl = output.cast<Expression>();
 
 		output = node;
 	}
@@ -1261,9 +1668,9 @@ public:
 
 	virtual void Visit(CreateClone *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
 
 		output = node;
 	}
@@ -1275,9 +1682,11 @@ public:
 
 	virtual void Visit(AskAndWait *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		env.Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
@@ -1294,18 +1703,37 @@ public:
 
 	virtual void Visit(SetVariable *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		OptionalValue &value = env.Lookup(node->name);
+		value = node->e->eval;
 
 		output = node;
 	}
 
 	virtual void Visit(ChangeVariable *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		OptionalValue &value = env.Lookup(node->name);
+		if (value.HasValue() && node->e->eval.HasValue())
+		{
+			Value tmp;
+			InitializeValue(tmp);
+			Assign(tmp, value.GetValue());
+
+			ValueAdd(tmp, node->e->eval.GetValue());
+
+			value.SetValue(tmp);
+
+			ReleaseValue(tmp);
+		}
+		else
+			value.SetUndefined(); // TODO: make more specific
 
 		output = node;
 	}
@@ -1322,49 +1750,113 @@ public:
 
 	virtual void Visit(AppendToList *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		OptionalValue &list = env.Lookup(node->name);
+		if (list.HasValue())
+		{
+			Value tmp;
+			InitializeValue(tmp);
+			Assign(tmp, list.GetValue());
+
+			ListAppend(tmp, node->e->eval.GetValue());
+
+			list.SetValue(tmp);
+
+			ReleaseValue(tmp);
+		}
+		else
+			list.SetList();
 
 		output = node;
 	}
 
 	virtual void Visit(DeleteFromList *node) override
 	{
-		output = node->e.get();
+		output.set(node->e);
 		node->e->Accept(this);
-		node->e = (Expression *)output.get();
+		node->e = output.cast<Expression>();
+
+		OptionalValue &list = env.Lookup(node->name);
+		if (list.HasValue() && node->e->eval.HasValue())
+		{
+			Value tmp;
+			InitializeValue(tmp);
+			Assign(tmp, list.GetValue());
+
+			ListDelete(tmp, node->e->eval.GetValue());
+
+			list.SetValue(tmp);
+
+			ReleaseValue(tmp);
+		}
+		else
+			list.SetList();
 
 		output = node;
 	}
 
 	virtual void Visit(DeleteAllList *node) override
 	{
+		/* Create a new empty list */
+		OptionalValue &value = env.Lookup(node->name);
+
+		Value tmp;
+		InitializeValue(tmp);
+		AllocList(tmp, 0);
+
+		value.SetValue(tmp);
+
+		ReleaseValue(tmp);
+
 		output = node;
 	}
 
 	virtual void Visit(InsertInList *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
 		output = node->e2.get();
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
+
+		OptionalValue &list = env.Lookup(node->name);
+		if (list.HasValue() && node->e1->eval.HasValue() && node->e2->eval.HasValue())
+		{
+			Value tmp;
+			InitializeValue(tmp);
+			Assign(tmp, list.GetValue());
+
+			ListInsert(tmp, ToInteger(node->e2->eval.GetValue()), node->e1->eval.GetValue());
+
+			list.SetValue(tmp);
+
+			ReleaseValue(tmp);
+		}
+		else
+			list.SetList();
 
 		output = node;
 	}
 
 	virtual void Visit(ReplaceInList *node) override
 	{
-		output = node->e1.get();
+		output.set(node->e1);
 		node->e1->Accept(this);
-		node->e1 = (Expression *)output.get();
+		node->e1 = output.cast<Expression>();
 
-		output = node->e2.get();
+		output.set(node->e2);
 		node->e2->Accept(this);
-		node->e2 = (Expression *)output.get();
+		node->e2 = output.cast<Expression>();
+
+		OptionalValue &list = env.Lookup(node->name);
+		list.SetList();
+
+		// TODO: implement
 
 		output = node;
 	}
@@ -1393,19 +1885,21 @@ public:
 	{
 		for (std::pair<const std::string, AutoRelease<Expression>> &p : node->args)
 		{
-			output = p.second.get();
+			output.set(p.second);
 			p.second->Accept(this);
-			p.second = (Expression *)output.get();
+			p.second = output.cast<Expression>();
 		}
+
+		output = node;
 	}
 
 	virtual void Visit(StatementList *node) override
 	{
 		for (AutoRelease<Statement> &s : node->sl)
 		{
-			output = s.get();
+			output.set(s);
 			s->Accept(this);
-			s = (Statement *)output.get();
+			s = output.cast<Statement>();
 		}
 
 		output = node;
@@ -1414,7 +1908,15 @@ public:
 	virtual void Visit(StatementListList *node) override
 	{
 		for (AutoRelease<StatementList> &sl : node->sll)
+		{
+			env.Clear(); // Variables not set yet
+
+			output = sl.get();
 			sl->Accept(this);
+			sl = output.cast<StatementList>();
+		}
+
+		output = node;
 	}
 
 	virtual void Visit(SpriteDef *node) override
@@ -1434,6 +1936,7 @@ public:
 	}
 
 	AutoRelease<ASTNode> output;
+	StaticEnvironment env;
 	int level;
 
 	OptimizeVisitor(int level) : level(level) {}

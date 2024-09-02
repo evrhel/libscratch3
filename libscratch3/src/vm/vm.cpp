@@ -134,6 +134,12 @@ void SpriteList::Move(Sprite *sprite, int64_t distance)
 		Sprite *before = sprite->_prev;
 		Remove(sprite);
 
+		if (!before)
+		{
+			distance--;
+			before = _head;
+		}
+
 		for (int64_t i = 0; i < distance; i++)
 		{
 			if (before == _tail)
@@ -149,6 +155,13 @@ void SpriteList::Move(Sprite *sprite, int64_t distance)
 		Remove(sprite);
 
 		distance = -distance;
+
+		if (!after)
+		{
+			distance--;
+			after = _tail;
+		}
+		
 		for (int64_t i = 0; i < distance; i++)
 		{
 			if (after == _head->_next)
@@ -670,11 +683,19 @@ Script *VirtualMachine::AllocScript(const SCRIPT_ALLOC_INFO &ai)
 
 	Script *script = _scriptTable + _nextEntry;
 
-	_nextEntry++;
-	if (_nextEntry > _lastEntry)
-		_lastEntry = _nextEntry;
+	if (script->state != EMBRYO)
+		Panic("Allocating non embryonic script");
+	
+	// Find next available slot
+	do
+	{
+		_nextEntry++;
+		if (_nextEntry >= MAX_SCRIPTS)
+			_nextEntry = 0;
+	} while (_scriptTable[_nextEntry].state != EMBRYO);
 
-	assert(script->state == EMBRYO);
+	if (_nextEntry >= _lastEntry)
+		_lastEntry = _nextEntry;
 
 	script->sprite = ai.sprite;
 
@@ -736,9 +757,12 @@ void VirtualMachine::FreeScript(Script *script)
 	if (index < _nextEntry)
 		_nextEntry = index;
 
+	//if (index >= _lastEntry)
+	//	_lastEntry = index + 1;
+
 	// find the last allocated script
-	while (_lastEntry > 0 && _scriptTable[_lastEntry - 1].state == EMBRYO)
-		_lastEntry--;
+	//while (_lastEntry > 0 && _scriptTable[_lastEntry - 1].state == EMBRYO)
+	//	_lastEntry--;
 
 	_allocatedScripts--;
 }

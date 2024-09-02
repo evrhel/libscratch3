@@ -65,6 +65,10 @@ bool Truth(const Value &val)
 	{
 	default:
 		return false;
+	case ValueType_Integer:
+		return val.u.integer != 0;
+	case ValueType_Real:
+		return val.u.real != 0.0;
 	case ValueType_Bool:
 		return val.u.boolean;
 	case ValueType_String:
@@ -831,9 +835,9 @@ Value &ValueDiv(Value &lhs, const Value &rhs)
 			goto handle_div0;
 
 		if (lhs.type == ValueType_Integer)
-			return SetInteger(lhs, lhs.u.integer / rhs.u.real);
+			return SetInteger(lhs, lhs.u.integer / rhs.u.integer);
 		if (lhs.type == ValueType_Real)
-			return SetReal(lhs, lhs.u.integer / rhs.u.real);
+			return SetReal(lhs, lhs.u.real / rhs.u.integer);
 		return SetInteger(lhs, 0);
 	case ValueType_Real:
 		if (rhs.u.real == 0.0)
@@ -842,7 +846,7 @@ Value &ValueDiv(Value &lhs, const Value &rhs)
 		if (lhs.type == ValueType_Real)
 			return SetReal(lhs, lhs.u.real / rhs.u.real);
 		if (rhs.type == ValueType_Integer)
-			return SetReal(lhs, lhs.u.real / rhs.u.integer);
+			return SetReal(lhs, lhs.u.integer / rhs.u.real);
 		return SetInteger(lhs, 0);
 	case ValueType_Bool:
 		if (!rhs.u.boolean)
@@ -877,6 +881,37 @@ handle_div0:
 		return SetReal(lhs, lhs.u.boolean ? INFINITY : NAN);
 
 	return SetReal(lhs, NAN);
+}
+
+Value &ValueMod(Value &lhs, const Value &rhs)
+{
+	switch (rhs.type) // Notice switch on rhs
+	{
+	default:
+		return SetReal(lhs, NAN);
+	case ValueType_Integer:
+		if (rhs.u.integer == 0)
+			return SetReal(lhs, NAN);
+
+		if (lhs.type == ValueType_Integer)
+			return SetInteger(lhs, lhs.u.integer % rhs.u.integer);
+		if (lhs.type == ValueType_Real)
+			return SetReal(lhs, fmod(lhs.u.real, (double)rhs.u.integer));
+		return SetInteger(lhs, 0);
+	case ValueType_Real:
+		if (rhs.u.real == 0.0)
+			return SetReal(lhs, NAN);
+
+		if (lhs.type == ValueType_Real)
+			return SetReal(lhs, fmod(lhs.u.real, rhs.u.real));
+		if (rhs.type == ValueType_Integer)
+			return SetReal(lhs, fmod((double)lhs.u.integer, rhs.u.real));
+		return SetInteger(lhs, 0);
+	case ValueType_Bool:
+		if (!rhs.u.boolean)
+			return SetReal(lhs, NAN);
+		return SetInteger(lhs, 0);
+	}
 }
 
 Value &ValueNeg(Value &lhs)

@@ -220,13 +220,13 @@ int ScriptMain()
 			Push();
 			break;
 		case Op_pushint:
-			i64 = *(int64_t *)self->pc;
-			self->pc += sizeof(int64_t);
+			i64 = *(bc::int64 *)self->pc;
+			self->pc += sizeof(bc::int64);
 			SetInteger(Push(), i64);
 			break;
 		case Op_pushreal:
-			real = *(double *)self->pc;
-			self->pc += sizeof(double);
+			real = *(bc::float64 *)self->pc;
+			self->pc += sizeof(bc::float64);
 			SetReal(Push(), real);
 			break;
 		case Op_pushtrue:
@@ -284,92 +284,92 @@ int ScriptMain()
 			SetBool(StackAt(-1), !Truth(StackAt(-1)));
 			break;
 		case Op_add:
-			lhs = &StackAt(-2);
-			rhs = &StackAt(-1);
-			real = ToReal(*lhs) + ToReal(*rhs);
+			ValueAdd(StackAt(-2), StackAt(-1));
 			Pop();
-			SetReal(*lhs, real);
 			break;
 		case Op_sub:
-			lhs = &StackAt(-2);
-			rhs = &StackAt(-1);
-			real = ToReal(*lhs) - ToReal(*rhs);
+			ValueSub(StackAt(-2), StackAt(-1));
 			Pop();
-			SetReal(*lhs, real);
 			break;
 		case Op_mul:
-			lhs = &StackAt(-2);
-			rhs = &StackAt(-1);
-			real = ToReal(*lhs) * ToReal(*rhs);
+			ValueMul(StackAt(-2), StackAt(-1));
 			Pop();
-			SetReal(*lhs, real);
 			break;
 		case Op_div:
-			lhs = &StackAt(-2);
-			rhs = &StackAt(-1);
-			real = ToReal(*lhs) / ToReal(*rhs);
+			ValueDiv(StackAt(-2), StackAt(-1));
 			Pop();
-			SetReal(*lhs, real);
 			break;
 		case Op_mod:
-			lhs = &StackAt(-2);
-			rhs = &StackAt(-1);
-			real = fmod(ToReal(*lhs), ToReal(*rhs));
+			ValueMod(StackAt(-2), StackAt(-1));
 			Pop();
-			SetReal(*lhs, real);
 			break;
 		case Op_neg:
-			SetReal(StackAt(-1), -ToReal(StackAt(-1)));
+			ValueNeg(StackAt(-1));
 			break;
 		case Op_round:
-			SetReal(StackAt(-1), round(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, round(ToReal(*lhs)));
 			break;
 		case Op_abs:
-			SetReal(StackAt(-1), fabs(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, fabs(ToReal(*lhs)));
 			break;
 		case Op_floor:
-			SetReal(StackAt(-1), floor(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, floor(ToReal(StackAt(-1))));
 			break;
 		case Op_ceil:
-			SetReal(StackAt(-1), ceil(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, ceil(ToReal(StackAt(-1))));
 			break;
 		case Op_sqrt:
-			SetReal(StackAt(-1), sqrt(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, sqrt(ToReal(StackAt(-1))));
 			break;
 		case Op_sin:
-			SetReal(StackAt(-1), sin(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, sin(ToReal(*lhs) * DEG2RAD));
 			break;
 		case Op_cos:
-			SetReal(StackAt(-1), cos(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, cos(ToReal(*lhs) * DEG2RAD));
 			break;
 		case Op_tan:
-			SetReal(StackAt(-1), tan(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, tan(ToReal(*lhs) * DEG2RAD));
 			break;
 		case Op_asin:
-			SetReal(StackAt(-1), asin(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, asin(ToReal(*lhs)) * RAD2DEG);
 			break;
 		case Op_acos:
-			SetReal(StackAt(-1), acos(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, acos(ToReal(*lhs)) * RAD2DEG);
 			break;
 		case Op_atan:
-			SetReal(StackAt(-1), atan(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, atan(ToReal(*lhs)) * RAD2DEG);
 			break;
 		case Op_ln:
-			SetReal(StackAt(-1), log(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, log(ToReal(*lhs)));
 			break;
 		case Op_log10:
-			SetReal(StackAt(-1), log10(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, log10(ToReal(*lhs)));
 			break;
 		case Op_exp:
-			SetReal(StackAt(0), exp(ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, exp(ToReal(*lhs)));
 			break;
 		case Op_exp10:
-			SetReal(StackAt(-1), pow(10.0, ToReal(StackAt(-1))));
+			lhs = &StackAt(-1);
+			SetReal(*lhs, pow(10, ToReal(*lhs)));
 			break;
 		case Op_strcat:
 			lhs = &StackAt(-2);
 			rhs = &StackAt(-1);
-			ConcatValue(*lhs, *rhs);
+			ConcatValue(*rhs, *lhs);
 			Pop();
 			break;
 		case Op_charat:
@@ -379,17 +379,22 @@ int ScriptMain()
 			SetChar(*lhs, ValueCharAt(*lhs, i64));
 			break;
 		case Op_strlen:
-			SetInteger(StackAt(-1), ValueLength(StackAt(-1)));
+			lhs = &StackAt(-1);
+			SetInteger(*lhs, ValueLength(*lhs));
 			break;
 		case Op_strstr:
-			SetBool(StackAt(-2), ValueContains(StackAt(-1), StackAt(-2)));
+			lhs = &StackAt(-2);
+			rhs = &StackAt(-1);
+			SetBool(*lhs, ValueContains(*rhs, *lhs));
 			Pop();
 			break;
 		case Op_inc:
-			SetReal(StackAt(-1), ToReal(StackAt(-1)) + 1.0);
+			lhs = &StackAt(-1);
+			SetReal(*lhs, ToReal(*lhs) + 1.0);
 			break;
 		case Op_dec:
-			SetReal(StackAt(-1), ToReal(StackAt(-1)) - 1.0);
+			lhs = &StackAt(-1);
+			SetReal(*lhs, ToReal(*lhs) - 1.0);
 			break;
 		case Op_movesteps: {
 			double steps = ToReal(StackAt(-1));
@@ -496,8 +501,13 @@ int ScriptMain()
 			case ValueType_Real:
 				sprite->SetCostume(static_cast<int64_t>(round(v.u.real)));
 				break;
+			case ValueType_Bool:
+				sprite->SetCostume(v.u.boolean ? 1 : 0);
+				break;
 			case ValueType_String:
-				sprite->SetCostume(sprite->GetBase()->FindCostume(v.u.string));
+				i64 = sprite->GetBase()->FindCostume(v.u.string);
+				if (i64 != 0) // check if costume exists
+					sprite->SetCostume(i64);
 				break;
 			default:
 				break; // do nothing
@@ -523,8 +533,13 @@ int ScriptMain()
 			case ValueType_Real:
 				stage->SetCostume(static_cast<int64_t>(round(v.u.real)));
 				break;
+			case ValueType_Bool:
+				stage->SetCostume(v.u.boolean ? 1 : 0);
+				break;
 			case ValueType_String:
-				stage->SetCostume(stage->GetBase()->FindCostume(v.u.string));
+				i64 = stage->GetBase()->FindCostume(v.u.string);
+				if (i64 != 0) // check if costume exists
+					stage->SetCostume(i64);
 				break;
 			}
 
@@ -922,6 +937,12 @@ int ScriptMain()
 				break;
 			}
 
+			if (!strcmp(v.u.string->str, "_edge_"))
+			{
+				SetBool(v, sprite->TouchingEdge());
+				break;
+			}
+
 			Sprite *s = VM->FindSprite(v);
 			if (!s)
 			{
@@ -1218,6 +1239,9 @@ void LS_NORETURN Terminate()
 void LS_NORETURN Raise(ExceptionType type, const char *message)
 {
 	Script *self = VM->GetCurrentScript();
+	if (!self)
+		VM->Panic("Raising exception outside of script");
+
 	self->except = type;
 	self->exceptMessage = message;
 	Terminate();

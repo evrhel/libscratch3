@@ -133,7 +133,7 @@ struct SpriteDef : public ASTNode
 	double size = 100.0;
 	double direction = 90.0;
 	bool draggable = false;
-	std::string rotationStyle = "all around";
+	RotationStyle rotationStyle = RotationStyle_AllAround;
 };
 
 // list of sprite definitions

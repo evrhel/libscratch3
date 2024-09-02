@@ -223,6 +223,18 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize)
 			printf("addstatic %u\n", ((bc::VarId *)ptr)->ToInt());
 			ptr += sizeof(bc::VarId);
 			break;
+		case Op_setfield:
+			printf("setfield %u\n", ((bc::VarId *)ptr)->ToInt());
+			ptr += sizeof(bc::VarId);
+			break;
+		case Op_getfield:
+			printf("getfield %u\n", ((bc::VarId *)ptr)->ToInt());
+			ptr += sizeof(bc::VarId);
+			break;
+		case Op_addfield:
+			printf("addfield %u\n", ((bc::VarId *)ptr)->ToInt());
+			ptr += sizeof(bc::VarId);
+			break;
 		case Op_listcreate:
 			printf("listcreate %llu\n", *(uint64_t *)ptr);
 			ptr += sizeof(uint64_t);
@@ -480,15 +492,72 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize)
 			printf("setsize\n");
 			break;
 		case Op_addgraphiceffect:
-			printf("addgraphiceffect\n");
-			// TODO: Decode graphic effect
+			printf("addgraphiceffect ");
+
+			switch (*ptr)
+			{
+			default:
+				printf("<unknown>\n");
+				break;
+			case GraphicEffect_Color:
+				printf("color\n");
+				break;
+			case GraphicEffect_Fisheye:
+				printf("fisheye\n");
+				break;
+			case GraphicEffect_Whirl:
+				printf("whirl\n");
+				break;
+			case GraphicEffect_Pixelate:
+				printf("pixelate\n");
+				break;
+			case GraphicEffect_Mosaic:
+				printf("mosaic\n");
+				break;
+			case GraphicEffect_Brightness:
+				printf("brightness\n");
+				break;
+			case GraphicEffect_Ghost:
+				printf("ghost\n");
+				break;
+			}
+
 			ptr++;
 			break;
-		case Op_setgraphiceffect:
-			printf("setgraphiceffect\n");
-			// TODO: Decode graphic effect
+		case Op_setgraphiceffect: {
+			printf("setgraphiceffect ");
+			
+			switch (*ptr)
+			{
+			default:
+				printf("<unknown>\n");
+				break;
+			case GraphicEffect_Color:
+				printf("color\n");
+				break;
+			case GraphicEffect_Fisheye:
+				printf("fisheye\n");
+				break;
+			case GraphicEffect_Whirl:
+				printf("whirl\n");
+				break;
+			case GraphicEffect_Pixelate:
+				printf("pixelate\n");
+				break;
+			case GraphicEffect_Mosaic:
+				printf("mosaic\n");
+				break;
+			case GraphicEffect_Brightness:
+				printf("brightness\n");
+				break;
+			case GraphicEffect_Ghost:
+				printf("ghost\n");
+				break;
+			}
+
 			ptr++;
 			break;
+		}
 		case Op_cleargraphiceffects:
 			printf("cleargraphiceffects\n");
 			break;

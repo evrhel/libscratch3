@@ -405,6 +405,8 @@ void Sprite::Update()
     if (_transDirty)
     {
         Costume *c = _base->GetCostume(_costume);
+        if (c == nullptr)
+            VM->Panic("Invalid costume ID");
 
         const Vector2 &logicalCenter = c->GetLogicalCenter();
         const Vector2 &logicalSize = c->GetLogicalSize();
@@ -422,12 +424,11 @@ void Sprite::Update()
         else if (_rotationStyle == RotationStyle_LeftRight)
         {
             if (_direction < 0)
-                rotation = MUTIL_PI;
-            else
-                rotation = 0.0f;
+                size.x = -size.x; // flip horizontally
+            rotation = 0.0f;
         }
         else
-            rotation = radians(static_cast<float>(_direction - 90.0));
+            rotation = -radians(static_cast<float>(_direction - 90.0));
 
         // Setup transformation matrices
         Matrix4 mScale = scale(Matrix4(), Vector3(size, 1.0f));
@@ -514,6 +515,18 @@ bool Sprite::TouchingSprite(const Sprite *sprite)
                 return true;
         }
     }
+
+    return false;
+}
+
+bool Sprite::TouchingEdge()
+{
+    Update(); // ensure transformation is up-to-date
+
+    // TODO: check on pixel level
+    if (_bbox.lo.x <= -240.0f || _bbox.hi.x >= 240.0f ||
+		_bbox.lo.y <= -180.0f || _bbox.hi.y >= 180.0f)
+		return true;
 
     return false;
 }

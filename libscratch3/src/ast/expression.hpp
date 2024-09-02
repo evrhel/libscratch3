@@ -27,7 +27,7 @@ struct Constexpr : public Consteval
 	AST_IMPL(Constexpr, Consteval);
 	AST_ACCEPTOR;
 
-	std::string value;
+	//std::string value;
 };
 
 // (x position)
