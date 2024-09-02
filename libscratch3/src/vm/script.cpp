@@ -449,8 +449,20 @@ int ScriptMain()
 			sprite->SetDirection(ToReal(StackAt(-1)));
 			Pop();
 			break;
-		case Op_lookat:
-			Raise(NotImplemented, "lookat");
+		case Op_lookat: {
+			Sprite *target = VM->FindSprite(CvtString(StackAt(-1)));
+			if (target)
+			{
+				double dx = target->GetX() - sprite->GetX();
+				double dy = target->GetY() - sprite->GetY();
+
+				// shift direction by 90 degrees
+				sprite->SetDirection(atan2(dy, dx) * RAD2DEG + 90.0);
+			}
+
+			Pop();
+			break;
+		}
 		case Op_addx:
 			sprite->SetX(ToReal(StackAt(-1)) + sprite->GetX());
 			Pop();
@@ -957,8 +969,31 @@ int ScriptMain()
 			Raise(NotImplemented, "touchingcolor");
 		case Op_colortouching:
 			Raise(NotImplemented, "colortouching");
-		case Op_distanceto:
-			Raise(NotImplemented, "distanceto");
+		case Op_distanceto: {
+			Value &target = CvtString(StackAt(-1));
+			if (!strcmp("_mouse_", target.u.string->str))
+			{
+				IOHandler &io = VM->GetIO();
+				double dx = io.GetMouseX() - sprite->GetX();
+				double dy = io.GetMouseY() - sprite->GetY();
+
+				SetReal(target, sqrt(dx * dx + dy * dy));
+			}
+			else
+			{
+				Sprite *s = VM->FindSprite(target);
+				if (s)
+				{
+					double dx = s->GetX() - sprite->GetX();
+					double dy = s->GetY() - sprite->GetY();
+
+					SetReal(target, sqrt(dx * dx + dy * dy));
+				}
+				else
+					SetReal(target, 0.0);
+			}
+			break;
+		}
 		case Op_ask:
 			Raise(NotImplemented, "ask");
 		case Op_getanswer:

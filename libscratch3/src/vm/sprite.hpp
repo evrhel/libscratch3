@@ -18,7 +18,7 @@
 #define UNALLOCATED_INSTANCE_ID 0
 #define BASE_INSTANCE_ID 1
 
-#define MAX_INSTANCES 256
+#define MAX_INSTANCES 512
 
 using namespace mutil;
 

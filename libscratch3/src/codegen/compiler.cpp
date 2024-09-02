@@ -1051,9 +1051,16 @@ public:
 		case StopMode_All:
 			cp.WriteOpcode(Op_stopall);
 			break;
-		case StopMode_ThisScript:
-			cp.WriteOpcode(Op_stopself);
+		case StopMode_ThisScript: {
+			if (currentProc)
+			{
+				cp.WriteOpcode(Op_leave);
+				cp.WriteOpcode(Op_ret);
+			}
+			else
+				cp.WriteOpcode(Op_stopself);
 			break;
+		}
 		case StopMode_OtherScriptsInSprite:
 			cp.WriteOpcode(Op_stopother);
 			break;

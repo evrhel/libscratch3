@@ -319,6 +319,15 @@ public:
 
 			output = neg;
 		}
+		else if (rhs.eval.IsNegativeOne())
+		{
+			// Replace with negation instruction
+			AutoRelease<Neg> neg = new Neg();
+			neg->e = &lhs;
+			neg->Accept(this);
+
+			output = neg;
+		}
 		else if (lhs.eval.HasValue() && rhs.eval.HasValue())
 			node->eval = lhs.eval * rhs.eval;
 
