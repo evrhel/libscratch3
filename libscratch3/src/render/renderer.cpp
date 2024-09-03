@@ -314,12 +314,28 @@ GLRenderer *GLRenderer::Create(const SpriteList *sprites, const Scratch3VMOption
     return r;
 }
 
-bool GLRenderer::TouchingColor(Sprite *sprite, const Vector3 &color)
+bool GLRenderer::TouchingColor(Sprite *sprite, const Vector3 &color, const Vector3 *mask)
 {
     assert(sprite != nullptr);
 
-    // TODO: implement
-    return true;
+    if (!_queryFbo)
+        return false;
+
+    if (!sprite->IsVisible())
+        return false;
+
+    sprite->Update();
+
+    const AABB &bbox = sprite->GetBoundingBox();
+    if (bbox.hi.x - bbox.lo.x <= 0 || bbox.hi.y - bbox.lo.y <= 0)
+		return false;
+
+    const IntVector4 bounds(bbox.lo.x, bbox.hi.x, bbox.lo.y, bbox.hi.y);
+
+    if (!TouchingColorBegin(sprite, color, mask, bounds))
+        return false;
+
+    return TouchingColorEnd(color, bounds);
 }
 
 void GLRenderer::SetLogicalSize(int left, int right, int bottom, int top)
@@ -388,6 +404,8 @@ void GLRenderer::Render()
     _spriteShader->Use();
     _spriteShader->SetProj(_proj);
 
+    _spriteShader->SetUseColorMask(false);
+
     glBindVertexArray(_quadVao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEbo);
 
@@ -414,6 +432,44 @@ void GLRenderer::Resize()
 {
     SDL_GL_GetDrawableSize(_window, &_width, &_height);
     _viewport.Resize(_options.freeAspectRatio, _width, _height);
+
+    if (_queryRbo)
+    {
+       glDeleteRenderbuffers(1, &_queryRbo);
+		_queryRbo = 0;
+    }
+
+    if (_queryFbo)
+    {
+        glDeleteFramebuffers(1, &_queryFbo);
+        _queryFbo = 0;
+    }
+
+    glGenFramebuffers(1, &_queryFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, _queryFbo);
+
+    GLuint colorBuffer;
+    glGenTextures(1, &colorBuffer);
+
+    glBindTexture(GL_TEXTURE_2D, colorBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _viewport.width, _viewport.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorBuffer, 0);
+
+    glGenRenderbuffers(1, &_queryRbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, _queryRbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, _viewport.width, _viewport.height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, _queryRbo);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        printf("GLRenderer::Resize: Framebuffer is not complete\n");
+
+        glDeleteRenderbuffers(1, &_queryRbo);
+        glDeleteFramebuffers(1, &_queryFbo);
+
+        _queryRbo = 0;
+        _queryFbo = 0;
+    }
 }
 
 GLRenderer::GLRenderer() :
@@ -422,6 +478,7 @@ GLRenderer::GLRenderer() :
     _left(0), _right(0), _bottom(0), _top(0),
     _viewport({}),
     _width(0), _height(0),
+    _queryFbo(0), _queryRbo(0),
     _frame(0),
     _startTime(0), _lastTime(0), _time(0), _deltaTime(0), _fps(-1),
     _objectsDrawn(0),
@@ -434,6 +491,12 @@ GLRenderer::GLRenderer() :
 
 GLRenderer::~GLRenderer()
 {
+    if (_queryRbo)
+        glDeleteRenderbuffers(1, &_queryRbo);
+
+    if (_queryFbo)
+        glDeleteFramebuffers(1, &_queryFbo);
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImPlot::DestroyContext();
@@ -449,6 +512,103 @@ GLRenderer::~GLRenderer()
     SDL_DestroyWindow(_window);
 
     SDL_Quit();
+}
+
+bool GLRenderer::TouchingColorBegin(Sprite *sprite, const Vector3 &color, const Vector3 *mask, const IntVector4 &bounds)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, _queryFbo);
+
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    
+    const IntVector2 size(bounds.y - bounds.x, bounds.w - bounds.z);
+
+    glViewport(0, 0, size.x, size.y);
+    Matrix4 proj = mutil::ortho(bounds.x, bounds.y, bounds.z, bounds.w);
+
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    // Draw sprite to stencil buffer
+
+    glEnable(GL_STENCIL_TEST);
+    glStencilFunc(GL_ALWAYS, 1, 1);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    glColorMask(0, 0, 0, 0);
+
+    glBindVertexArray(_quadVao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEbo);
+
+    _spriteShader->Use();
+    _spriteShader->SetProj(proj);
+
+    if (mask)
+    {
+        _spriteShader->SetUseColorMask(true);
+        _spriteShader->SetColorMask(*mask);
+    }
+
+    PrepareSprite(sprite, _spriteShader);
+    glDrawElements(GL_TRIANGLES, QUAD_INDEX_COUNT, GL_UNSIGNED_BYTE, 0);
+
+    // Draw rest of sprites to color buffer
+
+    if (mask)
+        _spriteShader->SetUseColorMask(false);
+
+    glStencilFunc(GL_EQUAL, 1, 1);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    glColorMask(1, 1, 1, 1);
+
+    for (Sprite *s = _sprites->Head(); s; s = s->GetNext())
+    {
+        if (s == sprite)
+            continue;
+
+        if (!PrepareSprite(s, _spriteShader))
+            continue; // not visible
+
+        glDrawElements(GL_TRIANGLES, QUAD_INDEX_COUNT, GL_UNSIGNED_BYTE, 0);
+
+        _objectsDrawn++;
+    }
+
+    glDisable(GL_STENCIL_TEST);
+
+    return CheckGLError();
+}
+
+bool GLRenderer::TouchingColorEnd(const Vector3 &color, const IntVector4 &bounds)
+{
+    const IntVector2 size(bounds.y - bounds.x, bounds.w - bounds.z);
+    const int32_t bufferSize = size.x * size.y * 4;
+
+    uint8_t *buffer = new uint8_t[bufferSize];
+    uint8_t *const end = buffer + bufferSize;
+
+    IntVector3 icolor(color * 255.0f);
+
+    glReadPixels(0, 0, size.x, size.y, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+    if (!CheckGLError())
+    {
+        delete[] buffer;
+        return false;
+    }
+
+    for (uint8_t *pixel = buffer; pixel < end; pixel += 4)
+    {
+        if (pixel[3] == 0)
+            continue; // transparent
+
+        if (pixel[0] == icolor.x && pixel[1] == icolor.y && pixel[2] == icolor.z)
+        {
+			delete[] buffer;
+			return true;
+		}
+    }
+
+    delete[] buffer;
+    return false;
 }
 
 bool CheckGLError()

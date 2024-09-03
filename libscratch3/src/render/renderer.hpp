@@ -219,9 +219,10 @@ public:
     //!
     //! \param sprite ID of the sprite to test
     //! \param color The color to test
+    //! \param mask The mask to test
     //!
     //! \return Whether the sprite is touching the color
-    bool TouchingColor(Sprite *sprite, const Vector3 &color);
+    bool TouchingColor(Sprite *sprite, const Vector3 &color, const Vector3 *mask);
 
     //! \brief Set the logical size of the renderer
     //!
@@ -266,6 +267,8 @@ private:
 
     // Window framebuffer size
     int _width, _height;
+
+    GLuint _queryFbo, _queryRbo;
         
     Matrix4 _proj;
 
@@ -283,6 +286,9 @@ private:
     GLuint _quadVao, _quadVbo, _quadEbo;
 
     const SpriteList *_sprites;
+
+    bool TouchingColorBegin(Sprite *sprite, const Vector3 &color, const Vector3 *mask, const IntVector4 &bounds);
+    bool TouchingColorEnd(const Vector3 &color, const IntVector4 &bounds);
 };
 
 bool CheckGLError();

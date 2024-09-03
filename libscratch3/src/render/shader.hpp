@@ -18,6 +18,7 @@ public:
 
     void SetFloat(int loc, float value);
     void SetInt(int loc, int value);
+    void SetVec3(int loc, const Vector3 &value);
     void SetVec4(int loc, const Vector4 &value);
     void SetMat4(int loc, const Matrix4 &value);
 
@@ -47,6 +48,9 @@ public:
 
     void SetColor(const Vector4 &color);
 
+    void SetUseColorMask(bool use);
+    void SetColorMask(const Vector3 &color);
+
     SpriteShader();
     virtual ~SpriteShader() = default;
 protected:
@@ -66,4 +70,7 @@ private:
     int _textureLoc;
 
     int _colorLoc;
+
+    int _useColorMaskLoc;
+    int _colorMaskLoc;
 };

@@ -4,12 +4,16 @@
 #include <string>
 #include <unordered_map>
 
+#include <mutil/mutil.h>
+
 #include "../defs.hpp"
 
 // initial capacity for lists
 #define INITIAL_CAPACITY 8
 
 #define VALUE_STATIC 0x01 // value is statically allocated
+
+using namespace mutil;
 
 enum ValueType
 {
@@ -180,6 +184,8 @@ bool ValueContains(const Value &lhs, const Value &rhs);
 int64_t ToInteger(const Value &v);
 double ToReal(const Value &v);
 const char *ToString(const Value &v, int64_t *len = nullptr);
+IntVector4 ToRGBA(const Value &v);
+IntVector3 ToRGB(const Value &v);
 
 //! \brief Returns a trivial string representation of a value
 //! 

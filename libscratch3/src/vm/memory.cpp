@@ -711,6 +711,53 @@ const char *ToString(const Value &v, int64_t *len)
 	}
 }
 
+IntVector4 ToRGBA(const Value &v)
+{
+	int64_t icol;
+
+	switch (v.type)
+	{
+	default:
+	case ValueType_None:
+		return IntVector4(0);
+	case ValueType_Integer:
+	case ValueType_Real:
+	case ValueType_Bool:
+		icol = ToInteger(v);
+		break;
+	case ValueType_String:
+	case ValueType_List: {
+		int64_t len;
+		const char *s = ToString(v, &len);
+
+		if (len == 0 || s[0] != '#')
+			return IntVector4(0);
+
+		// parse hex color
+		char *end;
+		icol = strtoll(s + 1, &end, 16);
+		
+		if (*end != 0) // invalid hex color
+			return IntVector4(0);
+
+		break;
+	}
+	}
+
+	IntVector4 color;
+	color.r = (icol >> 16) & 0xff;
+	color.g = (icol >> 8) & 0xff;
+	color.b = icol & 0xff;
+	color.a = (icol >> 24) & 0xff;
+
+	return color;
+}
+
+IntVector3 ToRGB(const Value &v)
+{
+	return IntVector3(ToRGBA(v));
+}
+
 const char *GetRawString(const Value &v, int64_t *len)
 {
 	switch (v.type)

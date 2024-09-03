@@ -5,6 +5,7 @@
 
 #include "vm.hpp"
 #include "sprite.hpp"
+#include "../render/renderer.hpp"
 #include "../codegen/compiler.hpp"
 #include "../codegen/util.hpp"
 
@@ -965,10 +966,28 @@ int ScriptMain()
 			SetBool(v, sprite->TouchingSprite(s));
 			break;
 		}
-		case Op_touchingcolor:
-			Raise(NotImplemented, "touchingcolor");
-		case Op_colortouching:
-			Raise(NotImplemented, "colortouching");
+		case Op_touchingcolor: {
+			Value &v = StackAt(-1);
+
+			Vector3 color = Vector3(ToRGB(v)) / 255.0f;
+
+			GLRenderer *ren = VM->GetRenderer();
+			SetBool(v, ren->TouchingColor(sprite, color, nullptr));
+			break;
+		}
+		case Op_colortouching: {
+			Value &lhs = StackAt(-2);
+			Value &rhs = StackAt(-1);
+
+			Vector3 maskcol = Vector3(ToRGB(lhs)) / 255.0f;
+			Vector3 color = Vector3(ToRGB(rhs)) / 255.0f;
+
+			GLRenderer *ren = VM->GetRenderer();
+
+			SetBool(lhs, ren->TouchingColor(sprite, color, &maskcol));
+			Pop();
+			break;
+		}
 		case Op_distanceto: {
 			Value &target = CvtString(StackAt(-1));
 			if (!strcmp("_mouse_", target.u.string->str))

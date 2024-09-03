@@ -80,6 +80,11 @@ void BaseShader::SetInt(int loc, int value)
     glUniform1i(loc, value);
 }
 
+void BaseShader::SetVec3(int loc, const Vector3 &value)
+{
+    glUniform3fv(loc, 1, value.vec);
+}
+
 void BaseShader::SetVec4(int loc, const Vector4 &value)
 {
     glUniform4fv(loc, 1, value.vec);
@@ -156,6 +161,16 @@ void SpriteShader::SetColor(const Vector4 &color)
     SetVec4(_colorLoc, color);
 }
 
+void SpriteShader::SetUseColorMask(bool use)
+{
+    SetInt(_useColorMaskLoc, use);
+}
+
+void SpriteShader::SetColorMask(const Vector3 &color)
+{
+    SetVec3(_colorMaskLoc, color);
+}
+
 SpriteShader::SpriteShader() :
     _projLoc(-1), _modelLoc(-1),
     _colorEffectLoc(-1), _brightnessEffectLoc(-1),
@@ -163,7 +178,8 @@ SpriteShader::SpriteShader() :
     _pixelateEffectLoc(-1), _mosaicEffectLoc(-1),
     _ghostEffectLoc(-1),
     _textureLoc(-1),
-    _colorLoc(-1) { }
+    _colorLoc(-1),
+    _useColorMaskLoc(-1), _colorMaskLoc(-1) { }
 
 void SpriteShader::Init()
 {
@@ -181,4 +197,7 @@ void SpriteShader::Init()
     _textureLoc = GetUniformLocation("uTexture");
 
     _colorLoc = GetUniformLocation("uColor");
+
+    _useColorMaskLoc = GetUniformLocation("uUseColorMask");
+    _colorMaskLoc = GetUniformLocation("uColorMask");
 }

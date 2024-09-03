@@ -16,7 +16,12 @@ uniform sampler2D uTexture;
 
 uniform vec4 uColor;
 
+uniform bool uUseColorMask;
+uniform vec3 uColorMask;
+
 const float kEpsilon = 0.0001;
+
+const vec3 kColorMaskTolerance = vec3(2.0 / 255.0);
 
 vec3 rgb2hsv(vec3 c)
 {
@@ -135,8 +140,19 @@ void main()
 
     color = brightnessEffect(color);
 
-
     color = ghostEffect(color);
 
     FragColor = color * uColor;
+
+    // Alpha test
+    if (FragColor.a < 0.01)
+        discard;
+
+    // Color mask
+    if (uUseColorMask)
+    {
+        vec3 dist = abs(FragColor.rgb - uColorMask);
+        if (any(greaterThan(dist, kColorMaskTolerance)))
+            discard;
+    }
 }
