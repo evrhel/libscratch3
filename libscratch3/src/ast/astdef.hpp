@@ -87,6 +87,8 @@ struct IndexOf;
 struct ListLength;
 struct ListContains;
 
+struct PenMenuColorProperty;
+
 //
 /////////////////////////////////////////////////////////////////////////////////
 // Internal Reporters
@@ -216,6 +218,17 @@ struct HideList;
 struct ProcProto;
 struct DefineProc;
 struct Call;
+
+// Pen
+struct PenClear;
+struct PenStamp;
+struct PenDown;
+struct PenUp;
+struct SetPenColor;
+struct ChangePenProperty;
+struct SetPenProperty;
+struct ChangePenSize;
+struct SetPenSize;
 
 // Top Level
 struct VariableDef;
@@ -352,6 +365,8 @@ enum AstType
 	Ast_ListLength,
 	Ast_ListContains,
 
+	Ast_PenMenuColorProperty,
+
 	Ast_Reporter,
 	
 	Ast_GotoReporter,
@@ -457,6 +472,16 @@ enum AstType
 	Ast_ProcProto,
 	Ast_DefineProc,
 	Ast_Call,
+
+	Ast_PenClear,
+	Ast_PenStamp,
+	Ast_PenDown,
+	Ast_PenUp,
+	Ast_SetPenColor,
+	Ast_ChangePenProperty,
+	Ast_SetPenProperty,
+	Ast_ChangePenSize,
+	Ast_SetPenSize,
 
 	Ast_VariableDef,
 	Ast_VariableDefList,
@@ -717,6 +742,21 @@ enum MonitorMode
 };
 
 extern const char *const MonitorModeStrings[];
+
+enum PenProperty
+{
+	PenProperty_Unknown,
+
+	PenProperty_Color,
+	PenProperty_Saturation,
+	PenProperty_Brightness,
+	PenProperty_Transparency,
+
+	PenProperty_Count
+};
+
+extern const char *const PenPropertyStrings[];
+PenProperty PenPropertyFromString(const std::string &str);
 
 //
 /////////////////////////////////////////////////////////////////////////////////

@@ -437,6 +437,11 @@ public:
 		cp.WriteOpcode(Op_listcontains);
 	}
 
+	virtual void Visit(PenMenuColorProperty *node) override
+	{
+		cp.PushString(node->type);
+	}
+
 	virtual void Visit(StatementList *node)
 	{
 		bool oldTopLevel = topLevel;
@@ -1297,6 +1302,81 @@ public:
 		uint64_t offset = cp._text.size();
 		cp._importSymbols.emplace_back(offset, GetQualifiedProcName(it->second.proto->proccode));
 		cp.WriteText<bc::uint64>(0);
+	}
+
+	virtual void Visit(PenClear *node) override
+	{
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_erase);
+	}
+
+	virtual void Visit(PenStamp *node) override
+	{
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_stamp);
+	}
+
+	virtual void Visit(PenDown *node) override
+	{
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_pendown);
+	}
+
+	virtual void Visit(PenUp *node) override
+	{
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_penup);
+	}
+
+	virtual void Visit(SetPenColor *node) override
+	{
+		node->e->Accept(this);
+
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_setcolor);
+	}
+
+	virtual void Visit(ChangePenProperty *node) override
+	{
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_addparam);
+	}
+
+	virtual void Visit(SetPenProperty *node) override
+	{
+		node->e1->Accept(this);
+		node->e2->Accept(this);
+
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_setparam);
+	}
+
+	virtual void Visit(ChangePenSize *node) override
+	{
+		node->e->Accept(this);
+
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_addsize);
+	}
+
+	virtual void Visit(SetPenSize *node) override
+	{
+		node->e->Accept(this);
+
+		cp.WriteOpcode(Op_ext);
+		cp.WriteOpcode(Ext_pen);
+		cp.WriteOpcode(Op_Pen_setsize);
 	}
 
 	//

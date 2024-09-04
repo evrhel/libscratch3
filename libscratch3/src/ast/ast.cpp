@@ -1595,6 +1595,17 @@ static ASTNode *NodeFromOpcode(const std::string &opcode)
 	if (opcode == "procedures_definition") return new DefineProc();
 	if (opcode == "procedures_call") return new Call();
 
+	if (opcode == "pen_clear") return new PenClear();
+	if (opcode == "pen_stamp") return new PenStamp();
+	if (opcode == "pen_penDown") return new PenDown();
+	if (opcode == "pen_penUp") return new PenUp();
+	if (opcode == "pen_setPenColorToColor") return new SetPenColor();
+	if (opcode == "pen_changePenColorParamBy") return new ChangePenProperty();
+	if (opcode == "pen_setPenColorParamTo") return new SetPenProperty();
+	if (opcode == "pen_changePenSizeBy") return new ChangePenSize();
+	if (opcode == "pen_setPenSizeTo") return new SetPenSize();
+	if (opcode == "pen_menu_colorParam") return new PenMenuColorProperty();
+
 	// Reporters
 
 	if (opcode == "motion_goto_menu") return new GotoReporter();

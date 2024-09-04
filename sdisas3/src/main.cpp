@@ -862,6 +862,57 @@ static void ShowDissasembly(uint8_t *fileData, size_t fileSize)
 		case Op_listcontains:
 			printf("listcontains\n");
 			break;
+		case Op_ext: {
+			ExtId extId = (ExtId)*ptr;
+			ptr++;
+			switch (extId)
+			{
+			default:
+				printf("ext %02X\n", opcode);
+				break;
+			case Ext_pen: {
+				Opcode_Pen penOp = (Opcode_Pen)*ptr;
+				ptr++;
+				switch (penOp)
+				{
+				default:
+					printf("pen %02X\n", opcode);
+					break;
+				case Op_Pen_noop:
+					printf("pen_noop\n");
+					break;
+				case Op_Pen_erase:
+					printf("pen_erase\n");
+					break;
+				case Op_Pen_stamp:
+					printf("pen_stamp\n");
+					break;
+				case Op_Pen_pendown:
+					printf("pen_pendown\n");
+					break;
+				case Op_Pen_penup:
+					printf("pen_penup\n");
+					break;
+				case Op_Pen_setcolor:
+					printf("pen_setcolor\n");
+					break;
+				case Op_Pen_addparam:
+					printf("pen_addparam\n");
+					break;
+				case Op_Pen_setparam:
+					printf("pen_setparam\n");
+					break;
+				case Op_Pen_addsize:
+					printf("pen_addsize\n");
+					break;
+				case Op_Pen_setsize:
+					printf("pen_setsize\n");
+					break;
+				}
+				break;
+			}
+			}
+		}
 		}
 	}
 }

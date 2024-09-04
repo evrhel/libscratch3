@@ -21,3 +21,4 @@ target_link_libraries(sdisas3 PRIVATE
 )
 
 target_include_directories(sdisas3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../libscratch3/src)
+target_include_directories(sdisas3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixUtil/MatrixUtil/include)

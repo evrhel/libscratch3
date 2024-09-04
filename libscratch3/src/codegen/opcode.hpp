@@ -196,9 +196,9 @@ enum Opcode_Pen
 	Op_Pen_stamp,
 	Op_Pen_pendown,
 	Op_Pen_penup,
+	Op_Pen_setcolor,
 	Op_Pen_addparam,
 	Op_Pen_setparam,
-	Op_Pen_findparam,
 	Op_Pen_addsize,
 	Op_Pen_setsize
 };

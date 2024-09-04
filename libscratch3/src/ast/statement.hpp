@@ -1815,3 +1815,150 @@ struct Call : public Statement
 	std::unordered_map<std::string, AutoRelease<Expression>> args;
 	bool warp = false;
 };
+
+// [erase all]
+struct PenClear : public Statement
+{
+	AST_IMPL(PenClear, Statement);
+	AST_ACCEPTOR;
+};
+
+// [stamp]
+struct PenStamp : public Statement
+{
+	AST_IMPL(PenStamp, Statement);
+	AST_ACCEPTOR;
+};
+
+// [pen down]
+struct PenDown : public Statement
+{
+	AST_IMPL(PenDown, Statement);
+	AST_ACCEPTOR;
+};
+
+// [pen up]
+struct PenUp : public Statement
+{
+	AST_IMPL(PenUp, Statement);
+	AST_ACCEPTOR;
+};
+
+// [set pen color to $e]
+struct SetPenColor : public Statement
+{
+	AST_IMPL(SetPenColor, Statement);
+	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "COLOR")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AutoRelease<Expression> e;
+};
+
+// [change pen $e1 by $e2]
+struct ChangePenProperty : public Statement
+{
+	AST_IMPL(ChangePenProperty, Statement);
+	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "COLOR_PARAM")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+		else if (key == "VALUE")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
+	AutoRelease<Expression> e1;
+	AutoRelease<Expression> e2;
+};
+
+// [set pen $e1 to $e2]
+struct SetPenProperty : public Statement
+{
+	AST_IMPL(SetPenProperty, Statement);
+	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "COLOR_PARAM")
+		{
+			if (!e1)
+				e1 = val->As<Expression>();
+			return !!e1;
+		}
+		else if (key == "VALUE")
+		{
+			if (!e2)
+				e2 = val->As<Expression>();
+			return !!e2;
+		}
+
+		return false;
+	}
+
+	AutoRelease<Expression> e1;
+	AutoRelease<Expression> e2;
+};
+
+// [change pen size by $e]
+struct ChangePenSize : public Statement
+{
+	AST_IMPL(ChangePenSize, Statement);
+	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "SIZE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AutoRelease<Expression> e;
+};
+
+// [set pen size to $e]
+struct SetPenSize : public Statement
+{
+	AST_IMPL(SetPenSize, Statement);
+	AST_ACCEPTOR;
+
+	AST_INPUT_SETTER(key, val)
+	{
+		if (key == "SIZE")
+		{
+			if (!e)
+				e = val->As<Expression>();
+			return !!e;
+		}
+
+		return false;
+	}
+
+	AutoRelease<Expression> e;
+};

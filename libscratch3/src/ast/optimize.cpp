@@ -984,6 +984,12 @@ public:
 		output = node;
 	}
 
+	virtual void Visit(PenMenuColorProperty *node) override
+	{
+		node->eval.SetString();
+		output = node;
+	}
+
 	virtual void Visit(MoveSteps *node) override
 	{
 		output.set(node->e);
@@ -1899,6 +1905,51 @@ public:
 			p.second = output.cast<Expression>();
 		}
 
+		output = node;
+	}
+
+	virtual void Visit(PenClear *node) override
+	{
+		output = node;
+	}
+
+	virtual void Visit(PenStamp *node) override
+	{
+		output = node;
+	}
+
+	virtual void Visit(PenDown *node) override
+	{
+		output = node;
+	}
+
+	virtual void Visit(PenUp *node) override
+	{
+		output = node;
+	}
+
+	virtual void Visit(SetPenColor *node) override
+	{
+		output = node;
+	}
+
+	virtual void Visit(ChangePenProperty *node) override
+	{
+		output = node;
+	}
+
+	virtual void Visit(SetPenProperty *node) override
+	{
+		output = node;
+	}
+
+	virtual void Visit(ChangePenSize *node) override
+	{
+		output = node;
+	}
+
+	virtual void Visit(SetPenSize *node) override
+	{
 		output = node;
 	}
 

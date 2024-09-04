@@ -179,6 +179,22 @@ const char *const MonitorModeStrings[MonitorMode_Count] = {
 	"LIST"
 };
 
+extern const char *const PenPropertyStrings[] = {
+	"unknown",
+	"COLOR",
+	"SATURATION",
+	"BRIGHTNESS",
+	"TRANSPARENCY"
+};
+
+PenProperty PenPropertyFromString(const std::string &str)
+{
+	for (int i = 0; i < PenProperty_Count; i++)
+		if (StringEqualsRaw(str.c_str(), PenPropertyStrings[i]))
+			return (PenProperty)i;
+	return PenProperty_Unknown;
+}
+
 const char *AstTypeString(AstType type)
 {
 	switch (type)
@@ -313,6 +329,15 @@ const char *AstTypeString(AstType type)
 	case Ast_ProcProto: return "ProcProto";
 	case Ast_DefineProc: return "DefineProc";
 	case Ast_Call: return "Call";
+	case Ast_PenClear: return "PenClear";
+	case Ast_PenStamp: return "PenStamp";
+	case Ast_PenDown: return "PenDown";
+	case Ast_PenUp: return "PenUp";
+	case Ast_SetPenColor: return "SetPenColor";
+	case Ast_ChangePenProperty: return "ChangePenProperty";
+	case Ast_SetPenProperty: return "SetPenProperty";
+	case Ast_ChangePenSize: return "ChangePenSize";
+	case Ast_SetPenSize: return "SetPenSize";
 	case Ast_VariableDef: return "VariableDef";
 	case Ast_VariableDefList: return "VariableDefList";
 	case Ast_ListDef: return "ListDef";

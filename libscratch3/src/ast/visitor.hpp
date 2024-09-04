@@ -58,6 +58,7 @@ public:
 	inline virtual void Visit(IndexOf *node) {}
 	inline virtual void Visit(ListLength *node) {}
 	inline virtual void Visit(ListContains *node) {}
+	inline virtual void Visit(PenMenuColorProperty *node) {}
 
 	//
 	/////////////////////////////////////////////////////////////////
@@ -143,6 +144,15 @@ public:
 	inline virtual void Visit(ProcProto *node) {}
 	inline virtual void Visit(DefineProc *node) {}
 	inline virtual void Visit(Call *node) {}
+	inline virtual void Visit(PenClear *node) {}
+	inline virtual void Visit(PenStamp *node) {}
+	inline virtual void Visit(PenDown *node) {}
+	inline virtual void Visit(PenUp *node) {}
+	inline virtual void Visit(SetPenColor *node) {}
+	inline virtual void Visit(ChangePenProperty *node) {}
+	inline virtual void Visit(SetPenProperty *node) {}
+	inline virtual void Visit(ChangePenSize *node) {}
+	inline virtual void Visit(SetPenSize *node) {}
 
 	//
 	/////////////////////////////////////////////////////////////////

@@ -1068,3 +1068,22 @@ struct ListContains : public Expression
 	std::string id, name;
 	AutoRelease<Expression> e; // any
 };
+
+struct PenMenuColorProperty : public Expression
+{
+	EXPR_IMPL(PenMenuColorProperty, Expression);
+	AST_ACCEPTOR;
+
+	AST_FIELD_SETTER(key, value, id)
+	{
+		if (key == "colorParam")
+		{
+			this->type = value;
+			return true;
+		}
+
+		return false;
+	}
+
+	std::string type;
+};
