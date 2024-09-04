@@ -1042,6 +1042,30 @@ Value &ValueLess(Value &lhs, const Value &rhs)
 	}
 }
 
+Value &ValueDeepCopy(Value &lhs, const Value &rhs)
+{
+	switch (rhs.type)
+	{
+	default:
+		return Assign(lhs, rhs);
+	case ValueType_String:
+		return SetString(lhs, rhs.u.string->str, rhs.u.string->len);
+	case ValueType_List: {
+		AllocList(lhs, rhs.u.list->len);
+		if (lhs.type != ValueType_List)
+			return SetEmpty(lhs);
+
+		List *l = lhs.u.list;
+		List *r = rhs.u.list;
+
+		for (int64_t i = 0; i < r->len; i++)
+			ValueDeepCopy(l->values[i], r->values[i]);
+
+		return lhs;
+	}
+	}
+}
+
 Value &AllocString(Value &v, int64_t len)
 {
 	if (len <= 0)

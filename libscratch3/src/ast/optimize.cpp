@@ -1,30 +1,85 @@
 #include "optimize.hpp"
 
+#include <list>
+
 #include "ast.hpp"
 #include "../vm/memory.hpp"
 
 class StaticEnvironment
 {
 public:
-	OptionalValue &Lookup(const std::string &name)
+	inline OptionalValue &Lookup(const std::string &name)
 	{
 		return _variables[name];
 	}
 
-	void Clear()
+	inline void Clear()
 	{
 		_variables.clear();
 	}
 
-	StaticEnvironment()
+	void Merge(const StaticEnvironment &from)
 	{
+		for (auto &p : from._variables)
+		{
+			OptionalValue &oldval = _variables[p.first];
+			const OptionalValue &newval = p.second;
 
+			if (oldval.HasValue() && newval.HasValue())
+			{
+				if (!Equals(oldval.GetValue(), newval.GetValue()))
+				{
+					if (oldval.Type() == newval.Type())
+						oldval.SetType(newval.Type()); // Removes value, keeps type
+					else
+						oldval.SetUndefined();
+				}
+			}
+			else if (oldval.Type() == newval.Type())
+				oldval.SetType(newval.Type()); // Removes value, keeps type
+			else
+				oldval.SetUndefined();
+		}
 	}
 
-	~StaticEnvironment()
+	StaticEnvironment &operator=(const StaticEnvironment &env)
 	{
+		if (this == &env)
+			return *this;
 
+		Value tmp;
+		InitializeValue(tmp);
+
+		for (auto &p : env._variables)
+		{
+			if (p.second.HasValue())
+			{
+				ValueDeepCopy(tmp, p.second.GetValue());
+				_variables[p.first].SetValue(tmp);
+			}
+			else
+				_variables[p.first].SetType(p.second.Type());
+		}
+
+		ReleaseValue(tmp);
+
+		return *this;
 	}
+
+	StaticEnvironment &operator=(StaticEnvironment &&env) noexcept
+	{
+		if (this == &env)
+			return *this;
+
+		_variables = std::move(env._variables);
+
+		return *this;
+	}
+
+	inline StaticEnvironment() {}
+	inline StaticEnvironment(const StaticEnvironment &env) { operator=(env); }
+	inline StaticEnvironment(StaticEnvironment &&env) noexcept { _variables = std::move(env._variables); }
+	inline ~StaticEnvironment() {}
 private:
 	std::unordered_map<std::string, OptionalValue> _variables;
 };
@@ -858,7 +913,7 @@ public:
 
 	virtual void Visit(VariableExpr *node) override
 	{
-		/*OptionalValue &value = env.Lookup(node->name);
+		OptionalValue &value = GetEnv().Lookup(node->id);
 		if (value.HasValue())
 		{
 			Constexpr *ce = new Constexpr();
@@ -868,8 +923,7 @@ public:
 			return;
 		}
 
-		node->eval = value;*/
-		node->eval.SetUndefined();
+		node->eval = value;
 		output = node;
 	}
 
@@ -881,7 +935,7 @@ public:
 
 	virtual void Visit(ListExpr *node) override
 	{
-		OptionalValue &list = env.Lookup(node->name);
+		OptionalValue &list = GetEnv().Lookup(node->id);
 		if (list.HasValue())
 		{
 			Constexpr *ce = new Constexpr();
@@ -901,7 +955,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		OptionalValue &list = env.Lookup(node->name);
+		OptionalValue &list = GetEnv().Lookup(node->id);
 		if (list.HasValue() && node->e->eval.HasValue())
 		{
 			Constexpr *ce = new Constexpr();
@@ -928,7 +982,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		OptionalValue &list = env.Lookup(node->name);
+		OptionalValue &list = GetEnv().Lookup(node->id);
 		if (list.HasValue() && node->e->eval.HasValue())
 		{
 			Constexpr *ce = new Constexpr();
@@ -946,7 +1000,7 @@ public:
 	
 	virtual void Visit(ListLength *node) override
 	{
-		OptionalValue &value = env.Lookup(node->name);
+		OptionalValue &value = GetEnv().Lookup(node->id);
 		if (value.HasValue())
 		{
 			Constexpr *ce = new Constexpr();
@@ -968,8 +1022,8 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		OptionalValue &list = env.Lookup(node->name);
-		if (list.HasValue() && node->e->eval.HasValue());
+		OptionalValue &list = GetEnv().Lookup(node->id);
+		if (list.HasValue() && node->e->eval.HasValue())
 		{
 			Constexpr *ce = new Constexpr();
 			bool contains = ListContainsValue(list.GetValue(), node->e->eval.GetValue());
@@ -1070,7 +1124,7 @@ public:
 		node->e2->Accept(this);
 		node->e2 = output.cast<Expression>();
 
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
@@ -1089,7 +1143,7 @@ public:
 		node->e3->Accept(this);
 		node->e3 = output.cast<Expression>();
 
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
@@ -1182,7 +1236,7 @@ public:
 		node->e2->Accept(this);
 		node->e2 = output.cast<Expression>();
 
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
@@ -1206,7 +1260,7 @@ public:
 		node->e2->Accept(this);
 		node->e2 = output.cast<Expression>();
 
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
@@ -1342,7 +1396,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
@@ -1445,7 +1499,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		env.Clear(); // Instruction may cause yield, variables not preserved
+		GetEnv().Clear(); // Instruction may cause yield, variables not preserved
 
 		output = node;
 	}
@@ -1456,7 +1510,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		env.Clear(); // Instruction may cause yield, variables not preserved
+		GetEnv().Clear(); // Instruction may cause yield, variables not preserved
 
 		output = node;
 	}
@@ -1467,14 +1521,14 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
 
 	virtual void Visit(Repeat *node) override
 	{
-		env.Clear(); // Variables not preserved between iterations
+		GetEnv().Clear(); // Variables not preserved between iterations
 
 		if (!node->e)
 		{
@@ -1503,7 +1557,7 @@ public:
 
 	virtual void Visit(Forever *node) override
 	{
-		env.Clear(); // Variables not preserved between iterations
+		GetEnv().Clear(); // Variables not preserved between iterations
 
 		if (!node->sl)
 		{
@@ -1554,9 +1608,13 @@ public:
 			return;
 		}
 
+		PushEnv();
+
 		output.set(node->sl);
 		node->sl->Accept(this);
 		node->sl = output.cast<StatementList>();
+
+		PopEnv();
 
 		output = node;
 	}
@@ -1617,11 +1675,8 @@ public:
 
 			output.set(ifNode);
 			ifNode->Accept(this);
-
-			return;
 		}
-
-		if (!node->sl2)
+		else if (!node->sl2)
 		{
 			/* Remove else branch */
 			AutoRelease<If> ifNode = new If();
@@ -1630,24 +1685,31 @@ public:
 
 			output.set(ifNode);
 			ifNode->Accept(this);
-
-			return;
 		}
+		else
+		{
+			PushEnv();
 
-		output.set(node->sl1);
-		node->sl1->Accept(this);
-		node->sl1 = output.cast<StatementList>();
+			output.set(node->sl1);
+			node->sl1->Accept(this);
+			node->sl1 = output.cast<StatementList>();
 
-		output.set(node->sl2);
-		node->sl2->Accept(this);
-		node->sl2 = output.cast<StatementList>();
+			PushEnv(1); // Separate environment for else branch
 
-		output = node;
+			output.set(node->sl2);
+			node->sl2->Accept(this);
+			node->sl2 = output.cast<StatementList>();
+
+			PopEnv(); // merge if and else environments
+			OverwriteEnv(); // overwrite the current environment with the merged one
+
+			output = node;
+		}
 	}
 
 	virtual void Visit(WaitUntil *node) override
 	{
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output.set(node->e);
 		node->e->Accept(this);
@@ -1662,7 +1724,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output.set(node->sl);
 		node->sl->Accept(this);
@@ -1701,7 +1763,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		env.Clear(); // Instruction causes yield, variables not preserved
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
 	}
@@ -1722,7 +1784,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		OptionalValue &value = env.Lookup(node->name);
+		OptionalValue &value = GetEnv().Lookup(node->id);
 		value = node->e->eval;
 
 		output = node;
@@ -1734,7 +1796,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		OptionalValue &value = env.Lookup(node->name);
+		OptionalValue &value = GetEnv().Lookup(node->id);
 		if (value.HasValue() && node->e->eval.HasValue())
 		{
 			Value tmp;
@@ -1769,7 +1831,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		OptionalValue &list = env.Lookup(node->name);
+		OptionalValue &list = GetEnv().Lookup(node->id);
 		if (list.HasValue())
 		{
 			Value tmp;
@@ -1794,7 +1856,7 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		OptionalValue &list = env.Lookup(node->name);
+		OptionalValue &list = GetEnv().Lookup(node->id);
 		if (list.HasValue() && node->e->eval.HasValue())
 		{
 			Value tmp;
@@ -1807,6 +1869,25 @@ public:
 
 			ReleaseValue(tmp);
 		}
+		else if (node->e->eval.HasValue() && node->e->eval.Type() == ValueType_String && !strcmp(node->e->eval.GetValue().u.string->str, "all"))
+		{
+			Value tmp;
+			InitializeValue(tmp);
+			AllocList(tmp, 0);
+
+			list.SetValue(tmp);
+
+			ReleaseValue(tmp);
+
+			AutoRelease<DeleteAllList> dal = new DeleteAllList();
+			dal->id = node->id;
+			dal->name = node->name;
+
+			output.set(dal);
+			dal->Accept(this);
+
+			return;
+		}
 		else
 			list.SetList();
 
@@ -1816,7 +1897,7 @@ public:
 	virtual void Visit(DeleteAllList *node) override
 	{
 		/* Create a new empty list */
-		OptionalValue &value = env.Lookup(node->name);
+		OptionalValue &value = GetEnv().Lookup(node->id);
 
 		Value tmp;
 		InitializeValue(tmp);
@@ -1839,7 +1920,7 @@ public:
 		node->e2->Accept(this);
 		node->e2 = output.cast<Expression>();
 
-		OptionalValue &list = env.Lookup(node->name);
+		OptionalValue &list = GetEnv().Lookup(node->name);
 		if (list.HasValue() && node->e1->eval.HasValue() && node->e2->eval.HasValue())
 		{
 			Value tmp;
@@ -1868,7 +1949,7 @@ public:
 		node->e2->Accept(this);
 		node->e2 = output.cast<Expression>();
 
-		OptionalValue &list = env.Lookup(node->name);
+		OptionalValue &list = GetEnv().Lookup(node->name);
 		list.SetList();
 
 		// TODO: implement
@@ -1969,11 +2050,13 @@ public:
 	{
 		for (AutoRelease<StatementList> &sl : node->sll)
 		{
-			env.Clear(); // Variables not set yet
+			PushEnv();
 
 			output = sl.get();
 			sl->Accept(this);
 			sl = output.cast<StatementList>();
+
+			PopEnv();
 		}
 
 		output = node;
@@ -1996,10 +2079,61 @@ public:
 	}
 
 	AutoRelease<ASTNode> output;
-	StaticEnvironment env;
+	std::list<StaticEnvironment> envs;
 	int level;
 
 	OptimizeVisitor(int level) : level(level) {}
+private:
+
+	inline StaticEnvironment &GetEnv()
+	{
+		return envs.front();
+	}
+
+	inline void PushEnv()
+	{
+		if (envs.size() == 0)
+			envs.emplace_front();
+		else
+			envs.push_front(GetEnv());
+	}
+
+	inline void PushEnv(int idx)
+	{
+		if (envs.size() == 0)
+			envs.emplace_front();
+		else
+		{
+			auto it = envs.begin();
+			while (idx-- > 0)
+				it++;
+
+			envs.push_front(*it);
+		}
+	}
+
+	inline void PopEnv(bool merge = true)
+	{
+		if (merge && envs.size() > 1)
+		{
+			StaticEnvironment &from = envs.front();
+			StaticEnvironment &to = *++envs.begin();
+
+			to.Merge(from);
+		}
+
+		envs.pop_front();
+	}
+
+	inline void OverwriteEnv()
+	{
+		StaticEnvironment &env = envs.front();
+		StaticEnvironment &prev = *++envs.begin();
+
+		prev = env;
+
+		envs.pop_front();
+	}
 };
 
 void Optimize(Program *prog, int level)

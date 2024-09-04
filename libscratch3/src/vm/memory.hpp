@@ -214,6 +214,8 @@ Value &ValueNeg(Value &lhs);
 Value &ValueGreater(Value &lhs, const Value &rhs);
 Value &ValueLess(Value &lhs, const Value &rhs);
 
+Value &ValueDeepCopy(Value &lhs, const Value &rhs);
+
 //
 /////////////////////////////////////////////////////////////////////
 // Allocation operations
@@ -498,6 +500,17 @@ public:
 		Assign(_value, val);
 		_hasValue = true;
 		_type = (ValueType)val.type;
+
+		return *this;
+	}
+
+	inline OptionalValue &SetType(ValueType type)
+	{
+		if (_hasValue)
+			ReleaseValue(_value);
+
+		_type = type;
+		_hasValue = false;
 
 		return *this;
 	}
