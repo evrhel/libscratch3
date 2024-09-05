@@ -1044,13 +1044,8 @@ Value &ValueLess(Value &lhs, const Value &rhs)
 
 Value &ValueDeepCopy(Value &lhs, const Value &rhs)
 {
-	switch (rhs.type)
+	if (rhs.type == ValueType_List)
 	{
-	default:
-		return Assign(lhs, rhs);
-	case ValueType_String:
-		return SetString(lhs, rhs.u.string->str, rhs.u.string->len);
-	case ValueType_List: {
 		AllocList(lhs, rhs.u.list->len);
 		if (lhs.type != ValueType_List)
 			return SetEmpty(lhs);
@@ -1063,7 +1058,8 @@ Value &ValueDeepCopy(Value &lhs, const Value &rhs)
 
 		return lhs;
 	}
-	}
+
+	return Assign(lhs, rhs);
 }
 
 Value &AllocString(Value &v, int64_t len)

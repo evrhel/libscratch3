@@ -191,10 +191,22 @@ public:
 		cp.WriteOpcode(Op_div);
 	}
 
-	virtual void Visit(Neg *node)
+	virtual void Visit(Neg *node) override
 	{
 		node->e->Accept(this);
 		cp.WriteOpcode(Op_neg);
+	}
+
+	virtual void Visit(Inc *node) override
+	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_inc);
+	}
+
+	virtual void Visit(Dec *node) override
+	{
+		node->e->Accept(this);
+		cp.WriteOpcode(Op_dec);
 	}
 
 	virtual void Visit(Random *node)
@@ -360,21 +372,23 @@ public:
 
 	virtual void Visit(ListExpr *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
 		}
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 	}
 
 	virtual void Visit(ListAccess *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
@@ -382,16 +396,17 @@ public:
 
 		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listat);
 	}
 
 	virtual void Visit(IndexOf *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
@@ -399,31 +414,33 @@ public:
 
 		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listfind);
 	}
 
 	virtual void Visit(ListLength *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
 		}
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listlen);
 	}
 
 	virtual void Visit(ListContains *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
@@ -431,8 +448,8 @@ public:
 
 		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listcontains);
 	}
@@ -457,8 +474,25 @@ public:
 
 		if (topLevel)
 		{
-			// implicit stop
-			cp.WriteOpcode(Op_stopself);
+			// implicit stop, omit if unreachable
+			bool writestop = true;
+			if (node->sl.size() > 0)
+			{
+				Statement *last = node->sl.back().get();
+				if (last->Is(Ast_Stop))
+				{
+					Stop *stop = reinterpret_cast<Stop *>(last);
+					if (stop->mode == StopMode_All || stop->mode == StopMode_ThisScript)
+						writestop = false;
+				}
+				else if (last->Is(Ast_Forever))
+					writestop = false;
+
+				// do not include clone deletion, normal sprites will skip it
+			}
+			
+			if (writestop)
+				cp.WriteOpcode(Op_stopself);
 
 			cp.WriteOpcode(Op_int);
 			cp.AlignText();
@@ -861,8 +895,13 @@ public:
 
 	virtual void Visit(WaitSecs *node)
 	{
-		node->e->Accept(this);
-		cp.WriteOpcode(Op_waitsecs);
+		if (node->e->eval.IsNegativeOrZero())
+			cp.WriteOpcode(Op_yield); // waiting 0 seconds is a yield
+		else
+		{
+			node->e->Accept(this);
+			cp.WriteOpcode(Op_waitsecs);
+		}
 	}
 
 	virtual void Visit(Repeat *node)
@@ -873,7 +912,9 @@ public:
 
 		// push counter
 		node->e->Accept(this);
-		cp.WriteOpcode(Op_round);
+
+		if (node->e->eval.Type() != ValueType_Integer && node->e->eval.Type() != ValueType_Bool)
+			cp.WriteOpcode(Op_round);
 
 		uint64_t top = cp._text.size();
 
@@ -881,19 +922,19 @@ public:
 		cp.WriteOpcode(Op_push);
 		cp.WriteText<int16_t>(-1); // top of stack
 
-		cp.PushValue(zero);
-		cp.WriteOpcode(Op_gt);
+		//cp.PushValue(zero);
+		//cp.WriteOpcode(Op_gt);
 		cp.WriteOpcode(Op_jz);
 		size_t jz = cp.WriteReference(Segment_text, Segment_text);
 
 		if (node->sl)
 			node->sl->Accept(this);
 
-		if (!InWarpMode())
-			cp.WriteOpcode(Op_yield);
-
 		// decrement counter
 		cp.WriteOpcode(Op_dec);
+
+		if (!InWarpMode())
+			cp.WriteOpcode(Op_yield);
 
 		// jump back to top
 		cp.WriteAbsoluteJump(Op_jmp, top);
@@ -926,9 +967,18 @@ public:
 		if (!node->sl)
 			return; // empty if substack, discard
 
-		node->e->Accept(this);
+		LogicalNot *lnot = reinterpret_cast<LogicalNot *>(node->e.get());
+		if (node->e->Is(Ast_LogicalNot) && lnot->e->eval.Type() == ValueType_Bool)
+		{
+			lnot->e->Accept(this);
+			cp.WriteOpcode(Op_jnz);
+		}
+		else
+		{
+			node->e->Accept(this);
+			cp.WriteOpcode(Op_jz);
+		}
 
-		cp.WriteOpcode(Op_jz);
 		size_t jz = cp.WriteReference(Segment_text, Segment_text);
 
 		node->sl->Accept(this);
@@ -971,10 +1021,19 @@ public:
 			return;
 		}
 
-		node->e->Accept(this);
-
 		// conditional jump to else block
-		cp.WriteOpcode(Op_jz);
+		LogicalNot *lnot = reinterpret_cast<LogicalNot *>(node->e.get());
+		if (node->e->Is(Ast_LogicalNot) && lnot->e->eval.Type() == ValueType_Bool)
+		{
+			lnot->e->Accept(this);
+			cp.WriteOpcode(Op_jnz);
+		}
+		else
+		{
+			node->e->Accept(this);
+			cp.WriteOpcode(Op_jz);
+		}
+
 		size_t jz = cp.WriteReference(Segment_text, Segment_text);
 
 		node->sl1->Accept(this);
@@ -997,11 +1056,21 @@ public:
 		uint64_t top;
 
 		top = cp._text.size();
-		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_jnz);
+		LogicalNot *lnot = reinterpret_cast<LogicalNot *>(node->e.get());
+		if (node->e->Is(Ast_LogicalNot) && lnot->e->eval.Type() == ValueType_Bool)
+		{
+			lnot->e->Accept(this);
+			cp.WriteOpcode(Op_jz);
+		}
+		else
+		{
+			node->e->Accept(this);
+			cp.WriteOpcode(Op_jnz);
+		}
+
 		size_t jnz = cp.WriteReference(Segment_text, Segment_text);
-		cp.WriteText<int64_t>(0); // placeholder
+		//cp.WriteText<int64_t>(0); // placeholder
 
 		if (!InWarpMode())
 			cp.WriteOpcode(Op_yield);
@@ -1018,21 +1087,17 @@ public:
 
 		top = cp._text.size();
 
-		/*if (node->e->Is(Ast_LogicalNot))
+		LogicalNot *lnot = reinterpret_cast<LogicalNot *>(node->e.get());
+		if (node->e->Is(Ast_LogicalNot) && lnot->e->eval.Type() == ValueType_Bool)
 		{
-			/* Invert jump condition */
-
-		/*	LogicalNot *ln = node->e.cast<LogicalNot>().get();
-
-			ln->e->Accept(this);
+			lnot->e->Accept(this);
 			cp.WriteOpcode(Op_jz);
 		}
-		else*/
+		else
 		{
 			node->e->Accept(this);
 			cp.WriteOpcode(Op_jnz);
 		}
-
 		
 		size_t jnz = cp.WriteReference(Segment_text, Segment_text);
 
@@ -1150,8 +1215,9 @@ public:
 
 	virtual void Visit(AppendToList *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
@@ -1159,16 +1225,17 @@ public:
 
 		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listadd);
 	}
 
 	virtual void Visit(DeleteFromList *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
@@ -1176,31 +1243,33 @@ public:
 
 		node->e->Accept(this);
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listremove);
 	}
 
 	virtual void Visit(DeleteAllList *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
 		}
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listclear);
 	}
 
 	virtual void Visit(InsertInList *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
@@ -1209,16 +1278,17 @@ public:
 		node->e1->Accept(this);
 		node->e2->Accept(this);
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listinsert);
 	}
 
 	virtual void Visit(ReplaceInList *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
@@ -1228,8 +1298,8 @@ public:
 		node->e2->Accept(this);
 		node->e1->Accept(this);
 
-		cp.WriteOpcode(Op_getstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteOpcode(isField ? Op_getfield : Op_getstatic);
+		cp.WriteText<bc::VarId>(id);
 
 		cp.WriteOpcode(Op_listreplace);
 	}
@@ -1521,8 +1591,9 @@ public:
 
 	virtual void Visit(ListDef *node)
 	{
-		auto it = staticVariables.find(node->id);
-		if (it == staticVariables.end())
+		bool isField, found;
+		bc::VarId id = FindVariable(node->id, &isField, &found);
+		if (!found)
 		{
 			printf("Error: Undefined list %s\n", node->id.c_str());
 			abort();
@@ -1540,7 +1611,7 @@ public:
 		cp.WriteText<int64_t>(size);
 
 		cp.WriteOpcode(Op_setstatic);
-		cp.WriteText<bc::VarId>(it->second);
+		cp.WriteText<bc::VarId>(id);
 	}
 
 	virtual void Visit(ListDefList *node)
@@ -1594,7 +1665,10 @@ public:
 
 				auto &statements = sl->sl;
 				for (size_t i = 1; i < statements.size(); i++)
-					statements[i]->Accept(this);
+				{
+					if (statements[i] != nullptr)
+						statements[i]->Accept(this);
+				}
 
 				cp.WriteOpcode(Op_leave);
 				cp.WriteOpcode(Op_ret);
@@ -1942,6 +2016,17 @@ public:
 				*found = true;
 				*isField = true;
 				return i;
+			}
+		}
+
+		auto &lists = currentSpriteDef->lists->lists;
+		for (size_t i = 0; i < lists.size(); i++)
+		{
+			if (StringEqualsRaw(lists[i]->id.c_str(), name.c_str()))
+			{
+				*found = true;
+				*isField = true;
+				return i + vars.size();
 			}
 		}
 

@@ -563,7 +563,7 @@ public:
 
 	constexpr bool IsZeroLike() const
 	{
-		if (_type == ValueType_None || _type == ValueType_String || _type == ValueType_List)
+		if (_type == ValueType_None || _type == ValueType_String)
 			return true;
 
 		if (!_hasValue)
@@ -584,6 +584,9 @@ public:
 
 	constexpr bool IsZero() const
 	{
+		if (_type == ValueType_None)
+			return true;
+
 		if (!_hasValue)
 			return false;
 
@@ -650,6 +653,27 @@ public:
 		}
 	}
 
+	constexpr bool IsNegativeOrZero() const
+	{
+		if (_type == ValueType_None)
+			return true;
+
+		if (!_hasValue)
+			return false;
+
+		switch (_type)
+		{
+		default:
+			return false;
+		case ValueType_Bool:
+			return !_value.u.boolean;
+		case ValueType_Integer:
+			return _value.u.integer <= 0;
+		case ValueType_Real:
+			return _value.u.real <= 0.0;
+		}
+	}
+
 	constexpr bool IsPositive() const
 	{
 		if (!_hasValue)
@@ -659,10 +683,31 @@ public:
 		{
 		default:
 			return false;
+		case ValueType_Bool:
+			return _value.u.boolean;
 		case ValueType_Integer:
 			return _value.u.integer > 0;
 		case ValueType_Real:
 			return _value.u.real > 0.0;
+		}
+	}
+
+	constexpr bool IsPositiveOrZero() const
+	{
+		if (_type == ValueType_None || _type == ValueType_Bool)
+			return true;
+
+		if (!_hasValue)
+			return false;
+
+		switch (_type)
+		{
+		default:
+			return false;
+		case ValueType_Integer:
+			return _value.u.integer >= 0;
+		case ValueType_Real:
+			return _value.u.real >= 0.0;
 		}
 	}
 

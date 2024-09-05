@@ -4,6 +4,7 @@
 
 #include "ast.hpp"
 #include "../vm/memory.hpp"
+#include "../codegen/util.hpp"
 
 class StaticEnvironment
 {
@@ -127,7 +128,7 @@ public:
 			node->eval.SetUndefined();
 			break;
 		case PropGetType_Number:
-			node->eval.SetReal();
+			node->eval.SetInteger();
 			break;
 		case PropGetType_Name:
 			node->eval.SetString();
@@ -145,7 +146,7 @@ public:
 			node->eval.SetUndefined();
 			break;
 		case PropGetType_Number:
-			node->eval.SetReal();
+			node->eval.SetInteger();
 			break;
 		case PropGetType_Name:
 			node->eval.SetString();
@@ -306,6 +307,38 @@ public:
 			output = &lhs; // Remove addition by zero
 		else if (lhs.eval.HasValue() && rhs.eval.HasValue())
 			node->eval = lhs.eval + rhs.eval;
+		else if (lhs.eval.IsOne())
+		{
+			AutoRelease<Inc> inc = new Inc();
+			inc->e = &rhs;
+
+			output = inc;
+			inc->Accept(this);
+		}
+		else if (lhs.eval.IsNegativeOne())
+		{
+			AutoRelease<Dec> dec = new Dec();
+			dec->e = &rhs;
+
+			output = dec;
+			dec->Accept(this);
+		}
+		else if (rhs.eval.IsOne())
+		{
+			AutoRelease<Inc> inc = new Inc();
+			inc->e = &lhs;
+
+			output = inc;
+			inc->Accept(this);
+		}
+		else if (rhs.eval.IsNegativeOne())
+		{
+			AutoRelease<Dec> dec = new Dec();
+			dec->e = &lhs;
+
+			output = dec;
+			dec->Accept(this);
+		}
 
 		TryCollapse();
 	}
@@ -339,6 +372,22 @@ public:
 			output = &lhs; // Remove subtraction by zero
 		else if (lhs.eval.HasValue() && rhs.eval.HasValue())
 			node->eval = lhs.eval - rhs.eval;
+		else if (rhs.eval.IsOne())
+		{
+			AutoRelease<Dec> dec = new Dec();
+			dec->e = &lhs;
+
+			output = dec;
+			dec->Accept(this);
+		}
+		else if (rhs.eval.IsNegativeOne())
+		{
+			AutoRelease<Inc> inc = new Inc();
+			inc->e = &lhs;
+
+			output = inc;
+			inc->Accept(this);
+		}
 
 		TryCollapse();
 	}
@@ -448,6 +497,64 @@ public:
 		TryCollapse();
 	}
 
+	virtual void Visit(Inc *node) override
+	{
+		output.set(node->e);
+		node->e->Accept(this);
+		node->e = output.cast<Expression>();
+
+		Expression &e = *node->e;
+
+		node->eval.SetReal();
+		output = node;
+
+		if (e.eval.HasValue())
+		{
+			Value tmp;
+			InitializeValue(tmp);
+
+			SetInteger(tmp, 1);
+
+			ValueAdd(tmp, e.eval.GetValue());
+
+			node->eval.SetValue(tmp);
+
+			ReleaseValue(tmp);
+		}
+
+		TryCollapse();
+	}
+
+	virtual void Visit(Dec *node) override
+	{
+		output.set(node->e);
+		node->e->Accept(this);
+		node->e = output.cast<Expression>();
+
+		Expression &e = *node->e;
+
+		node->eval.SetReal();
+		output = node;
+
+		if (e.eval.HasValue())
+		{
+			Value tmp;
+			InitializeValue(tmp);
+
+			Assign(tmp, e.eval.GetValue());
+
+			e.eval.SetInteger(1);
+
+			ValueSub(tmp, e.eval.GetValue());
+
+			node->eval.SetValue(tmp);
+
+			ReleaseValue(tmp);
+		}
+
+		TryCollapse();
+	}
+
 	virtual void Visit(Random *node) override
 	{
 		output.set(node->e1);
@@ -519,76 +626,61 @@ public:
 		Expression &lhs = *node->e1;
 		Expression &rhs = *node->e2;
 
-		// Try to match the following patterns:
-		//  x = true -> x
-		//  x = false -> !x
-		//  true = x -> x
-		//  false = x -> !x
-
-		/*if (rhs.eval.HasValue() && !lhs.eval.HasValue())
-		{
-			switch (rhs.eval.Type())
-			{
-			default:
-				break;
-			case ValueType_Integer:
-			case ValueType_Real:
-			case ValueType_Bool:
-				if (rhs.eval.IsOne())
-				{
-					if (lhs.eval.Type() == ValueType_Bool)
-					{
-						output = &lhs;
-						return;
-					}
-				}
-				else if (rhs.eval.IsZero())
-				{
-					AutoRelease<LogicalNot> lnot = new LogicalNot();
-					lnot->e = &lhs;
-					
-					output = lnot;
-					lnot->Accept(this);
-
-					return;
-				}
-			}
-		}
-		else if (lhs.eval.HasValue() && !rhs.eval.HasValue())
-		{
-			switch (lhs.eval.Type())
-			{
-			default:
-				break;
-			case ValueType_Integer:
-			case ValueType_Real:
-			case ValueType_Bool:
-				if (lhs.eval.IsOne())
-				{
-					if (rhs.eval.Type() == ValueType_Bool)
-					{
-						output = &rhs;
-						return;
-					}
-				}
-				else if (lhs.eval.IsZero())
-				{
-					AutoRelease<LogicalNot> lnot = new LogicalNot();
-					lnot->e = &rhs;
-
-					output = lnot;
-					lnot->Accept(this);
-
-					return;
-				}
-			}
-		}*/
-
 		node->eval.SetBool();
 		output = node;
 
 		if (lhs.eval.HasValue() && rhs.eval.HasValue())
 			node->eval.SetBool(Equals(lhs.eval.GetValue(), rhs.eval.GetValue()));
+		else if (rhs.eval.IsZero())
+		{
+			AutoRelease<LogicalNot> not = new LogicalNot();
+			not->e = &lhs;
+
+			output = not;
+			not->Accept(this);
+		}
+		else if (lhs.eval.IsZero())
+		{
+			AutoRelease<LogicalNot> not = new LogicalNot();
+			not->e = &rhs;
+
+			output = not;
+			not->Accept(this);
+		}
+		else if (rhs.eval.IsOne())
+		{
+			if (lhs.eval.Type() == ValueType_Bool)
+				output = &lhs; // Optimize boolean equality
+			else
+			{
+				AutoRelease<Constexpr> ce = new Constexpr();
+				ce->eval.SetBool(false);
+				node->e2 = ce;
+
+				AutoRelease<LogicalNot> not = new LogicalNot();
+				not->e = node;
+
+				output = not;
+				not->Accept(this);
+			}
+		}
+		else if (lhs.eval.IsOne())
+		{
+			if (rhs.eval.Type() == ValueType_Bool)
+				output = &rhs; // Optimize boolean equality
+			else
+			{
+				AutoRelease<Constexpr> ce = new Constexpr();
+				ce->eval.SetBool(false);
+				node->e1 = ce;
+
+				AutoRelease<LogicalNot> not = new LogicalNot();
+				not->e = node;
+
+				output = not;
+				not->Accept(this);
+			}
+		}
 
 		TryCollapse();
 	}
@@ -673,9 +765,31 @@ public:
 
 	virtual void Visit(LogicalNot *node) override
 	{
-		output = node;
+		if (!node->e)
+		{
+			AutoRelease<Constexpr> ce = new Constexpr();
+			ce->eval.SetBool(true);
+
+			output = ce;
+			return;
+		}
+
+		output = node->e;
 		node->e->Accept(this);
 		node->e	= output.cast<Expression>();
+
+		if (node->e->Is(Ast_LogicalNot))
+		{
+			AutoRelease<LogicalNot> other = node->e.cast<LogicalNot>();
+			if (other->e->eval.Type() == ValueType_Bool) // can only be performed on a boolean
+			{
+				// double negation
+				output = other->e;
+
+				TryCollapse();
+				return;
+			}
+		}
 
 		Expression &e = *node->e;
 
@@ -842,6 +956,8 @@ public:
 
 		if (e.eval.HasValue())
 			node->eval.SetInteger((int)round(ToReal(e.eval.GetValue())));
+		else if (e.eval.Type() == ValueType_Integer || e.eval.Type() == ValueType_Bool)
+			output.set(&e); // no need to round an integral type
 
 		TryCollapse();
 	}
@@ -868,27 +984,43 @@ public:
 			break;
 		case MathFuncType_Floor:
 			if (e.eval.HasValue())
-				node->eval.SetReal(floor(ToReal(e.eval.GetValue())));
+				node->eval.SetInteger(static_cast<int64_t>(floor(ToReal(e.eval.GetValue()))));
+			else if (e.eval.Type() == ValueType_Integer || e.eval.Type() == ValueType_Bool)
+				output.set(&e); // no need to floor an integral type
 			break;
 		case MathFuncType_Ceil:
 			if (e.eval.HasValue())
-				node->eval.SetReal(ceil(ToReal(e.eval.GetValue())));
+				node->eval.SetInteger(static_cast<int64_t>(ceil(ToReal(e.eval.GetValue()))));
+			else if (e.eval.Type() == ValueType_Integer || e.eval.Type() == ValueType_Bool)
+				output.set(&e); // no need to ceil an integral type
 			break;
 		case MathFuncType_Sqrt:
 			if (e.eval.HasValue())
 				node->eval.SetReal(sqrt(ToReal(e.eval.GetValue())));
 			break;
 		case MathFuncType_Sin:
+			if (e.eval.HasValue())
+				node->eval.SetReal(sin(ToReal(e.eval.GetValue()) * DEG2RAD));
 			break;
 		case MathFuncType_Cos:
+			if (e.eval.HasValue())
+				node->eval.SetReal(cos(ToReal(e.eval.GetValue()) * DEG2RAD));
 			break;
 		case MathFuncType_Tan:
+			if (e.eval.HasValue())
+				node->eval.SetReal(tan(ToReal(e.eval.GetValue()) * DEG2RAD));
 			break;
 		case MathFuncType_Asin:
+			if (e.eval.HasValue())
+				node->eval.SetReal(asin(ToReal(e.eval.GetValue())) * RAD2DEG);
 			break;
 		case MathFuncType_Acos:
+			if (e.eval.HasValue())
+				node->eval.SetReal(acos(ToReal(e.eval.GetValue())) * RAD2DEG);
 			break;
 		case MathFuncType_Atan:
+			if (e.eval.HasValue())
+				node->eval.SetReal(atan(ToReal(e.eval.GetValue())) * RAD2DEG);
 			break;
 		case MathFuncType_Ln:
 			if (e.eval.HasValue())
@@ -1089,7 +1221,14 @@ public:
 			return;
 		}
 
-		output = node;
+		AutoRelease<Neg> neg = new Neg();
+		neg->e = node->e;
+
+		AutoRelease<TurnDegrees> turn = new TurnDegrees();
+		turn->e = neg;
+
+		output.set(turn);
+		turn->Accept(this);
 	}
 
 	virtual void Visit(Goto *node) override
@@ -1521,6 +1660,8 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
+		// NOTE: cannot optimize even if e is <= 0, waiting zero seconds still has an effect
+
 		GetEnv().Clear(); // Instruction causes yield, variables not preserved
 
 		output = node;
@@ -1528,11 +1669,9 @@ public:
 
 	virtual void Visit(Repeat *node) override
 	{
-		GetEnv().Clear(); // Variables not preserved between iterations
-
 		if (!node->e)
 		{
-			/* No count, repeat 0 times */
+			// No effect
 			output = nullptr;
 			return;
 		}
@@ -1547,6 +1686,24 @@ public:
 		output.set(node->e);
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
+
+		if (!node->e->eval.IsPositiveOrZero())
+		{
+			// No effect
+			output = nullptr;
+			return;
+		}
+
+		if (node->e->eval.IsOne())
+		{
+			// Single iteration
+			output = node->sl;
+			node->sl->Accept(this);
+
+			return;
+		}
+			
+		GetEnv().Clear(); // Variables not preserved between iterations
 
 		output.set(node->sl);
 		node->sl->Accept(this);
@@ -1630,10 +1787,21 @@ public:
 
 		if (!node->e)
 			goto only_else;
-
+	
 		output.set(node->e);
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
+
+		if (node->e->Is(Ast_LogicalNot))
+		{
+			// swap branches and invert condition
+			AutoRelease<StatementList> tmp = node->sl1;
+			node->sl1 = node->sl2;
+			node->sl2 = tmp;
+
+			AutoRelease<LogicalNot> not = node->e.cast<LogicalNot>();
+			node->e = not->e;
+		}
 
 		if (node->e->eval.HasValue())
 		{
@@ -1715,16 +1883,32 @@ public:
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
+		if (node->e->eval.IsZero())
+			printf("Warning: wait until will never terminate\n");
+
 		output = node;
 	}
 
 	virtual void Visit(RepeatUntil *node) override
 	{
+		GetEnv().Clear(); // Instruction causes yield, variables not preserved
+
 		output.set(node->e);
 		node->e->Accept(this);
 		node->e = output.cast<Expression>();
 
-		GetEnv().Clear(); // Instruction causes yield, variables not preserved
+		if (node->e->eval.IsZero())
+		{
+			printf("Warning: repeat until will never terminate\n");
+
+			AutoRelease<Forever> forever = new Forever();
+			forever->sl = node->sl;
+
+			output.set(forever);
+			forever->Accept(this);
+
+			return;
+		}
 
 		output.set(node->sl);
 		node->sl->Accept(this);
@@ -1785,6 +1969,17 @@ public:
 		node->e = output.cast<Expression>();
 
 		OptionalValue &value = GetEnv().Lookup(node->id);
+
+		if (value.HasValue() && node->e->eval.HasValue())
+		{
+			if (Equals(value.GetValue(), node->e->eval.GetValue()))
+			{
+				// No change
+				output = nullptr;
+				return;
+			}
+		}
+
 		value = node->e->eval;
 
 		output = node;
@@ -1797,20 +1992,68 @@ public:
 		node->e = output.cast<Expression>();
 
 		OptionalValue &value = GetEnv().Lookup(node->id);
-		if (value.HasValue() && node->e->eval.HasValue())
+		OptionalValue &dx = node->e->eval;
+
+		if (value.HasValue() && dx.HasValue())
 		{
 			Value tmp;
 			InitializeValue(tmp);
 			Assign(tmp, value.GetValue());
 
-			ValueAdd(tmp, node->e->eval.GetValue());
+			ValueAdd(tmp, dx.GetValue());
 
 			value.SetValue(tmp);
 
 			ReleaseValue(tmp);
 		}
-		else
-			value.SetUndefined(); // TODO: make more specific
+		else if (dx.IsZeroLike())
+		{
+			switch (value.Type())
+			{
+			default:
+			case ValueType_Undefined:
+			case ValueType_String:
+			case ValueType_List:
+				value.SetReal();
+				break;
+			case ValueType_None: {
+				AutoRelease<SetVariable> sv = new SetVariable();
+				sv->id = node->id;
+				sv->name = node->name;
+
+				AutoRelease<Constexpr> ce = new Constexpr();
+				ce->eval.SetInteger(0);
+
+				sv->e = ce.get();
+				
+				break;
+			}
+			case ValueType_Integer:
+			case ValueType_Real:
+				output = nullptr;
+				break;
+			case ValueType_Bool:
+				if (value.HasValue())
+					value.SetInteger(Truth(value.GetValue()));
+				else
+					value.SetInteger();
+				break;
+			}
+		}
+		else if (value.IsZeroLike())
+		{
+			// Adding to zero is same as assignment which is more efficient
+
+			AutoRelease<SetVariable> sv = new SetVariable();
+			sv->id = node->id;
+			sv->name = node->name;
+
+			sv->e = node->e;
+
+			output.set(sv);
+
+			return;
+		}
 
 		output = node;
 	}
@@ -1861,7 +2104,7 @@ public:
 		{
 			Value tmp;
 			InitializeValue(tmp);
-			Assign(tmp, list.GetValue());
+			ValueDeepCopy(tmp, list.GetValue());
 
 			ListDelete(tmp, node->e->eval.GetValue());
 
@@ -1921,11 +2164,13 @@ public:
 		node->e2 = output.cast<Expression>();
 
 		OptionalValue &list = GetEnv().Lookup(node->name);
+		list.SetList();
+
 		if (list.HasValue() && node->e1->eval.HasValue() && node->e2->eval.HasValue())
 		{
 			Value tmp;
 			InitializeValue(tmp);
-			Assign(tmp, list.GetValue());
+			ValueDeepCopy(tmp, list.GetValue());
 
 			ListInsert(tmp, ToInteger(node->e2->eval.GetValue()), node->e1->eval.GetValue());
 
@@ -1950,9 +2195,60 @@ public:
 		node->e2 = output.cast<Expression>();
 
 		OptionalValue &list = GetEnv().Lookup(node->name);
-		list.SetList();
+		if (list.Type() != ValueType_List)
+			list.SetList();
 
-		// TODO: implement
+		if (node->e1->eval.IsNegativeOrZero())
+		{
+			// No effect
+			output = nullptr;
+			return;
+		}
+
+		if (list.HasValue())
+		{
+			if (node->e1->eval.HasValue())
+			{
+				int64_t idx;
+				if (node->e1->eval.Type() == ValueType_Integer || node->e1->eval.Type() == ValueType_Bool)
+					idx = ToInteger(node->e1->eval.GetValue());
+				else if (node->e1->eval.Type() == ValueType_Real)
+					idx = static_cast<int64_t>(round(ToReal(node->e1->eval.GetValue())));
+				else
+				{
+					// Invalid index
+					output = nullptr;
+					return;
+				}
+
+				if (node->e2->eval.HasValue())
+				{
+					Value tmp;
+					InitializeValue(tmp);
+					
+					ListGet(tmp, list.GetValue(), idx);
+
+					if (Equals(tmp, node->e2->eval.GetValue()))
+					{
+						// No effect
+						output = nullptr;
+						return;
+					}
+					
+					ValueDeepCopy(tmp, list.GetValue());
+
+					ListSet(tmp, idx, node->e2->eval.GetValue());
+
+					list.SetValue(tmp);
+
+					ReleaseValue(tmp);
+				}
+				else
+					list.SetList(); // Varying state
+			}
+			else
+				list.SetList(); // Varying state
+		}
 
 		output = node;
 	}

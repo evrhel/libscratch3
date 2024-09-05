@@ -11,9 +11,9 @@ struct Statement : public ASTNode
 };
 
 // statement list
-struct StatementList : public ASTNode
+struct StatementList : public Statement
 {
-	AST_IMPL(StatementList, ASTNode);
+	AST_IMPL(StatementList, Statement);
 	AST_ACCEPTOR;
 
 	std::vector<AutoRelease<Statement>> sl;

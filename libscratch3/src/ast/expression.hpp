@@ -523,6 +523,24 @@ struct Neg : public Consteval
 	AutoRelease<Expression> e; // number
 };
 
+// increment by 1
+struct Inc : public Consteval
+{
+	EXPR_IMPL(Inc, Consteval);
+	AST_ACCEPTOR;
+
+	AutoRelease<Expression> e; // number
+};
+
+// decremend by 1
+struct Dec : public Consteval
+{
+	EXPR_IMPL(Dec, Consteval);
+	AST_ACCEPTOR;
+
+	AutoRelease<Expression> e; // number
+};
+
 // (pick random $e1 to $e2)
 struct Random : public Expression
 {

@@ -9,9 +9,6 @@
 #include "../codegen/compiler.hpp"
 #include "../codegen/util.hpp"
 
-#define DEG2RAD (0.017453292519943295769236907684886)
-#define RAD2DEG (57.295779513082320876798154814105)
-
 void Script::Dump()
 {
 	printf("Script %p\n", this);
