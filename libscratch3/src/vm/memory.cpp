@@ -785,6 +785,8 @@ Value &ValueAdd(Value &lhs, const Value &rhs)
 	default:
 		if (rhs.type == ValueType_Integer || rhs.type == ValueType_Real)
 			return Assign(lhs, rhs);
+		if (rhs.type == ValueType_Bool)
+			return SetInteger(lhs, rhs.u.boolean ? 1 : 0);
 		return SetInteger(lhs, 0);
 	case ValueType_Integer:
 		if (rhs.type == ValueType_Integer)
@@ -824,12 +826,16 @@ Value &ValueSub(Value &lhs, const Value &rhs)
 			return SetInteger(lhs, lhs.u.integer - rhs.u.integer);
 		if (rhs.type == ValueType_Real)
 			return SetReal(lhs, lhs.u.integer - rhs.u.real);
+		if (rhs.type == ValueType_Bool)
+			return SetInteger(lhs, lhs.u.integer - (rhs.u.boolean ? 1 : 0));
 		return lhs;
 	case ValueType_Real:
 		if (rhs.type == ValueType_Real)
 			return SetReal(lhs, lhs.u.real - rhs.u.real);
 		if (rhs.type == ValueType_Integer)
 			return SetReal(lhs, lhs.u.real - rhs.u.integer);
+		if (rhs.type == ValueType_Bool)
+			return SetReal(lhs, lhs.u.real - (rhs.u.boolean ? 1.0 : 0.0));
 		return lhs;
 	case ValueType_Bool:
 		if (rhs.type == ValueType_Bool)
@@ -853,12 +859,16 @@ Value &ValueMul(Value &lhs, const Value &rhs)
 			return SetInteger(lhs, lhs.u.integer * rhs.u.integer);
 		if (rhs.type == ValueType_Real)
 			return SetReal(lhs, lhs.u.integer * rhs.u.real);
+		if (rhs.type == ValueType_Bool)
+			return SetInteger(lhs, lhs.u.integer * (rhs.u.boolean ? 1 : 0));
 		return SetInteger(lhs, 0);
 	case ValueType_Real:
 		if (rhs.type == ValueType_Real)
 			return SetReal(lhs, lhs.u.real * rhs.u.real);
 		if (rhs.type == ValueType_Integer)
 			return SetReal(lhs, lhs.u.real * rhs.u.integer);
+		if (rhs.type == ValueType_Bool)
+			return SetReal(lhs, lhs.u.real * (rhs.u.boolean ? 1.0 : 0.0));
 		return SetInteger(lhs, 0);
 	case ValueType_Bool:
 		if (rhs.type == ValueType_Bool)
@@ -882,9 +892,11 @@ Value &ValueDiv(Value &lhs, const Value &rhs)
 			goto handle_div0;
 
 		if (lhs.type == ValueType_Integer)
-			return SetInteger(lhs, lhs.u.integer / rhs.u.integer);
+			return SetReal(lhs, static_cast<double>(lhs.u.integer) / rhs.u.integer);
 		if (lhs.type == ValueType_Real)
 			return SetReal(lhs, lhs.u.real / rhs.u.integer);
+		if (lhs.type == ValueType_Bool)
+			return lhs.u.boolean ? SetReal(lhs, 1.0 / rhs.u.integer) : SetInteger(lhs, 0);
 		return SetInteger(lhs, 0);
 	case ValueType_Real:
 		if (rhs.u.real == 0.0)
@@ -894,6 +906,8 @@ Value &ValueDiv(Value &lhs, const Value &rhs)
 			return SetReal(lhs, lhs.u.real / rhs.u.real);
 		if (rhs.type == ValueType_Integer)
 			return SetReal(lhs, lhs.u.integer / rhs.u.real);
+		if (rhs.type == ValueType_Bool)
+			return lhs.u.boolean ? SetReal(lhs, 1.0 / rhs.u.real) : SetInteger(lhs, 0);
 		return SetInteger(lhs, 0);
 	case ValueType_Bool:
 		if (!rhs.u.boolean)
@@ -901,6 +915,8 @@ Value &ValueDiv(Value &lhs, const Value &rhs)
 
 		if (lhs.type == ValueType_Integer || lhs.type == ValueType_Real)
 			return lhs;
+		if (lhs.type == ValueType_Bool)
+			return SetInteger(lhs, lhs.u.boolean ? 1 : 0); // convert to integer
 
 		return SetInteger(lhs, 0);
 	}
